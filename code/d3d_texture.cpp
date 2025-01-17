@@ -72,9 +72,9 @@ void D3DTextureObject :: FreeD3DTexture()
 {
 	if (m_pD3DTexture) {
 		if (m_target == GL_TEXTURE_3D_EXT) {
-			logPrintf("FreeD3DTexture: %i x %i x %i x %s\n", m_width, m_height, m_depth, D3DGlobal_FormatToString(m_format) );
+			//logPrintf("FreeD3DTexture: %i x %i x %i x %s\n", m_width, m_height, m_depth, D3DGlobal_FormatToString(m_format) );
 		} else {
-			logPrintf("FreeD3DTexture: %i x %i x %s\n", m_width, m_height, D3DGlobal_FormatToString(m_format) );
+			//logPrintf("FreeD3DTexture: %i x %i x %s\n", m_width, m_height, D3DGlobal_FormatToString(m_format) );
 		}
 		m_pD3DTexture->Release();
 		m_pD3DTexture = nullptr;
@@ -115,15 +115,15 @@ HRESULT D3DTextureObject :: CreateD3DTexture( GLenum target, GLsizei width, GLsi
 	HRESULT hr;
 		
 	if (target == GL_TEXTURE_3D_EXT) {
-		logPrintf("CreateD3DTexture: %i x %i x %i x %s (mipmaps = %s)\n", width, height, depth, D3DGlobal_FormatToString(m_format), mipmaps ? "true" : "false" );
+		//logPrintf("CreateD3DTexture: %i x %i x %i x %s (mipmaps = %s)\n", width, height, depth, D3DGlobal_FormatToString(m_format), mipmaps ? "true" : "false" );
 		hr = D3DGlobal.pDevice->CreateVolumeTexture(width, height, depth, mipmaps ? 0 : 1, 0, format, D3DPOOL_MANAGED, &m_pD3DVolumeTexture, NULL);
 		if (m_pD3DVolumeTexture) m_pD3DVolumeTexture->SetPriority( m_priority );
 	} else if (target == GL_TEXTURE_CUBE_MAP_ARB) {
-		logPrintf("CreateD3DTexture: %i x %i x %s (cubemap) (mipmaps = %s)\n", width, height, D3DGlobal_FormatToString(m_format), mipmaps ? "true" : "false" );
+		//logPrintf("CreateD3DTexture: %i x %i x %s (cubemap) (mipmaps = %s)\n", width, height, D3DGlobal_FormatToString(m_format), mipmaps ? "true" : "false" );
 		hr = D3DGlobal.pDevice->CreateCubeTexture(width, mipmaps ? 0 : 1, 0, format, D3DPOOL_MANAGED, &m_pD3DCubeTexture, NULL);
 		if (m_pD3DCubeTexture) m_pD3DCubeTexture->SetPriority( m_priority );
 	} else {
-		logPrintf("CreateD3DTexture: %i x %i x %s (mipmaps = %s)\n", width, height, D3DGlobal_FormatToString(m_format), mipmaps ? "true" : "false" );
+		//logPrintf("CreateD3DTexture: %i x %i x %s (mipmaps = %s)\n", width, height, D3DGlobal_FormatToString(m_format), mipmaps ? "true" : "false" );
 		hr = D3DGlobal.pDevice->CreateTexture(width, height, mipmaps ? 0 : 1, 0, format, D3DPOOL_MANAGED, &m_pD3DTexture, NULL);
 		if (m_pD3DTexture) m_pD3DTexture->SetPriority( m_priority );
 	}
@@ -137,9 +137,9 @@ HRESULT D3DTextureObject :: RecreateD3DTexture( GLboolean mipmaps )
 	if (m_mipmaps == mipmaps) return S_OK;
 
 	if (m_target == GL_TEXTURE_3D_EXT) {
-		logPrintf("RecreateD3DTexture: %i x %i x %i x %s (mipmaps = %s)\n", m_width, m_height, m_depth, D3DGlobal_FormatToString(m_format), mipmaps ? "true" : "false" );
+		//logPrintf("RecreateD3DTexture: %i x %i x %i x %s (mipmaps = %s)\n", m_width, m_height, m_depth, D3DGlobal_FormatToString(m_format), mipmaps ? "true" : "false" );
 	} else {
-		logPrintf("RecreateD3DTexture: %i x %i x %s (mipmaps = %s)\n", m_width, m_height, D3DGlobal_FormatToString(m_format), mipmaps ? "true" : "false" );
+		//logPrintf("RecreateD3DTexture: %i x %i x %s (mipmaps = %s)\n", m_width, m_height, D3DGlobal_FormatToString(m_format), mipmaps ? "true" : "false" );
 	}
 
 	HRESULT hr;
@@ -415,7 +415,7 @@ HRESULT D3DTextureObject :: CopyTextureSubLevel( GLint cubeface, GLint level, GL
 	hr = D3DGlobal.pDevice->GetRenderTarget( 0, &lpRenderTarget );
 	if (FAILED(hr)) {
 		D3DGlobal.lastError = hr;
-		logPrintf("WARNING: CopyTextureSubLevel: GetRenderTarget failed with error '%s'\n", DXGetErrorString9(hr));
+		logPrintf("WARNING: CopyTextureSubLevel: GetRenderTarget failed with error '%s'\n", DXGetErrorString(hr));
 		return hr;
 	} 
 
@@ -428,7 +428,7 @@ HRESULT D3DTextureObject :: CopyTextureSubLevel( GLint cubeface, GLint level, GL
 		hr = lpRenderTarget->GetDesc(&desc);
 		if (FAILED(hr)) {
 			D3DGlobal.lastError = hr;
-			logPrintf("WARNING: CopyTextureSubLevel: GetDesc failed with error '%s'\n", DXGetErrorString9(hr));
+			logPrintf("WARNING: CopyTextureSubLevel: GetDesc failed with error '%s'\n", DXGetErrorString(hr));
 			lpRenderTarget->Release();
 			return hr;
 		}
@@ -441,7 +441,7 @@ HRESULT D3DTextureObject :: CopyTextureSubLevel( GLint cubeface, GLint level, GL
 															 &D3DGlobal.pSystemMemRT, NULL );
 		if (FAILED(hr)) {
 			D3DGlobal.lastError = hr;
-			logPrintf("WARNING: CopyTextureSubLevel: CreateOffscreenPlainSurface failed with error '%s'\n", DXGetErrorString9(hr));
+			logPrintf("WARNING: CopyTextureSubLevel: CreateOffscreenPlainSurface failed with error '%s'\n", DXGetErrorString(hr));
 			lpRenderTarget->Release();
 			return hr;
 		}
@@ -456,7 +456,7 @@ HRESULT D3DTextureObject :: CopyTextureSubLevel( GLint cubeface, GLint level, GL
 															&D3DGlobal.pSystemMemFB, NULL );
 				if (FAILED(hr)) {
 					D3DGlobal.lastError = hr;
-					logPrintf("WARNING: CopyTextureSubLevel: CreateRenderTarget failed with error '%s'\n", DXGetErrorString9(hr));
+					logPrintf("WARNING: CopyTextureSubLevel: CreateRenderTarget failed with error '%s'\n", DXGetErrorString(hr));
 					lpRenderTarget->Release();
 					return hr;
 				}
@@ -468,7 +468,7 @@ HRESULT D3DTextureObject :: CopyTextureSubLevel( GLint cubeface, GLint level, GL
 		hr = D3DGlobal.pDevice->StretchRect( lpRenderTarget, NULL, D3DGlobal.pSystemMemFB, NULL, D3DTEXF_NONE );
 		if (FAILED(hr)) {
 			D3DGlobal.lastError = hr;
-			logPrintf("WARNING: CopyTextureSubLevel: StretchRect failed with error '%s'\n", DXGetErrorString9(hr));
+			logPrintf("WARNING: CopyTextureSubLevel: StretchRect failed with error '%s'\n", DXGetErrorString(hr));
 			lpRenderTarget->Release();
 			return hr;
 		}
@@ -479,7 +479,7 @@ HRESULT D3DTextureObject :: CopyTextureSubLevel( GLint cubeface, GLint level, GL
 	hr = D3DGlobal.pDevice->GetRenderTargetData( lpRenderTarget, D3DGlobal.pSystemMemRT );
 	if (FAILED(hr)) {
 		D3DGlobal.lastError = hr;
-		logPrintf("WARNING: CopyTextureSubLevel: GetRenderTargetData failed with error '%s'\n", DXGetErrorString9(hr));
+		logPrintf("WARNING: CopyTextureSubLevel: GetRenderTargetData failed with error '%s'\n", DXGetErrorString(hr));
 		if (lpRenderTarget != D3DGlobal.pSystemMemFB)
 			lpRenderTarget->Release();
 		return hr;
@@ -503,7 +503,7 @@ HRESULT D3DTextureObject :: CopyTextureSubLevel( GLint cubeface, GLint level, GL
 	hr = D3DGlobal.pSystemMemRT->LockRect( &srclockrect, &srcrect, D3DLOCK_NOSYSLOCK|D3DLOCK_READONLY );
 	if (FAILED(hr)) {
 		D3DGlobal.lastError = hr;
-		logPrintf("WARNING: CopyTextureSubLevel: LockRect #1 failed with error '%s'\n", DXGetErrorString9(hr));
+		logPrintf("WARNING: CopyTextureSubLevel: LockRect #1 failed with error '%s'\n", DXGetErrorString(hr));
 		if (lpRenderTarget != D3DGlobal.pSystemMemFB)
 			lpRenderTarget->Release();
 		return hr;
@@ -513,7 +513,7 @@ HRESULT D3DTextureObject :: CopyTextureSubLevel( GLint cubeface, GLint level, GL
 		hr = m_pD3DCubeTexture->LockRect( (D3DCUBEMAP_FACES)cubeface, level, &dstlockrect, &dstrect, D3DLOCK_DISCARD );
 		if (FAILED(hr)) {
 			D3DGlobal.lastError = hr;
-			logPrintf("WARNING: CopyTextureSubLevel: LockRect #2 failed with error '%s'\n", DXGetErrorString9(hr));
+			logPrintf("WARNING: CopyTextureSubLevel: LockRect #2 failed with error '%s'\n", DXGetErrorString(hr));
 			if (lpRenderTarget != D3DGlobal.pSystemMemFB)
 				lpRenderTarget->Release();
 			return hr;
@@ -522,7 +522,7 @@ HRESULT D3DTextureObject :: CopyTextureSubLevel( GLint cubeface, GLint level, GL
 		hr = m_pD3DTexture->LockRect( level, &dstlockrect, &dstrect, D3DLOCK_DISCARD );
 		if (FAILED(hr)) {
 			D3DGlobal.lastError = hr;
-			logPrintf("WARNING: CopyTextureSubLevel: LockRect #2 failed with error '%s'\n", DXGetErrorString9(hr));
+			logPrintf("WARNING: CopyTextureSubLevel: LockRect #2 failed with error '%s'\n", DXGetErrorString(hr));
 			if (lpRenderTarget != D3DGlobal.pSystemMemFB)
 				lpRenderTarget->Release();
 			return hr;

@@ -25,6 +25,7 @@
 #include "d3d_texture.hpp"
 #include "d3d_matrix_stack.hpp"
 #include "d3d_combiners.hpp"
+#include "d3d_matrix_detection.hpp"
 
 D3DState_t D3DState;
 static D3DState_t D3DStateCopy;
@@ -197,10 +198,39 @@ static void D3DState_SetTransform()
 
 	if (D3DState.modelViewMatrixModified) {
 		D3DState.modelViewMatrixModified = false;
-		hr = D3DGlobal.pDevice->SetTransform( D3DTS_WORLD, D3DGlobal.modelviewMatrixStack->top() );
-		if (FAILED(hr)) {
-			D3DGlobal.lastError = hr;
-			return;
+		if (!matrix_detect_is_detection_valid())
+		{
+			hr = D3DGlobal.pDevice->SetTransform( D3DTS_WORLD, D3DGlobal.modelviewMatrixStack->top() );
+			if (FAILED(hr)) {
+				D3DGlobal.lastError = hr;
+				return;
+			}
+
+			static D3DXMATRIX mat;
+			static bool mat_inited = false;
+			if ( !mat_inited)
+			{
+				D3DXMatrixIdentity(&mat);
+				mat_inited = true;
+			}
+			hr = D3DGlobal.pDevice->SetTransform(D3DTS_VIEW, &mat);
+			if (FAILED(hr)) {
+				D3DGlobal.lastError = hr;
+				return;
+			}
+		}
+		else
+		{
+			hr = D3DGlobal.pDevice->SetTransform(D3DTS_WORLD, D3DGlobal.modelMatrixStack->top());
+			if (FAILED(hr)) {
+				D3DGlobal.lastError = hr;
+				return;
+			}
+			hr = D3DGlobal.pDevice->SetTransform(D3DTS_VIEW, D3DGlobal.viewMatrixStack->top());
+			if (FAILED(hr)) {
+				D3DGlobal.lastError = hr;
+				return;
+			}
 		}
 	}
 	if (D3DState.projectionMatrixModified) {

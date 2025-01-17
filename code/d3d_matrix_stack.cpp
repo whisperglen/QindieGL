@@ -121,7 +121,10 @@ HRESULT D3DMatrixStack :: push()
 HRESULT D3DMatrixStack :: pop()
 {
 	if (!m_iStackDepth)
+	{
+		this->load_identity();
 		return E_STACK_UNDERFLOW;
+	}
 	--m_iStackDepth;
 	return S_OK;
 }

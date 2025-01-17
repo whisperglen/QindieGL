@@ -132,6 +132,8 @@ typedef struct D3DGlobal_s
 	char					*szExtensions;
 	char					*szWExtensions;
 	D3DMatrixStack			*modelviewMatrixStack;
+	D3DMatrixStack			*modelMatrixStack;
+	D3DMatrixStack			*viewMatrixStack;
 	D3DMatrixStack			*projectionMatrixStack;
 	D3DMatrixStack			*textureMatrixStack[MAX_D3D_TMU];
 	int						maxActiveTMU;

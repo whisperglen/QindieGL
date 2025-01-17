@@ -218,8 +218,9 @@ OPENGL_API void WINAPI glViewport( GLint x, GLint y, GLsizei width, GLsizei heig
 	// translate from OpenGL bottom-left to D3D top-left
 	y = D3DGlobal.hCurrentMode.Height - (height + y);
 
-	D3DState.viewport.X = x;
-	D3DState.viewport.Y = y;
+	// WG: need a better way to handle this without producing artifacts
+	D3DState.viewport.X = x; //< 0 ? 0 : x;
+	D3DState.viewport.Y = y; //< 0 ? 0 : y;
 	D3DState.viewport.Width = width;
 	D3DState.viewport.Height = height;
 	if (!D3DGlobal.initialized) {

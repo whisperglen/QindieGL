@@ -363,3 +363,4 @@ EXPORTS
 	wglUseFontBitmapsW = wrap_wglUseFontBitmapsW
 	wglUseFontOutlinesA = wrap_wglUseFontOutlinesA
 	wglUseFontOutlinesW = wrap_wglUseFontOutlinesW
+	matrix_print_s

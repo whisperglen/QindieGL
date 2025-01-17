@@ -211,6 +211,7 @@ OPENGL_API void WINAPI glLightfv( GLenum light, GLenum pname, const GLfloat *par
 			lpos.y = params[1];
 			lpos.z = params[2];
 			
+			// WG: figure out how matrix heuristics applies here
 			if( params[3] == 0.0f ) {
 				D3DXVec3TransformNormal( &lresult, &lpos, D3DGlobal.modelviewMatrixStack->top( ) );
 				D3DState.LightingState.lightType[lightIndex] = D3DLIGHT_DIRECTIONAL;
@@ -235,6 +236,7 @@ OPENGL_API void WINAPI glLightfv( GLenum light, GLenum pname, const GLfloat *par
 			lpos.x = params[0];
 			lpos.y = params[1];
 			lpos.z = params[2];
+			// WG: figure out how matrix heuristics applies here
 			D3DXVec3TransformNormal( &D3DState.LightingState.lightDirection[lightIndex], &lpos, D3DGlobal.modelviewMatrixStack->top( ) );
 		}
 		break;

@@ -18,6 +18,9 @@
     <None Include="opengl32.def">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="..\README.md">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="QindieGL.rc">
@@ -97,6 +100,12 @@
     <ClCompile Include="..\code\d3d_wrapper.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\code\d3d_helpers.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\code\d3d_matrix_detection.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\code\d3d_array.hpp">
@@ -133,6 +142,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\code\d3d_wrapper.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\code\d3d_helpers.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\code\d3d_matrix_detection.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

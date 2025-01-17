@@ -1161,13 +1161,13 @@ OPENGL_API void WINAPI glReadPixels( GLint x, GLint y, GLsizei width, GLsizei he
 		hr = D3DGlobal.pDevice->GetDepthStencilSurface( &lpRenderTarget );
 		if(FAILED(hr)) {
 			D3DGlobal.lastError = hr;
-			logPrintf("WARNING: glReadPixels: GetDepthStencilSurface failed with error '%s'\n", DXGetErrorString9(hr));
+			logPrintf("WARNING: glReadPixels: GetDepthStencilSurface failed with error '%s'\n", DXGetErrorString(hr));
 			return;
 		} 
 		hr = lpRenderTarget->GetDesc(&desc);
 		if(FAILED(hr)) {
 			D3DGlobal.lastError = hr;
-			logPrintf("WARNING: glReadPixels: GetDesc failed with error '%s'\n", DXGetErrorString9(hr));
+			logPrintf("WARNING: glReadPixels: GetDesc failed with error '%s'\n", DXGetErrorString(hr));
 			return;
 		}
 
@@ -1179,14 +1179,14 @@ OPENGL_API void WINAPI glReadPixels( GLint x, GLint y, GLsizei width, GLsizei he
 														&lpDS, nullptr );
 		if(FAILED(hr)) {
 			D3DGlobal.lastError = hr;
-			logPrintf("WARNING: glReadPixels: CreateDepthStencilSurface failed with error '%s'\n", DXGetErrorString9(hr));
+			logPrintf("WARNING: glReadPixels: CreateDepthStencilSurface failed with error '%s'\n", DXGetErrorString(hr));
 			return;
 		}
 
 		hr = D3DGlobal.pDevice->StretchRect( lpRenderTarget, nullptr, lpDS, nullptr, D3DTEXF_NONE );
 		if(FAILED(hr)) {
 			D3DGlobal.lastError = hr;
-			logPrintf("WARNING: glReadPixels: StretchRect failed with error '%s'\n", DXGetErrorString9(hr));
+			logPrintf("WARNING: glReadPixels: StretchRect failed with error '%s'\n", DXGetErrorString(hr));
 			return;
 		}
 
@@ -1200,14 +1200,14 @@ OPENGL_API void WINAPI glReadPixels( GLint x, GLint y, GLsizei width, GLsizei he
 															 &lpDS2, nullptr );
 		if(FAILED(hr)) {
 			D3DGlobal.lastError = hr;
-			logPrintf("WARNING: glReadPixels: CreateOffscreenPlainSurface failed with error '%s'\n", DXGetErrorString9(hr));
+			logPrintf("WARNING: glReadPixels: CreateOffscreenPlainSurface failed with error '%s'\n", DXGetErrorString(hr));
 			return;
 		}
 
 		hr = D3DGlobal.pDevice->GetRenderTargetData( lpDS, lpDS2 );
 		if(FAILED(hr)) {
 			D3DGlobal.lastError = hr;
-			logPrintf("WARNING: glReadPixels: GetRenderTargetData failed with error '%s'\n", DXGetErrorString9(hr));
+			logPrintf("WARNING: glReadPixels: GetRenderTargetData failed with error '%s'\n", DXGetErrorString(hr));
 			return;
 		}
 
@@ -1222,7 +1222,7 @@ OPENGL_API void WINAPI glReadPixels( GLint x, GLint y, GLsizei width, GLsizei he
 		hr = D3DGlobal.pDevice->GetRenderTarget( 0, &lpRenderTarget );
 		if(FAILED(hr)) {
 			D3DGlobal.lastError = hr;
-			logPrintf("WARNING: glReadPixels: GetRenderTarget failed with error '%s'\n", DXGetErrorString9(hr));
+			logPrintf("WARNING: glReadPixels: GetRenderTarget failed with error '%s'\n", DXGetErrorString(hr));
 			return;
 		} 
 
@@ -1233,7 +1233,7 @@ OPENGL_API void WINAPI glReadPixels( GLint x, GLint y, GLsizei width, GLsizei he
 			hr = lpRenderTarget->GetDesc(&desc);
 			if(FAILED(hr)) {
 				D3DGlobal.lastError = hr;
-				logPrintf("WARNING: glReadPixels: GetDesc failed with error '%s'\n", DXGetErrorString9(hr));
+				logPrintf("WARNING: glReadPixels: GetDesc failed with error '%s'\n", DXGetErrorString(hr));
 				return;
 			}
 
@@ -1245,7 +1245,7 @@ OPENGL_API void WINAPI glReadPixels( GLint x, GLint y, GLsizei width, GLsizei he
 																 &D3DGlobal.pSystemMemRT, nullptr );
 			if(FAILED(hr)) {
 				D3DGlobal.lastError = hr;
-				logPrintf("WARNING: glReadPixels: CreateOffscreenPlainSurface failed with error '%s'\n", DXGetErrorString9(hr));
+				logPrintf("WARNING: glReadPixels: CreateOffscreenPlainSurface failed with error '%s'\n", DXGetErrorString(hr));
 				return;
 			}
 
@@ -1259,7 +1259,7 @@ OPENGL_API void WINAPI glReadPixels( GLint x, GLint y, GLsizei width, GLsizei he
 																&D3DGlobal.pSystemMemFB, nullptr );
 					if(FAILED(hr)) {
 						D3DGlobal.lastError = hr;
-						logPrintf("WARNING: glReadPixels: CreateRenderTarget failed with error '%s'\n", DXGetErrorString9(hr));
+						logPrintf("WARNING: glReadPixels: CreateRenderTarget failed with error '%s'\n", DXGetErrorString(hr));
 						return;
 					}
 				}
@@ -1270,7 +1270,7 @@ OPENGL_API void WINAPI glReadPixels( GLint x, GLint y, GLsizei width, GLsizei he
 			hr = D3DGlobal.pDevice->StretchRect( lpRenderTarget, nullptr, D3DGlobal.pSystemMemFB, nullptr, D3DTEXF_NONE );
 			if(FAILED(hr)) {
 				D3DGlobal.lastError = hr;
-				logPrintf("WARNING: glReadPixels: StretchRect failed with error '%s'\n", DXGetErrorString9(hr));
+				logPrintf("WARNING: glReadPixels: StretchRect failed with error '%s'\n", DXGetErrorString(hr));
 				return;
 			}
 			lpRenderTarget->Release();
@@ -1280,7 +1280,7 @@ OPENGL_API void WINAPI glReadPixels( GLint x, GLint y, GLsizei width, GLsizei he
 		hr = D3DGlobal.pDevice->GetRenderTargetData( lpRenderTarget, D3DGlobal.pSystemMemRT );
 		if(FAILED(hr)) {
 			D3DGlobal.lastError = hr;
-			logPrintf("WARNING: glReadPixels: GetRenderTargetData failed with error '%s'\n", DXGetErrorString9(hr));
+			logPrintf("WARNING: glReadPixels: GetRenderTargetData failed with error '%s'\n", DXGetErrorString(hr));
 			return;
 		}
 	}
@@ -1297,7 +1297,7 @@ OPENGL_API void WINAPI glReadPixels( GLint x, GLint y, GLsizei width, GLsizei he
 	hr = D3DGlobal.pSystemMemRT->LockRect( &lockrect, &srcrect, D3DLOCK_NOSYSLOCK|D3DLOCK_READONLY );
 	if(FAILED(hr)) {
 		D3DGlobal.lastError = hr;
-		logPrintf("WARNING: glReadPixels: LockRect failed with error '%s'\n", DXGetErrorString9(hr));
+		logPrintf("WARNING: glReadPixels: LockRect failed with error '%s'\n", DXGetErrorString(hr));
 		return;
 	}
 

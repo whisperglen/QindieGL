@@ -371,7 +371,8 @@ void D3DExtension_BuildExtensionsString()
 //=========================================
 OPENGL_API PROC WINAPI wrap_wglGetProcAddress( LPCSTR s )
 {
-	static size_t stubAddress = 0xBAD00000;
+	// WG: some games check for this being NULL, and crash
+	static size_t stubAddress = NULL;// 0xBAD00000;
 	const char *pszDisabledExt = NULL;
 
 	for (int i = 0; ; ++i) {
@@ -393,7 +394,7 @@ OPENGL_API PROC WINAPI wrap_wglGetProcAddress( LPCSTR s )
 		}
 	}
 
-	++stubAddress;
+	//++stubAddress;
 
 	if (pszDisabledExt)
 		logPrintf("WARNING: wglGetProcAddress: queried disabled proc '%s' (extension '%s') (stub = 0x%X)\n", s, pszDisabledExt, stubAddress);

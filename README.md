@@ -4,7 +4,6 @@
 
 ![QindieGL Logo](logo/QIndieGL-Logo-small.png?raw=true)
 
-[Download Win32 32-bit Binaries](https://github.com/crystice-softworks/QindieGL/raw/master/bin/QindieGL.1.0.rev5.zip)
 
 ## Introduction
 

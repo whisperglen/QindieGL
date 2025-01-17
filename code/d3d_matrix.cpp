@@ -22,7 +22,7 @@
 #include "d3d_global.hpp"
 #include "d3d_state.hpp"
 #include "d3d_matrix_stack.hpp"
-
+#include "d3d_matrix_detection.hpp"
 //==================================================================================
 // Some words about projection matrices
 //----------------------------------------------------------------------------------
@@ -96,6 +96,12 @@ OPENGL_API void WINAPI glLoadIdentity()
 	D3DState.currentMatrixStack->load_identity( );
 	*D3DState.currentMatrixModified = true;
 	CheckTexCoordOffset_Hack( false );
+
+	if (D3DState.TransformState.matrixMode == GL_MODELVIEW)
+	{
+		D3DGlobal.modelMatrixStack->load_identity( );
+		D3DGlobal.viewMatrixStack->load_identity( );
+	}
 }
 
 static void ProjectionMatrix_GLtoD3D( FLOAT *m )
@@ -141,6 +147,14 @@ OPENGL_API void WINAPI glLoadMatrixf( const GLfloat *m )
 	}
 	*D3DState.currentMatrixModified = true;
 	CheckTexCoordOffset_Hack( b2Dproj );
+
+	if (D3DState.TransformState.matrixMode == GL_MODELVIEW)
+	{
+		D3DXMATRIX model, view;
+		matrix_detect_process_upload(m, &model, &view);
+		D3DGlobal.modelMatrixStack->load(model);
+		D3DGlobal.viewMatrixStack->load(view);
+	}
 }
 OPENGL_API void WINAPI glLoadMatrixd( const GLdouble *m )
 {
@@ -158,6 +172,14 @@ OPENGL_API void WINAPI glLoadMatrixd( const GLdouble *m )
 	D3DState.currentMatrixStack->load( mf );
 	*D3DState.currentMatrixModified = true;
 	CheckTexCoordOffset_Hack( b2Dproj );
+
+	if (D3DState.TransformState.matrixMode == GL_MODELVIEW)
+	{
+		D3DXMATRIX model, view;
+		matrix_detect_process_upload(mf, &model, &view);
+		D3DGlobal.modelMatrixStack->load(model);
+		D3DGlobal.viewMatrixStack->load(view);
+	}
 }
 OPENGL_API void WINAPI glMultMatrixf( const GLfloat *m )
 {
@@ -165,6 +187,11 @@ OPENGL_API void WINAPI glMultMatrixf( const GLfloat *m )
 	D3DState.currentMatrixStack->multiply( m );
 	*D3DState.currentMatrixModified = true;
 	CheckTexCoordOffset_Hack( false );
+
+	if (D3DState.TransformState.matrixMode == GL_MODELVIEW)
+	{
+		D3DGlobal.modelMatrixStack->multiply( m );
+	}
 }
 OPENGL_API void WINAPI glMultMatrixd( const GLdouble *m )
 {
@@ -175,6 +202,11 @@ OPENGL_API void WINAPI glMultMatrixd( const GLdouble *m )
 	D3DState.currentMatrixStack->multiply( mf );
 	*D3DState.currentMatrixModified = true;
 	CheckTexCoordOffset_Hack( false );
+
+	if (D3DState.TransformState.matrixMode == GL_MODELVIEW)
+	{
+		D3DGlobal.modelMatrixStack->multiply( mf );
+	}
 }
 OPENGL_API void WINAPI glLoadTransposeMatrixf( const GLfloat *m )
 {
@@ -191,6 +223,14 @@ OPENGL_API void WINAPI glLoadTransposeMatrixf( const GLfloat *m )
 	D3DState.currentMatrixStack->load( mt );
 	*D3DState.currentMatrixModified = true;
 	CheckTexCoordOffset_Hack( b2Dproj );
+
+	if (D3DState.TransformState.matrixMode == GL_MODELVIEW)
+	{
+		D3DXMATRIX model, view;
+		matrix_detect_process_upload(&mt.m[0][0], &model, &view);
+		D3DGlobal.modelMatrixStack->load(model);
+		D3DGlobal.viewMatrixStack->load(view);
+	}
 }
 OPENGL_API void WINAPI glLoadTransposeMatrixd( const GLdouble *m )
 {
@@ -209,6 +249,14 @@ OPENGL_API void WINAPI glLoadTransposeMatrixd( const GLdouble *m )
 	D3DState.currentMatrixStack->load( mt );
 	*D3DState.currentMatrixModified = true;
 	CheckTexCoordOffset_Hack( b2Dproj );
+
+	if (D3DState.TransformState.matrixMode == GL_MODELVIEW)
+	{
+		D3DXMATRIX model, view;
+		matrix_detect_process_upload(&mt.m[0][0], &model, &view);
+		D3DGlobal.modelMatrixStack->load(model);
+		D3DGlobal.viewMatrixStack->load(view);
+	}
 }
 OPENGL_API void WINAPI glMultTransposeMatrixf( const GLfloat *m )
 {
@@ -218,6 +266,11 @@ OPENGL_API void WINAPI glMultTransposeMatrixf( const GLfloat *m )
 	D3DState.currentMatrixStack->multiply( mt );
 	*D3DState.currentMatrixModified = true;
 	CheckTexCoordOffset_Hack( false );
+
+	if (D3DState.TransformState.matrixMode == GL_MODELVIEW)
+	{
+		D3DGlobal.modelMatrixStack->multiply( mt );
+	}
 }
 OPENGL_API void WINAPI glMultTransposeMatrixd( const GLdouble *m )
 {
@@ -229,6 +282,11 @@ OPENGL_API void WINAPI glMultTransposeMatrixd( const GLdouble *m )
 	D3DState.currentMatrixStack->multiply( mt );
 	*D3DState.currentMatrixModified = true;
 	CheckTexCoordOffset_Hack( false );
+
+	if (D3DState.TransformState.matrixMode == GL_MODELVIEW)
+	{
+		D3DGlobal.modelMatrixStack->multiply( mt );
+	}
 }
 OPENGL_API void WINAPI glFrustum( GLdouble left, GLdouble right, GLdouble bottom, GLdouble top, GLdouble zNear, GLdouble zFar )
 {
@@ -254,12 +312,24 @@ OPENGL_API void WINAPI glPopMatrix( void )
 	HRESULT hr = D3DState.currentMatrixStack->pop( );
 	if( FAILED( hr ) ) D3DGlobal.lastError = hr;
 	*D3DState.currentMatrixModified = true;
+
+	if (D3DState.TransformState.matrixMode == GL_MODELVIEW)
+	{
+		D3DGlobal.modelMatrixStack->pop( );
+		D3DGlobal.viewMatrixStack->pop( );
+	}
 }
 OPENGL_API void WINAPI glPushMatrix( void )
 {
 	if( !D3DState.currentMatrixStack ) return;
 	HRESULT hr = D3DState.currentMatrixStack->push( );
 	if( FAILED( hr ) ) D3DGlobal.lastError = hr;
+
+	if (D3DState.TransformState.matrixMode == GL_MODELVIEW)
+	{
+		D3DGlobal.modelMatrixStack->push( );
+		D3DGlobal.viewMatrixStack->push( );
+	}
 }
 OPENGL_API void WINAPI glRotatef( GLfloat angle, GLfloat x, GLfloat y, GLfloat z )
 {
@@ -269,6 +339,11 @@ OPENGL_API void WINAPI glRotatef( GLfloat angle, GLfloat x, GLfloat y, GLfloat z
 	D3DXMatrixRotationAxis( &m, &v, D3DXToRadian( angle ) );
 	D3DState.currentMatrixStack->multiply( m );
 	*D3DState.currentMatrixModified = true;
+
+	if (D3DState.TransformState.matrixMode == GL_MODELVIEW)
+	{
+		D3DGlobal.modelMatrixStack->multiply( m );
+	}
 }
 OPENGL_API void WINAPI glRotated( GLdouble angle, GLdouble x, GLdouble y, GLdouble z )
 {
@@ -278,6 +353,11 @@ OPENGL_API void WINAPI glRotated( GLdouble angle, GLdouble x, GLdouble y, GLdoub
 	D3DXMatrixRotationAxis( &m, &v, D3DXToRadian( (FLOAT)angle ) );
 	D3DState.currentMatrixStack->multiply( m );
 	*D3DState.currentMatrixModified = true;
+
+	if (D3DState.TransformState.matrixMode == GL_MODELVIEW)
+	{
+		D3DGlobal.modelMatrixStack->multiply( m );
+	}
 }
 OPENGL_API void WINAPI glScalef( GLfloat x, GLfloat y, GLfloat z )
 {
@@ -286,6 +366,11 @@ OPENGL_API void WINAPI glScalef( GLfloat x, GLfloat y, GLfloat z )
 	D3DXMatrixScaling( &m, x, y, z );
 	D3DState.currentMatrixStack->multiply( m );
 	*D3DState.currentMatrixModified = true;
+
+	if (D3DState.TransformState.matrixMode == GL_MODELVIEW)
+	{
+		D3DGlobal.modelMatrixStack->multiply( m );
+	}
 }
 OPENGL_API void WINAPI glScaled( GLdouble x, GLdouble y, GLdouble z )
 {
@@ -294,6 +379,11 @@ OPENGL_API void WINAPI glScaled( GLdouble x, GLdouble y, GLdouble z )
 	D3DXMatrixScaling( &m,(FLOAT)x,(FLOAT)y,(FLOAT)z );
 	D3DState.currentMatrixStack->multiply( m );
 	*D3DState.currentMatrixModified = true;
+
+	if (D3DState.TransformState.matrixMode == GL_MODELVIEW)
+	{
+		D3DGlobal.modelMatrixStack->multiply( m );
+	}
 }
 OPENGL_API void WINAPI glTranslatef( GLfloat x, GLfloat y, GLfloat z )
 {
@@ -302,6 +392,11 @@ OPENGL_API void WINAPI glTranslatef( GLfloat x, GLfloat y, GLfloat z )
 	D3DXMatrixTranslation( &m, x, y, z );
 	D3DState.currentMatrixStack->multiply( m );
 	*D3DState.currentMatrixModified = true;
+
+	if (D3DState.TransformState.matrixMode == GL_MODELVIEW)
+	{
+		D3DGlobal.modelMatrixStack->multiply( m );
+	}
 }
 OPENGL_API void WINAPI glTranslated( GLdouble x, GLdouble y, GLdouble z )
 {
@@ -310,4 +405,9 @@ OPENGL_API void WINAPI glTranslated( GLdouble x, GLdouble y, GLdouble z )
 	D3DXMatrixTranslation( &m,(FLOAT)x,(FLOAT)y,(FLOAT)z );
 	D3DState.currentMatrixStack->multiply( m );
 	*D3DState.currentMatrixModified = true;
+
+	if (D3DState.TransformState.matrixMode == GL_MODELVIEW)
+	{
+		D3DGlobal.modelMatrixStack->multiply( m );
+	}
 }

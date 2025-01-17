@@ -28,7 +28,8 @@
 #include "d3d_extension.hpp"
 #include "d3d_texture.hpp"
 #include "d3d_matrix_stack.hpp"
-
+#include "d3d_matrix_detection.hpp"
+#include "d3d_helpers.hpp"
 //==================================================================================
 // D3D Global
 //----------------------------------------------------------------------------------
@@ -63,6 +64,8 @@ void D3DGlobal_Init( bool clearGlobals )
 		if (!D3DGlobal.defaultTexture[i])
 			D3DGlobal.defaultTexture[i] = new D3DTextureObject(0);
 	}
+
+	matrix_detect_configuration_reset();
 }
 
 void D3DGlobal_Reset()
@@ -138,6 +141,14 @@ void D3DGlobal_Cleanup( bool cleanupAll )
 	if (D3DGlobal.modelviewMatrixStack) {
 		delete D3DGlobal.modelviewMatrixStack;
 		D3DGlobal.modelviewMatrixStack = nullptr;
+	}
+	if (D3DGlobal.modelMatrixStack) {
+		delete D3DGlobal.modelMatrixStack;
+		D3DGlobal.modelMatrixStack = nullptr;
+	}
+	if (D3DGlobal.viewMatrixStack) {
+		delete D3DGlobal.viewMatrixStack;
+		D3DGlobal.viewMatrixStack = nullptr;
 	}
 	if (D3DGlobal.projectionMatrixStack) {
 		delete D3DGlobal.projectionMatrixStack;
@@ -742,14 +753,14 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 
 	if (FAILED(hr = D3DGlobal.pD3D->GetDeviceCaps(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, &D3DGlobal.hD3DCaps))) {
 		D3DGlobal.lastError = hr;
-		logPrintf("wglCreateContext: GetDeviceCaps failed with error '%s'\n", DXGetErrorString9(hr));
+		logPrintf("wglCreateContext: GetDeviceCaps failed with error '%s'\n", DXGetErrorString(hr));
 		return 0;
 	}
 
 	// get the format for the desktop mode
 	if (FAILED(hr = D3DGlobal.pD3D->GetAdapterDisplayMode(D3DADAPTER_DEFAULT, &D3DGlobal.hDesktopMode))) {
 		D3DGlobal.lastError = hr;
-		logPrintf("wglCreateContext: GetAdapterDisplayMode failed with error '%s'\n", DXGetErrorString9(hr));
+		logPrintf("wglCreateContext: GetAdapterDisplayMode failed with error '%s'\n", DXGetErrorString(hr));
 		return 0;
 	}
 
@@ -785,7 +796,7 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 									   &D3DGlobal.hPresentParams, &D3DGlobal.pDevice );
 
 	if (FAILED(hr)) {
-		logPrintf("wglCreateContext: CreateDevice failed with error '%s'\n", DXGetErrorString9(hr));
+		logPrintf("wglCreateContext: CreateDevice failed with error '%s'\n", DXGetErrorString(hr));
 		logPrintf("wglCreateContext: creating device with hardware vertex processing\n");
 	
 		hr = D3DGlobal.pD3D->CreateDevice( D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, D3DGlobal.hWnd, 
@@ -794,14 +805,14 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 
 		if (FAILED(hr)) {
 			// it's OK, we may not have hardware vp available, so create a software vp device
-			logPrintf("wglCreateContext: CreateDevice failed with error '%s'\n", DXGetErrorString9(hr));
+			logPrintf("wglCreateContext: CreateDevice failed with error '%s'\n", DXGetErrorString(hr));
 			logPrintf("wglCreateContext: creating device with software vertex processing\n");
 
 			hr = D3DGlobal.pD3D->CreateDevice( D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, D3DGlobal.hWnd, 
 											   D3DCREATE_SOFTWARE_VERTEXPROCESSING | D3DCREATE_FPU_PRESERVE | D3DCREATE_DISABLE_DRIVER_MANAGEMENT,
 											   &D3DGlobal.hPresentParams, &D3DGlobal.pDevice );
 			if (FAILED(hr)) {
-				logPrintf("wglCreateContext: CreateDevice failed with error '%s'\n", DXGetErrorString9(hr));
+				logPrintf("wglCreateContext: CreateDevice failed with error '%s'\n", DXGetErrorString(hr));
 				return 0;
 			}
 		}
@@ -814,7 +825,7 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 
 	hr = D3DGlobal.pDevice->GetSwapChain( 0, &D3DGlobal.pSwapChain );
 	if (FAILED(hr)) {
-		logPrintf("wglCreateContext: GetSwapChain failed with error '%s'\n", DXGetErrorString9(hr));
+		logPrintf("wglCreateContext: GetSwapChain failed with error '%s'\n", DXGetErrorString(hr));
 		return 0;
 	}
 	if (nullptr == D3DGlobal.pSwapChain) {
@@ -829,23 +840,23 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 	D3DSURFACE_DESC hDepthStencilDesc;
 	hr = D3DGlobal.pSwapChain->GetBackBuffer( 0, D3DBACKBUFFER_TYPE_MONO, &lpBackBuffer );
 	if (FAILED(hr)) {
-		logPrintf("wglCreateContext: GetBackBuffer failed with error '%s'\n", DXGetErrorString9(hr));
+		logPrintf("wglCreateContext: GetBackBuffer failed with error '%s'\n", DXGetErrorString(hr));
 		return 0;
 	}
 	hr = lpBackBuffer->GetDesc( &hBackBufferDesc );
 	if (FAILED(hr)) {
-		logPrintf("wglCreateContext: lpBackBuffer->GetDesc failed with error '%s'\n", DXGetErrorString9(hr));
+		logPrintf("wglCreateContext: lpBackBuffer->GetDesc failed with error '%s'\n", DXGetErrorString(hr));
 		return 0;
 	}
 	lpBackBuffer->Release();
 	hr = D3DGlobal.pDevice->GetDepthStencilSurface( &lpDepthStencil );
 	if (FAILED(hr)) {
-		logPrintf("wglCreateContext: GetDepthStencilSurface failed with error '%s'\n", DXGetErrorString9(hr));
+		logPrintf("wglCreateContext: GetDepthStencilSurface failed with error '%s'\n", DXGetErrorString(hr));
 		return 0;
 	}
 	hr = lpDepthStencil->GetDesc( &hDepthStencilDesc );
 	if (FAILED(hr)) {
-		logPrintf("wglCreateContext: lpDepthStencil->GetDesc failed with error '%s'\n", DXGetErrorString9(hr));
+		logPrintf("wglCreateContext: lpDepthStencil->GetDesc failed with error '%s'\n", DXGetErrorString(hr));
 		return 0;
 	}
 	lpDepthStencil->Release();
@@ -876,6 +887,8 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 
 	//init matrix stacks
 	D3DGlobal.modelviewMatrixStack = new D3DMatrixStack;
+	D3DGlobal.modelMatrixStack = new D3DMatrixStack;
+	D3DGlobal.viewMatrixStack = new D3DMatrixStack;
 	D3DGlobal.projectionMatrixStack = new D3DMatrixStack;
 	for (int i = 0; i < MAX_D3D_TMU; ++i)
 		D3DGlobal.textureMatrixStack[i] = new D3DMatrixStack;
@@ -1073,6 +1086,8 @@ OPENGL_API BOOL WINAPI wrap_wglSwapBuffers( HDC )
 				D3DGlobal.lastError = hr;
 			}
 		}
+
+		matrix_detect_frame_ended();
 	}
 
 	if (D3DGlobal.pVABuffer)
