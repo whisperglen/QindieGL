@@ -1,9 +1,17 @@
 # QindieGL
 ## QindieGL Is Not Driver, It's Emulator
-**Version 1.0 rev. 5 (November 2016)**
 
 ![QindieGL Logo](logo/QIndieGL-Logo-small.png?raw=true)
 
+## What's special about this fork?
+
+Since my modification of Return to Castle Wolfenstein open source to support RTX-remix, I was wondering if other idtech3 games could be enhanced with camera detection and stable geometry.
+
+So far I have released a camera hack: I noticed RTCW stores the camera and the modelview matrix (model/world * camera) in two globals; I can detect the camera global (by comparing the pointers) and the model matrix can be obtained by multiplying modelview * camera-inverse. We'll see if this is sufficient.
+
+A method for stabilising geometry hashes is in it's inception, stay tuned.
+
+Tested with: American McGee's Alice, Heavy Metal FAKK2, Star Trek Elite Force 2.
 
 ## Introduction
 
@@ -21,6 +29,7 @@ Please perform the following steps to install and enable QindieGL:
 
 1. Add the information from the `QindieGL-setup.reg` file to the Windows registry.
 2. Place `opengl32.dll` to the directory where the executable file of the game is located.
+3a. Most probably the game will not load the local `opengl32.dll` due to GPU driver app interference: Rename the executable e.g. quake2dx.exe
 3. Run the game; make sure the `QindieGL.log` file is created; this means that game has successfully hooked the wrapper.
 4. If you want to restore the native OpenGL renderer, delete the `opengl32.dll` file from the game executable's directory.
 
