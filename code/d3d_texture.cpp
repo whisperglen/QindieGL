@@ -255,11 +255,15 @@ HRESULT D3DTextureObject :: FillTextureLevel( GLint cubeface, GLint level, GLint
 	case GL_RGB:
 	case GL_RGB8:
 	case GL_BGR_EXT:
+	case GL_COMPRESSED_RGB_S3TC_DXT1_EXT:
 	case 4:
 	case GL_RGBA:
 	case GL_RGBA8:
 	case GL_BGRA_EXT:
 	case GL_ABGR_EXT:
+	case GL_COMPRESSED_RGBA_S3TC_DXT1_EXT:
+	case GL_COMPRESSED_RGBA_S3TC_DXT3_EXT:
+	case GL_COMPRESSED_RGBA_S3TC_DXT5_EXT:
 		m_dstbytes = 4;
 		break;
 	default:
@@ -827,12 +831,16 @@ static void D3DTex_LoadImage(GLenum target, GLint level, GLint internalformat, G
 		case GL_RGB:
 		case GL_RGB8:
 		case GL_BGR_EXT:
+		case GL_COMPRESSED_RGB_S3TC_DXT1_EXT:
 			d3dFormat = D3DFMT_X8R8G8B8;
 			break;
 		case 4:
 		case GL_RGBA:
 		case GL_RGBA8:
 		case GL_BGRA_EXT:
+		case GL_COMPRESSED_RGBA_S3TC_DXT1_EXT:
+		case GL_COMPRESSED_RGBA_S3TC_DXT3_EXT:
+		case GL_COMPRESSED_RGBA_S3TC_DXT5_EXT:
 			d3dFormat = D3DFMT_A8R8G8B8;
 			break;
 		default:

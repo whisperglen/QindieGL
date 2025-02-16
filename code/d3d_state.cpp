@@ -198,7 +198,8 @@ static void D3DState_SetTransform()
 
 	if (D3DState.modelViewMatrixModified) {
 		D3DState.modelViewMatrixModified = false;
-		if (!matrix_detect_is_detection_valid())
+		static bool prev_dectection_enabled = false;
+		if (!matrix_detect_is_detection_enabled())
 		{
 			hr = D3DGlobal.pDevice->SetTransform( D3DTS_WORLD, D3DGlobal.modelviewMatrixStack->top() );
 			if (FAILED(hr)) {
@@ -206,17 +207,18 @@ static void D3DState_SetTransform()
 				return;
 			}
 
-			static D3DXMATRIX mat;
-			static bool mat_inited = false;
-			if ( !mat_inited)
+			if (prev_dectection_enabled)
 			{
+				//in case user just disabled it, clear the view matrix
+				D3DXMATRIX mat;
 				D3DXMatrixIdentity(&mat);
-				mat_inited = true;
-			}
-			hr = D3DGlobal.pDevice->SetTransform(D3DTS_VIEW, &mat);
-			if (FAILED(hr)) {
-				D3DGlobal.lastError = hr;
-				return;
+				hr = D3DGlobal.pDevice->SetTransform(D3DTS_VIEW, &mat);
+				if (FAILED(hr)) {
+					D3DGlobal.lastError = hr;
+					return;
+				}
+
+				prev_dectection_enabled = false;
 			}
 		}
 		else
@@ -231,6 +233,8 @@ static void D3DState_SetTransform()
 				D3DGlobal.lastError = hr;
 				return;
 			}
+
+			prev_dectection_enabled = true;
 		}
 	}
 	if (D3DState.projectionMatrixModified) {

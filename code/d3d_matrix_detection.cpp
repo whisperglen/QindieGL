@@ -2,6 +2,7 @@
 #include "d3d_matrix_detection.hpp"
 #include "d3d_helpers.hpp"
 #include "d3d_wrapper.hpp"
+#include "d3d_global.hpp"
 
 #include <iostream>
 #include <fstream>
@@ -10,6 +11,8 @@
 #include <vector>
 #include <stdio.h>
 #include <string.h>
+
+#include "ini.h"
 
 struct matrix_log_data
 {
@@ -20,6 +23,7 @@ struct matrix_log_data
 	std::vector<void*> seq_ptr;
 };
 
+#if 0
 enum detection_status
 {
 	MDET_SKY_OR_CAMERA = 0,
@@ -45,6 +49,18 @@ typedef struct mat_detection
 	}
 } mat_detection_t;
 
+enum det_flags
+{
+	MFLG_FLIP = 1 << 0,
+	MFLG_FIRST = 1 << 1,
+	MFLG_SAME = 1 << 2,
+	MFLG_TRANSL = 1 << 3,
+	MFLG_INV = 1 << 4
+};
+
+mat_detection_t g_mat_camera;
+#endif
+
 static bool matrix_is_flippingmat(const float* mat);
 
 static struct matrix_log_data g_mat_log_data[100];
@@ -56,7 +72,6 @@ static bool g_mat_log_print_one_round = false;
 void* g_mat_addrs[3];
 int g_mat_addr_count = 0;
 int g_mat_addr_selected = 0;
-static float g_camera_backup[16];
 
 static float g_mat_identity[16] =
 {
@@ -66,12 +81,19 @@ static float g_mat_identity[16] =
 	0.0, 0.0, 0.0, 1.0
 };
 
-mat_detection_t g_mat_camera;
-bool g_mat_detection_valid = true;
-
-bool matrix_detect_is_detection_valid()
+enum detection_mode_e
 {
-	return g_mat_detection_valid;
+	DETECTION_NONE = 0,
+	DETECTION_IDTECH2 = 1,
+	DETECTION_IDTECH3 = 2
+};
+
+bool g_mat_detection_enabled = false;
+int g_mat_detection_mode = 0;
+
+bool matrix_detect_is_detection_enabled()
+{
+	return g_mat_detection_enabled;
 }
 
 inline bool matrix_is_identity(const float* mat)
@@ -84,20 +106,11 @@ inline bool matrix_is_transposed(const float* a, const float* b)
 	return matrix_detect_are_equal(a, b, 12);
 }
 
-enum det_flags
-{
-	MFLG_FLIP = 1 << 0,
-	MFLG_FIRST = 1 << 1,
-	MFLG_SAME = 1 << 2,
-	MFLG_TRANSL = 1 << 3,
-	MFLG_INV = 1 << 4
-};
-
 void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, D3DXMATRIX* detected_view)
 {
 	unsigned int flags = 0;
-
-	if (g_mat_addr_count == 0)
+#if 1
+	if (g_mat_addr_count == 0 || g_mat_detection_mode == DETECTION_IDTECH2)
 	{
 		D3DXMatrixIdentity(detected_model);
 		memcpy(&detected_view->m[0][0], mat, 16*sizeof(float));
@@ -107,7 +120,7 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 			matrix_print_s(&detected_view->m[0][0], "detected view 0");
 		}
 	}
-	else
+	else //DETECTION_IDTECH3
 	{
 		if (matrix_is_identity(mat))
 		{
@@ -146,7 +159,7 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 			}
 		}
 	}
-#if 0
+#else
 	if (matrix_is_flippingmat(mat))
 	{
 		//ignore this one
@@ -221,7 +234,6 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 		g_mat_addrs[g_mat_addr_count] = (void*)mat;
 		if (mat < g_mat_addrs[g_mat_addr_selected])
 		{
-			memcpy(g_camera_backup, mat, sizeof(g_camera_backup));
 			g_mat_addr_selected = g_mat_addr_count;
 			msg_newDefault = true;
 		}
@@ -254,13 +266,23 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 	}
 }
 
+void matrix_detect_on_world_retrieve(const float* mat, D3DXMATRIX* detected_model, D3DXMATRIX* detected_view)
+{
+	if (g_mat_detection_mode == DETECTION_IDTECH2)
+	{
+		//store modelview in view matrix
+		D3DXMatrixIdentity(detected_model);
+		memcpy(&(detected_view->m[0][0]), mat, sizeof(detected_view->m));
+	}
+}
+
 void matrix_detect_frame_ended()
 {
 	key_inputs_t keys = keypress_get();
 
 	if (keys.o && (keys.ctrl || keys.alt))
 	{
-		g_mat_detection_valid = !g_mat_detection_valid;
+		g_mat_detection_enabled = !g_mat_detection_enabled;
 	}
 
 	if (keys.pgdwn && (keys.ctrl || keys.alt))
@@ -288,7 +310,7 @@ void matrix_detect_frame_ended()
 		}
 
 	}
-	g_mat_camera.clear();
+	//g_mat_camera.clear();
 
 	g_mat_log_idx = 0;
 	g_mat_log_global_count = 0;
@@ -304,11 +326,39 @@ void matrix_detect_frame_ended()
 	}
 }
 
+static int read_confval(const char* valname, mINI::INIStructure &ini)
+{
+	int ret = 0;
+	const char* gamename = D3DGlobal_GetGameName();
+	for(int tries = 0; tries < 2; tries++)
+	{
+		if (gamename && ini.has(gamename) && ini[gamename].has(valname))
+		{
+			try {
+				ret = std::stoi(ini[gamename][valname]);
+			} catch (const std::exception &e) {
+				logPrintf("MatrixDetection: EXCEPTION %s\n", e.what());
+			}
+		}
+		else
+		{
+			gamename = GLOBAL_GAMENAME;
+		}
+	}
+	return ret;
+}
+
 void matrix_detect_configuration_reset()
 {
 	matrix_detect_frame_ended();
 	g_mat_addr_count = 0;
 	g_mat_addr_selected = 0;
+
+	mINI::INIStructure &ini = *((mINI::INIStructure *)D3DGlobal_GetIniHandler());
+	g_mat_detection_enabled = read_confval("enable_camera_detection", ini);
+	g_mat_detection_mode = read_confval("camera_detection_mode", ini);
+
+	logPrintf("MatrixDetection enabled:%d mode:%d\n", g_mat_detection_enabled, g_mat_detection_mode);
 }
 
 bool matrix_detect_are_equal(const float *a, const float *b, int count)

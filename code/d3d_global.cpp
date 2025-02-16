@@ -30,6 +30,8 @@
 #include "d3d_matrix_stack.hpp"
 #include "d3d_matrix_detection.hpp"
 #include "d3d_helpers.hpp"
+
+#include "ini.h"
 //==================================================================================
 // D3D Global
 //----------------------------------------------------------------------------------
@@ -37,6 +39,11 @@
 //==================================================================================
 
 D3DGlobal_t D3DGlobal;
+
+static std::string g_gamename;
+static mINI::INIFile g_inifile(WRAPPER_GL_SHORT_NAME_STRING ".ini");
+static mINI::INIStructure g_iniconf;
+static bool g_iniavailable = false;
 
 void D3DGlobal_Init( bool clearGlobals )
 {
@@ -63,6 +70,15 @@ void D3DGlobal_Init( bool clearGlobals )
 	for (int i = 0; i < D3D_TEXTARGET_MAX; ++i) {
 		if (!D3DGlobal.defaultTexture[i])
 			D3DGlobal.defaultTexture[i] = new D3DTextureObject(0);
+	}
+
+	if (g_inifile.read(g_iniconf))
+	{
+		g_iniavailable = true;
+	}
+	else
+	{
+		g_iniavailable = false;
 	}
 
 	matrix_detect_configuration_reset();
@@ -223,6 +239,14 @@ DWORD D3DGlobal_GetRegistryValue( const char *key, const char *section, DWORD de
 	DWORD dwSize = sizeof(DWORD);
 	char szKeyPath[MAX_PATH];
 
+	if (g_iniavailable)
+	{
+		if (g_iniconf.has(section) && g_iniconf[section].has(key))
+		{
+			return std::stoul(g_iniconf[section][key]);
+		}
+	}
+
 	strncpy_s(szKeyPath, WRAPPER_REGISTRY_PATH "\\", MAX_PATH-1);
 	strncat_s(szKeyPath, section, MAX_PATH-1);
 
@@ -242,6 +266,28 @@ DWORD D3DGlobal_GetRegistryValue( const char *key, const char *section, DWORD de
 	}
 
 	return defaultValue;
+}
+
+/*
+==================
+D3DGlobal_GetIniHandler
+
+Returns a pointer to the ini file handler object
+==================
+*/
+void* D3DGlobal_GetIniHandler()
+{
+	return &g_iniconf;
+}
+
+void D3DGlobal_StoreGameName(const char *gn)
+{
+	g_gamename.assign(gn);
+}
+
+const char* D3DGlobal_GetGameName()
+{
+	return g_gamename.c_str();
 }
 
 /*
@@ -1106,7 +1152,7 @@ static PIXELFORMATDESCRIPTOR s_d3dPixelFormat =
 	PFD_DOUBLEBUFFER,					// Must Support Double Buffering
 	PFD_TYPE_RGBA,                      // Request An RGBA Format
 	32,									// Select Our Color Depth
-	0, 0, 0, 0, 0, 0,                   // Color Bits Ignored
+	8, 0, 8, 0, 8, 0,                   // Color Bits WG: needed by SDL
 	8,                                  // 8-bit Alpha Buffer
 	0,                                  // Shift Bit Ignored
 	0,                                  // No Accumulation Buffer
@@ -1120,9 +1166,9 @@ static PIXELFORMATDESCRIPTOR s_d3dPixelFormat =
 };
 
 #if 0
-static void DumpPixelFormat( PIXELFORMATDESCRIPTOR *pfd ) 
+static void DumpPixelFormat( CONST PIXELFORMATDESCRIPTOR *pfd, const char *func, HDC hdc, int index ) 
 {
-	logPrintf("DumpPixelFormat: 0x%x\n", pfd);
+	logPrintf("%s: HDC %p index %d\n", func, hdc, index);
 	if (!pfd) return;
 
 	logPrintf(" Size = %i\n", pfd->nSize);
@@ -1141,10 +1187,15 @@ static void DumpPixelFormat( PIXELFORMATDESCRIPTOR *pfd )
 	logPrintf(" Layer Type = %i\n", pfd->iLayerType);
 	logPrintf(" Layer Mask = %i\n", pfd->dwLayerMask);
 }
+#else
+static void DumpPixelFormat(CONST PIXELFORMATDESCRIPTOR* pfd, const char* func, HDC hdc, int index)
+{
+}
 #endif
 
-OPENGL_API int WINAPI wrap_wglChoosePixelFormat( HDC, PIXELFORMATDESCRIPTOR *pfd ) 
-{ 
+OPENGL_API int WINAPI wrap_wglChoosePixelFormat( HDC hdc, PIXELFORMATDESCRIPTOR *pfd ) 
+{
+	DumpPixelFormat(pfd, "wglChoosePixelFormat", hdc, -1);
 	if ( pfd ) {
 		s_d3dPixelFormat.cColorBits = pfd->cColorBits;
 		D3DGlobal.iBPP = pfd->cColorBits;
@@ -1153,20 +1204,22 @@ OPENGL_API int WINAPI wrap_wglChoosePixelFormat( HDC, PIXELFORMATDESCRIPTOR *pfd
 	return 0;
 }
 
-OPENGL_API int WINAPI wrap_wglDescribePixelFormat( HDC, int, UINT, LPPIXELFORMATDESCRIPTOR pfd ) 
+OPENGL_API int WINAPI wrap_wglDescribePixelFormat( HDC hdc, int index, UINT, LPPIXELFORMATDESCRIPTOR pfd ) 
 { 
+	logPrintf("wglDescribePixelFormat: HDC %p index %d\n", hdc, index);
 	if ( pfd ) memcpy( pfd, &s_d3dPixelFormat, sizeof(s_d3dPixelFormat) );
 	return 1;
 }
 
-OPENGL_API int WINAPI wrap_wglGetPixelFormat( HDC ) 
+OPENGL_API int WINAPI wrap_wglGetPixelFormat( HDC hdc ) 
 { 
+	logPrintf("wglGetPixelFormat: HDC %p\n", hdc);
 	return 1;
 }
 
-OPENGL_API BOOL WINAPI wrap_wglSetPixelFormat( HDC, int, CONST PIXELFORMATDESCRIPTOR* ) 
+OPENGL_API BOOL WINAPI wrap_wglSetPixelFormat( HDC hdc, int index, CONST PIXELFORMATDESCRIPTOR *pfd ) 
 { 
-	// just silently pass the PFD through unmodified
+	DumpPixelFormat(pfd, "wglSetPixelFormat", hdc, index);
 	return TRUE;
 }
 
@@ -1207,7 +1260,7 @@ OPENGL_API BOOL WINAPI wrap_wglSwapLayerBuffers( HDC, UINT )
 
 OPENGL_API BOOL WINAPI wrap_wglShareLists( HGLRC, HGLRC )
 {
-	return TRUE;
+	return FALSE;
 }
 OPENGL_API BOOL WINAPI wrap_wglUseFontBitmapsA( HDC, DWORD, DWORD, DWORD )
 {

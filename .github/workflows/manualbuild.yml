@@ -50,5 +50,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: QindieGL
-        path: |
-          bin\opengl32.dll
+        path: .\bin\*

@@ -7,11 +7,21 @@
 
 Since my modification of Return to Castle Wolfenstein open source to support RTX-remix, I was wondering if other idtech3 games could be enhanced with camera detection and stable geometry.
 
-So far I have released a camera hack: I noticed RTCW stores the camera and the modelview matrix (model/world * camera) in two globals; I can detect the camera global (by comparing the pointers) and the model matrix can be obtained by multiplying modelview * camera-inverse. We'll see if this is sufficient.
+So far I have released a camera hack for idtech3: I noticed RTCW stores the camera and the modelview matrix (model/world * camera) in two globals;
+I can detect the camera global (by comparing the pointers) and the model matrix can be obtained by multiplying modelview * camera-inverse.
+We'll see if this is sufficient.
+<br/>
+For idtech2 games, I've noticed the game builds up the camera matrix with gl rotate and translate, then saves it for later use;
+I've used this (getvalue) as trigger to make it the camera matrix, and any later scale/rotate/translate would be considered model camera.
 
 A method for stabilising geometry hashes is in it's inception, stay tuned.
 
-Tested with: American McGee's Alice, Heavy Metal FAKK2, Star Trek Elite Force 2.
+Tested with: American McGee's Alice, Heavy Metal FAKK2, Star Trek Elite Force 2, Quake2, Heretic2.
+
+## Included in this project:
+
+- DXErr functions part of DXUT [https://github.com/Microsoft/DXUT] (MIT license)
+- mINI library [https://github.com/metayeti/mINI] (MIT license)
 
 ## Introduction
 

@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Source Files\DXUT">
+      <UniqueIdentifier>{cd84312e-f5b9-49ba-8c0e-e09db4e7edd8}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="opengl32.def">
@@ -106,6 +109,12 @@
     <ClCompile Include="..\code\d3d_matrix_detection.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\extern\dxut\dxerr_a.cpp">
+      <Filter>Source Files\DXUT</Filter>
+    </ClCompile>
+    <ClCompile Include="..\extern\dxut\dxerr_w.cpp">
+      <Filter>Source Files\DXUT</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\code\d3d_array.hpp">
@@ -150,5 +159,13 @@
     <ClInclude Include="..\code\d3d_matrix_detection.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\extern\dxut\dxerr.h">
+      <Filter>Source Files\DXUT</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CopyFileToFolders Include="QindieGL.ini">
+      <Filter>Resource Files</Filter>
+    </CopyFileToFolders>
   </ItemGroup>
 </Project>

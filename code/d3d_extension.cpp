@@ -399,7 +399,18 @@ OPENGL_API PROC WINAPI wrap_wglGetProcAddress( LPCSTR s )
 	if (pszDisabledExt)
 		logPrintf("WARNING: wglGetProcAddress: queried disabled proc '%s' (extension '%s') (stub = 0x%X)\n", s, pszDisabledExt, stubAddress);
 	else
-		logPrintf("WARNING: wglGetProcAddress: queried unknown proc '%s' (stub = 0x%X)\n", s, stubAddress);
+	{
+		FARPROC fp = GetProcAddress(D3DGlobal.hModule, s);
+		if (fp)
+		{
+			logPrintf("wglGetProcAddress: queried proc '%s'\n", s);
+			return fp;
+		}
+		else
+		{
+			logPrintf("WARNING: wglGetProcAddress: queried unknown proc '%s' (stub = 0x%X)\n", s, stubAddress);
+		}
+	}
 
 	return (PROC)stubAddress;
 }

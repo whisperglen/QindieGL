@@ -110,6 +110,7 @@ typedef struct D3DGlobal_s
 	bool					deviceLost;
 	bool					sceneBegan;
 	int						skipCopyImage;
+	HMODULE                 hModule;
 	HWND					hWnd;
 	HDC						hDC;
 	HGLRC					hGLRC;
@@ -165,12 +166,17 @@ typedef struct D3DGlobal_s
 	} compiledVertexArray;
 } D3DGlobal_t;
 
+#define GLOBAL_GAMENAME "game.global"
+
 extern D3DGlobal_t D3DGlobal;
 
 extern void D3DGlobal_Init( bool clearGlobals );
 extern void D3DGlobal_Cleanup( bool cleanupAll );
 extern const char* D3DGlobal_FormatToString( D3DFORMAT format );
 extern DWORD D3DGlobal_GetRegistryValue( const char *key, const char *section, DWORD defaultValue );
+extern void* D3DGlobal_GetIniHandler();
+extern void D3DGlobal_StoreGameName(const char *gn);
+extern const char* D3DGlobal_GetGameName();
 extern void D3DGlobal_CPU_Detect();
 
 #endif //QINDIEGL_D3D_GLOBAL_H

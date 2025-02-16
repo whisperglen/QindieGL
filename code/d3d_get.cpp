@@ -24,6 +24,7 @@
 #include "d3d_array.hpp"
 #include "d3d_matrix_stack.hpp"
 #include "d3d_texture.hpp"
+#include "d3d_matrix_detection.hpp"
 
 //==================================================================================
 // Get* functions
@@ -356,6 +357,10 @@ template<typename T> static void glGet( GLenum pname, T *params )
 			for (int i = 0; i < 16; i++) {
 				params[i] = (T)pm->m[i/4][i%4];
 			}
+			D3DXMATRIX model, view;
+			matrix_detect_on_world_retrieve(&pm->m[0][0], &model, &view);
+			D3DGlobal.modelMatrixStack->load(model);
+			D3DGlobal.viewMatrixStack->load(view);
 			return;
 		}
 	case GL_PROJECTION_MATRIX:
