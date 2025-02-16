@@ -7,7 +7,8 @@
 src/extractfuncs/extractfuncs.exe
 ### ignore file changes with:  git update-index --skip-worktree <file>
 ### revert ignore with:        git update-index --no-skip-worktree  <file>
-extern/*/lib*/*.lib
+extern/detours/lib.X86*/
+[Rr]eleaseNoDetours/
 
 # User-specific files
 *.rsuser

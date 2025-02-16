@@ -5,6 +5,10 @@
       <Configuration>Debug</Configuration>
       <Platform>Win32</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="ReleaseNoDetours|Win32">
+      <Configuration>ReleaseNoDetours</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Release|Win32">
       <Configuration>Release</Configuration>
       <Platform>Win32</Platform>
@@ -30,6 +34,13 @@
     <CharacterSet>MultiByte</CharacterSet>
     <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoDetours|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v142</PlatformToolset>
+  </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
@@ -37,6 +48,9 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoDetours|Win32'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
@@ -52,6 +66,12 @@
     <IncludePath>$(IncludePath);D:\DirectX9_SDK\Include</IncludePath>
     <LibraryPath>$(LibraryPath);D:\DirectX9_SDK\Lib</LibraryPath>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoDetours|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+    <TargetName>opengl32</TargetName>
+    <IncludePath>$(IncludePath);D:\DirectX9_SDK\Include</IncludePath>
+    <LibraryPath>$(LibraryPath);D:\DirectX9_SDK\Lib</LibraryPath>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <PrecompiledHeader>
@@ -60,21 +80,27 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;QINDIEGLSRC_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\extern\dx9sdk\include;$(ProjectDir)..\extern\dxut;$(ProjectDir)..\extern\mINI;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\extern\dx9sdk\include;$(ProjectDir)..\extern\dxut;$(ProjectDir)..\idtech3_mixup;$(ProjectDir)..\extern\mINI;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <ModuleDefinitionFile>$(ProjectDir)\opengl32.def</ModuleDefinitionFile>
       <AdditionalDependencies>d3dx9.lib;legacy_stdio_definitions.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(ProjectDir)..\extern\dx9sdk\lib\x86\;$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(ProjectDir)..\extern\dx9sdk\lib\$(PlatformTarget)\;$(ProjectDir)..\idtech3_mixup\lib.$(PlatformTarget)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
     </Link>
     <PostBuildEvent>
-      <Command>copy $(TargetPath) $(ProjectDir)..\bin\$(TargetFileName)
-copy $(TargetDir)$(TargetName).pdb $(ProjectDir)..\bin\$(TargetName).pdb
-copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(ProjectName).ini</Command>
+      <Command>mkdir $(ProjectDir)..\bin\$(Configuration)\
+copy $(TargetPath) $(ProjectDir)..\bin\$(Configuration)\$(TargetFileName)
+
+copy $(TargetDir)$(TargetName).pdb $(ProjectDir)..\bin\$(Configuration)\$(TargetName).pdb
+
+copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration)\$(ProjectName).ini</Command>
     </PostBuildEvent>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -88,7 +114,43 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(ProjectName).ini</Comm
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\extern\dx9sdk\include;$(ProjectDir)..\extern\dxut;$(ProjectDir)..\extern\mINI%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\extern\dx9sdk\include;$(ProjectDir)..\extern\dxut;$(ProjectDir)..\idtech3_mixup;$(ProjectDir)..\extern\mINI%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <ModuleDefinitionFile>$(ProjectDir)\opengl32.def</ModuleDefinitionFile>
+      <AdditionalDependencies>d3dx9.lib;legacy_stdio_definitions.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)..\extern\dx9sdk\lib\$(PlatformTarget)\;$(ProjectDir)..\idtech3_mixup\lib.$(PlatformTarget)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
+    </Link>
+    <PostBuildEvent>
+      <Command>mkdir $(ProjectDir)..\bin\$(Configuration)\
+copy $(TargetPath) $(ProjectDir)..\bin\$(Configuration)\$(TargetFileName)
+
+copy $(TargetDir)$(TargetName).pdb $(ProjectDir)..\bin\$(Configuration)\$(TargetName).pdb
+
+copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration)\$(ProjectName).ini</Command>
+    </PostBuildEvent>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoDetours|Win32'">
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;QINDIEGLSRC_EXPORTS;QINDIEGLSRC_NO_DETOURS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\extern\dx9sdk\include;$(ProjectDir)..\extern\dxut;$(ProjectDir)..\idtech3_mixup;$(ProjectDir)..\extern\mINI%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -101,10 +163,16 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(ProjectName).ini</Comm
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
     </Link>
     <PostBuildEvent>
-      <Command>copy $(TargetPath) $(ProjectDir)..\bin\$(TargetFileName)
-copy $(TargetDir)$(TargetName).pdb $(ProjectDir)..\bin\$(TargetName).pdb
-copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(ProjectName).ini</Command>
+      <Command>mkdir $(ProjectDir)..\bin\$(Configuration)\
+copy $(TargetPath) $(ProjectDir)..\bin\$(Configuration)\$(TargetFileName)
+
+copy $(TargetDir)$(TargetName).pdb $(ProjectDir)..\bin\$(Configuration)\$(TargetName).pdb
+
+copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration)\$(ProjectName).ini</Command>
     </PostBuildEvent>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
   </ItemDefinitionGroup>
   <ItemGroup>
     <None Include="..\README.md" />

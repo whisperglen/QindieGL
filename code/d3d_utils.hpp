@@ -220,10 +220,10 @@ inline int UTIL_GLTextureTargettoInternalIndex( GLenum target )
 	}
 }
 
-#define __PO446(S, LN)  { static bool printed##LN = false; if (!printed##LN) { printed##LN = true; logPrintf((S)); } }
-#define __PO448(S, LN) __PO446(S, LN)
+#define __PO446(S, LN, ...)  { static bool printed##LN = false; if (!printed##LN) { printed##LN = true; logPrintf((S), __VA_ARGS__); } }
+#define __PO448(S, LN, ...) __PO446(S, LN, __VA_ARGS__)
 
 // Logs the passed string only once, the first time the enclosing codeblock is executed
-#define PRINT_ONCE(S) __PO448((S), __LINE__)
+#define PRINT_ONCE(S, ...) __PO448((S), __LINE__, __VA_ARGS__)
 
 #endif //QINDIEGL_D3D_UTILS_H

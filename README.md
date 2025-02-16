@@ -7,21 +7,22 @@
 
 Since my modification of Return to Castle Wolfenstein open source to support RTX-remix, I was wondering if other idtech3 games could be enhanced with camera detection and stable geometry.
 
-So far I have released a camera hack for idtech3: I noticed RTCW stores the camera and the modelview matrix (model/world * camera) in two globals;
-I can detect the camera global (by comparing the pointers) and the model matrix can be obtained by multiplying modelview * camera-inverse.
-We'll see if this is sufficient.
-<br/>
-For idtech2 games, I've noticed the game builds up the camera matrix with gl rotate and translate, then saves it for later use;
+So far I have released a camera hack for idtech3: I noticed RTCW stores the camera and the modelview matrix (model/world * camera) in two globals;<br/>
+I can detect the camera global (by comparing the pointers) and the model matrix can be obtained by multiplying modelview * camera-inverse.<br/>
+We'll see if this is sufficient.<br/>
+For idtech2 games, I've noticed the game builds up the camera matrix with gl rotate and translate, then saves it for later use;<br/>
 I've used this (getvalue) as trigger to make it the camera matrix, and any later scale/rotate/translate would be considered model matrix.
 
 A method for stabilising geometry hashes is in it's inception, stay tuned.
 
-Tested with: American McGee's Alice, CoD 2003, Heavy Metal FAKK2, Star Trek Elite Force 2, Quake2, Heretic2.
+Tested with: American McGee's Alice, CoD 2003, Heavy Metal FAKK2, Star Trek Elite Force 2, Open Jedi Knight, Quake2, Heretic2.
+NOTE: RTSS interferes with proper Remix functionality; add NvRemixBridge.exe to the exception list (OJK needs this to be able to launch).
 
 ## Included in this project:
 
 - DXErr functions part of DXUT [https://github.com/Microsoft/DXUT] (MIT license)
 - mINI library [https://github.com/metayeti/mINI] (MIT license)
+- Detours library [https://github.com/microsoft/Detours] (MIT license)
 
 ## Introduction
 
@@ -37,7 +38,7 @@ QindieGL is a wrapper library which emulates OpenGL API using Microsoft Direct3D
 
 Please perform the following steps to install and enable QindieGL:
 
-1. Add the information from the `QindieGL-setup.reg` file to the Windows registry.
+1. Copy `QindieGL.ini` to the game directory. Modify in this file any settings particular to your game.
 2. Place `opengl32.dll` to the directory where the executable file of the game is located.
 3a. Most probably the game will not load the local `opengl32.dll` due to GPU driver app interference: Rename the executable e.g. quake2dx.exe
 3. Run the game; make sure the `QindieGL.log` file is created; this means that game has successfully hooked the wrapper.

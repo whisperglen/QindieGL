@@ -72,5 +72,6 @@
 
 
 extern void logPrintf( const char *fmt, ... );
+extern void logShutdown();
 
 #endif //QINDIEGL_D3D_WRAPPER_H

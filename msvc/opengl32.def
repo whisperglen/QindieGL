@@ -364,3 +364,5 @@ EXPORTS
 	wglUseFontOutlinesA = wrap_wglUseFontOutlinesA
 	wglUseFontOutlinesW = wrap_wglUseFontOutlinesW
 	matrix_print_s
+	DXGetErrorStringA
+	logPrintf

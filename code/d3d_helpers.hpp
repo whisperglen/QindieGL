@@ -2,6 +2,9 @@
 #ifndef QINDIEGL_D3D_HELPERS_H
 #define QINDIEGL_D3D_HELPERS_H
 
+#pragma warning( push )
+#pragma warning( disable : 4201)
+
 typedef union inputs
 {
 	struct {
@@ -22,5 +25,8 @@ typedef union inputs
 } key_inputs_t;
 
 key_inputs_t keypress_get();
+
+
+#pragma warning( pop ) 
 
 #endif

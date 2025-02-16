@@ -170,6 +170,10 @@ static glext_entry_point_t glext_EntryPoints[] =
 	//GL_EXT_stencil_two_side
 	GL_EXT_ENTRY_POINT( "EXT", "stencil_two_side", glActiveStencilFace, -1 ),
 
+	//GL_ATI_pn_triangles
+	{ "glPNTrianglesiATI", "GL_ATI_pn_triangles", -1, (PROC)glPNTrianglesiATI },
+	{ "glPNTrianglesfATI", "GL_ATI_pn_triangles", -1, (PROC)glPNTrianglesfATI },
+
 	//WGL_EXT_swap_control
 	WGL_EXT_ENTRY_POINT( "EXT", "swap_control", wglSwapInterval, -2 ),
 	WGL_EXT_ENTRY_POINT( "EXT", "swap_control", wglGetSwapInterval, -2 ),
@@ -351,6 +355,9 @@ void D3DExtension_BuildExtensionsString()
 
 	//an alias to GL_EXT_multi_draw_arrays
 	ExtensionBuf.AddExtension( "GL_SUN_multi_draw_arrays" );
+
+	//for idtech3 games that pass normal pointer when this is present
+	ExtensionBuf.AddExtension( "GL_ATI_pn_triangles" );
 
 	//we implement it at driver level
 	ExtensionBuf.AddExtension( "WGL_ARB_extensions_string" );

@@ -66,7 +66,7 @@ static void logInit()
 	fflush(g_fpLog);
 }
 
-static void logShutdown()
+void logShutdown()
 {
 	if (g_fpLog) {
 		time_t t;
@@ -106,6 +106,20 @@ void logPrintf( const char *fmt, ... )
 }
 
 #define PATH_SZ 1024
+static TCHAR exename[PATH_SZ] = { 0 };
+static TCHAR dllname[PATH_SZ] = { 0 };
+
+//#define QINDIEGLSRC_NO_DETOURS
+#ifdef QINDIEGLSRC_NO_DETOURS
+static bool hook_dll_on_load_check() { return false; }
+static void hook_on_process_attach() { }
+static void hook_do_init(const char*, const char*, const char*) { }
+static void hook_do_deinit() { }
+#else
+#include "hooking.h"
+#pragma comment(lib, "idtech3_mixup.lib")
+#endif
+
 //=========================================
 // DLL Entry Point
 //-----------------------------------------
@@ -116,37 +130,46 @@ BOOL APIENTRY DllMain( HMODULE hModule, DWORD ul_reason_for_call, LPVOID )
 {
 	std::string game_cfg(GLOBAL_GAMENAME);
 
+	if (hook_dll_on_load_check())
+	{
+		return TRUE;
+	}
+
     switch ( ul_reason_for_call )
 	{
 		case DLL_PROCESS_ATTACH:
 			DisableThreadLibraryCalls(hModule);
+			hook_on_process_attach();
 			logInit();
 			//logPrintf("DllMain( DLL_PROCESS_ATTACH )\n");
 			//detect executable name
 			{
-				static TCHAR mfname[PATH_SZ];
-				DWORD ercd = GetModuleFileName(NULL, mfname, PATH_SZ);
+				DWORD ercd = GetModuleFileName(NULL, exename, PATH_SZ);
 				if (ercd > 0)
 				{
-					TCHAR* name = _tcsrchr(mfname, _T('\\'));
+					TCHAR* name = _tcsrchr(exename, _T('\\'));
 					if (name) {
 						name++;
-						TCHAR* tmp = _tcsrchr(mfname, _T('.'));
+						int count = _tclen( name );
+						TCHAR* tmp = _tcsrchr(exename, _T('.'));
 						if (tmp) {
-							tmp[0] = 0; //terminate string before .exe
+							count = tmp - name;
 						}
 						game_cfg.assign("game.");
-						game_cfg.append(name);
+						game_cfg.append(name, count);
 					}
 				}
+				ercd = GetModuleFileName(hModule, dllname, PATH_SZ);
 			}
 			D3DGlobal_StoreGameName(game_cfg.c_str());
 			D3DGlobal_Init( true );
 			D3DGlobal.hModule = hModule;
+			hook_do_init(exename, dllname, game_cfg.c_str());
 			break;
 		case DLL_PROCESS_DETACH:
 			//logPrintf("DllMain( DLL_PROCESS_DETACH )\n");
 			D3DGlobal_Cleanup( true );
+			hook_do_deinit();
 			logShutdown();
 			break;
 		default:

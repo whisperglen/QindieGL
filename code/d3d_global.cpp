@@ -32,6 +32,7 @@
 #include "d3d_helpers.hpp"
 
 #include <tchar.h>
+#include <string.h>
 #include "ini.h"
 //==================================================================================
 // D3D Global
@@ -244,7 +245,7 @@ DWORD D3DGlobal_GetRegistryValue( const char *key, const char *section, DWORD de
 	{
 		if (g_iniconf.has(section) && g_iniconf[section].has(key))
 		{
-			return std::stoul(g_iniconf[section][key]);
+			return strtoul(g_iniconf[section][key].c_str(), NULL, 10);
 		}
 	}
 
@@ -267,6 +268,69 @@ DWORD D3DGlobal_GetRegistryValue( const char *key, const char *section, DWORD de
 	}
 
 	return defaultValue;
+}
+
+int D3DGlobal_ReadGameConf(const char* valname)
+{
+	int ret = 0;
+	const char* gamename = D3DGlobal_GetGameName();
+	for(int tries = 0; tries < 2; tries++)
+	{
+		if (gamename && g_iniconf.has(gamename) && g_iniconf[gamename].has(valname))
+		{
+			ret = strtoul( g_iniconf[gamename][valname].c_str(), NULL, 10 );
+		}
+		else
+		{
+			gamename = GLOBAL_GAMENAME;
+		}
+	}
+	return ret;
+}
+
+void* D3DGlobal_ReadGameConfPtr(const char* valname)
+{
+	void* ret = 0;
+	const char* gamename = D3DGlobal_GetGameName();
+	for(int tries = 0; tries < 2; tries++)
+	{
+		if (gamename && g_iniconf.has(gamename) && g_iniconf[gamename].has(valname))
+		{
+			ret = (void*)strtoul( g_iniconf[gamename][valname].c_str(), NULL, 16 );
+		}
+		else
+		{
+			gamename = GLOBAL_GAMENAME;
+		}
+	}
+	return ret;
+}
+
+int D3DGlobal_ReadGameConfStr(const char* valname, char *out, int outsz)
+{
+	int ret = 0;
+	const char* gamename = D3DGlobal_GetGameName();
+	for(int tries = 0; tries < 2; tries++)
+	{
+		if (gamename && g_iniconf.has(gamename) && g_iniconf[gamename].has(valname))
+		{
+			errno_t ercd = strncpy_s(out, outsz, g_iniconf[gamename][valname].c_str(), _TRUNCATE);
+			if ( ercd == STRUNCATE )
+			{
+				logPrintf( "ReadGameConf: string truncation for %s, expected max %d bytes.\n", valname, outsz );
+				return 0;
+			}
+			if ( ercd == 0 )
+			{
+				return 1;
+			}
+		}
+		else
+		{
+			gamename = GLOBAL_GAMENAME;
+		}
+	}
+	return ret;
 }
 
 /*
@@ -1190,7 +1254,7 @@ static void DumpPixelFormat( CONST PIXELFORMATDESCRIPTOR *pfd, const char *func,
 	logPrintf(" Layer Mask = %i\n", pfd->dwLayerMask);
 }
 #else
-static void DumpPixelFormat(CONST PIXELFORMATDESCRIPTOR* pfd, const char* func, HDC hdc, int index)
+static void DumpPixelFormat( CONST PIXELFORMATDESCRIPTOR*, const char*, HDC, int )
 {
 }
 #endif
@@ -1294,4 +1358,13 @@ OPENGL_API BOOL WINAPI wglSwapInterval( int interval )
 OPENGL_API int WINAPI wglGetSwapInterval()
 {
 	return (D3DGlobal.vSync ? 1 : 0);
+}
+
+OPENGL_API void WINAPI glPNTrianglesiATI( GLenum pname, GLint param )
+{
+	_CRT_UNUSED( pname ); _CRT_UNUSED( param );
+}
+OPENGL_API void WINAPI glPNTrianglesfATI( GLenum pname, GLfloat param )
+{
+	_CRT_UNUSED( pname ); _CRT_UNUSED( param );
 }

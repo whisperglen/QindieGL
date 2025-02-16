@@ -113,5 +113,7 @@ extern OPENGL_API void WINAPI glCompressedTexSubImage1D(GLenum target, GLint lev
 extern OPENGL_API void WINAPI glCompressedTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const GLvoid *pixels);
 extern OPENGL_API void WINAPI glCompressedTexSubImage3D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const GLvoid *pixels);
 extern OPENGL_API void WINAPI glGetCompressedTexImage(GLenum target, GLint level, GLvoid *img);
+extern OPENGL_API void WINAPI glPNTrianglesiATI( GLenum pname, GLint param );
+extern OPENGL_API void WINAPI glPNTrianglesfATI( GLenum pname, GLfloat param );
 
 #endif //QINDIEGL_D3D_EXTENSION_H

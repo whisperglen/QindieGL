@@ -148,11 +148,11 @@ void D3DState_SetDepthBias()
 	HRESULT hr = S_OK;
 
 	if (!D3DState.EnableState.depthBiasEnabled) {
-		 hr = D3DGlobal.pDevice->SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, 0);
-		 if (SUCCEEDED(hr)) hr = D3DGlobal.pDevice->SetRenderState(D3DRS_DEPTHBIAS, 0);
+		hr = D3DGlobal.pDevice->SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, 0);
+		if (SUCCEEDED(hr)) hr = D3DGlobal.pDevice->SetRenderState(D3DRS_DEPTHBIAS, 0);
 	} else {
 		hr = D3DGlobal.pDevice->SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, UTIL_FloatToDword(D3DState.PolygonState.depthBiasFactor));
-		 if (SUCCEEDED(hr)) hr = D3DGlobal.pDevice->SetRenderState(D3DRS_DEPTHBIAS, UTIL_FloatToDword(D3DState.PolygonState.depthBiasUnits));
+		if (SUCCEEDED(hr)) hr = D3DGlobal.pDevice->SetRenderState(D3DRS_DEPTHBIAS, UTIL_FloatToDword(D3DState.PolygonState.depthBiasUnits));
 	}
 	
 	if (FAILED(hr)) D3DGlobal.lastError = hr;
@@ -1279,6 +1279,10 @@ static void D3DState_EnableDisableState( GLenum cap, DWORD value )
 
 	case GL_MODULATE:
 		//Kingpin keeps calling this... wtf?
+		break;
+
+	case GL_PN_TRIANGLES_ATI:
+		//ignore, since we're tricking the game to pass NormalPointer
 		break;
 
 	default:

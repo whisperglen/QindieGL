@@ -520,6 +520,10 @@ template<typename T> static void glGet( GLenum pname, T *params )
 		params[0] = (T)D3DGlobal.hD3DCaps.MaxVertexIndex;
 		break;
 
+	case GL_MAX_PN_TRIANGLES_TESSELATION_LEVEL_ATI:
+		params[0] = 7;
+		break;
+
 	default:
 		logPrintf("WARNING: glGet(0x%x) is not supported\n", pname);
 		params[0] = (T)0;

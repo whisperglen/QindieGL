@@ -18,7 +18,7 @@ env:
   # Configuration type to build.
   # You can convert this to a build matrix if you need coverage of multiple configuration types.
   # https://docs.github.com/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
-  BUILD_CONFIGURATION: Release
+  #BUILD_CONFIGURATION: Release
 
 permissions:
   contents: read
@@ -26,6 +26,10 @@ permissions:
 jobs:
   build:
     runs-on: windows-2019
+    strategy:
+      matrix:
+        config: [Release, ReleaseNoDetours]
+        platform: [Win32]
 
     steps:
     - name: Checkout repository
@@ -34,7 +38,7 @@ jobs:
         submodules: 'true'
 
     - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v1.0.2
+      uses: microsoft/setup-msbuild@v1.1.3
 
     - name: Restore NuGet packages
       working-directory: ${{env.GITHUB_WORKSPACE}}
@@ -44,10 +48,18 @@ jobs:
       working-directory: ${{env.GITHUB_WORKSPACE}}
       # Add additional options to the MSBuild command line here (like platform or verbosity level).
       # See https://docs.microsoft.com/visualstudio/msbuild/msbuild-command-line-reference
-      run: msbuild /m /p:Configuration=${{env.BUILD_CONFIGURATION}} ${{env.SOLUTION_FILE_PATH}}
+      run: msbuild /m /p:Configuration=${{matrix.config}} ${{env.SOLUTION_FILE_PATH}}
 
-    - name: Upload Artifacts
+    - name: Upload Release Artifacts
+      if: ${{ matrix.config == 'Release' }}
       uses: actions/upload-artifact@v4
       with:
         name: QindieGL
-        path: .\bin\*
+        path: ./bin/${{matrix.config}}/*
+
+    - name: Upload ReleaseNoDetours Artifacts
+      if: ${{ matrix.config == 'ReleaseNoDetours' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: QindieGL_NoDetours
+        path: ./bin/${{matrix.config}}/*

@@ -178,6 +178,9 @@ extern DWORD D3DGlobal_GetRegistryValue( const char *key, const char *section, D
 extern void* D3DGlobal_GetIniHandler();
 extern void D3DGlobal_StoreGameName(const char *gn);
 extern const char* D3DGlobal_GetGameName();
+extern int D3DGlobal_ReadGameConf( const char* valname );
+extern void* D3DGlobal_ReadGameConfPtr( const char* valname );
+extern int D3DGlobal_ReadGameConfStr( const char* valname, char* out, int outsz );
 extern void D3DGlobal_CPU_Detect();
 
 #endif //QINDIEGL_D3D_GLOBAL_H
