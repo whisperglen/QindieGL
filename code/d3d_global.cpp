@@ -31,6 +31,7 @@
 #include "d3d_matrix_detection.hpp"
 #include "d3d_helpers.hpp"
 
+#include <tchar.h>
 #include "ini.h"
 //==================================================================================
 // D3D Global
@@ -250,10 +251,10 @@ DWORD D3DGlobal_GetRegistryValue( const char *key, const char *section, DWORD de
 	strncpy_s(szKeyPath, WRAPPER_REGISTRY_PATH "\\", MAX_PATH-1);
 	strncat_s(szKeyPath, section, MAX_PATH-1);
 
-    returnStatus = RegOpenKeyEx(HKEY_CURRENT_USER, szKeyPath, 0L, KEY_READ, &hKey);
+    returnStatus = RegOpenKeyExA(HKEY_CURRENT_USER, szKeyPath, 0L, KEY_READ, &hKey);
 
 	if (returnStatus == ERROR_SUCCESS) {
-		returnStatus = RegQueryValueEx(hKey, key, nullptr, &dwType, (LPBYTE)&dwValue, &dwSize);
+		returnStatus = RegQueryValueExA(hKey, key, nullptr, &dwType, (LPBYTE)&dwValue, &dwSize);
 		if (returnStatus == ERROR_SUCCESS) {
 			RegCloseKey(hKey);
 			return dwValue;
@@ -716,7 +717,7 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 
 	// initialize direct3d
 	if (!D3DGlobal.pD3D) {
-		if (nullptr == (D3DGlobal.hD3DDll = LoadLibrary("d3d9.dll"))) {
+		if (nullptr == (D3DGlobal.hD3DDll = LoadLibrary(_T("d3d9.dll")))) {
 			logPrintf("wglCreateContext: failed to load d3d9.dll\n");
 			return 0;
 		}

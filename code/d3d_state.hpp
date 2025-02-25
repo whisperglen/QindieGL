@@ -27,7 +27,9 @@ typedef void (*pfnTrNormal)( const GLfloat *normal, float *output );
 
 typedef struct D3DState_s
 {
-	D3DVIEWPORT9		viewport;	
+	D3DVIEWPORT9		viewport;
+	int                 viewport_offX;
+	int                 viewport_offY;
 	D3DMatrixStack*		currentMatrixStack;
 	bool				modelViewMatrixModified;
 	bool				projectionMatrixModified;

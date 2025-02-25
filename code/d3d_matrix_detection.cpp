@@ -110,17 +110,27 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 {
 	unsigned int flags = 0;
 #if 1
-	if (g_mat_addr_count == 0 || g_mat_detection_mode == DETECTION_IDTECH2)
+	if (g_mat_detection_mode == DETECTION_NONE)
+	{
+		memcpy(&detected_model->m[0][0], mat, 16*sizeof(float));
+		D3DXMatrixIdentity(detected_view);
+		if (g_mat_log_print_one_round)
+		{
+			matrix_print_s(&detected_model->m[0][0], "detected model N");
+			matrix_print_s(&detected_view->m[0][0], "detected view N");
+		}
+	}
+	else if (g_mat_addr_count == 0 || g_mat_detection_mode == DETECTION_IDTECH2)
 	{
 		D3DXMatrixIdentity(detected_model);
 		memcpy(&detected_view->m[0][0], mat, 16*sizeof(float));
 		if (g_mat_log_print_one_round)
 		{
-			matrix_print_s(&detected_model->m[0][0], "detected model 0");
-			matrix_print_s(&detected_view->m[0][0], "detected view 0");
+			matrix_print_s(&detected_model->m[0][0], "detected model ID2");
+			matrix_print_s(&detected_view->m[0][0], "detected view ID2");
 		}
 	}
-	else //DETECTION_IDTECH3
+	else if(g_mat_detection_mode == DETECTION_IDTECH3)
 	{
 		if (matrix_is_identity(mat))
 		{
@@ -141,8 +151,8 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 
 			if (g_mat_log_print_one_round)
 			{
-				matrix_print_s(&detected_model->m[0][0], "detected model 1");
-				matrix_print_s(&detected_view->m[0][0], "detected view 1");
+				matrix_print_s(&detected_model->m[0][0], "detected model ID3");
+				matrix_print_s(&detected_view->m[0][0], "detected view ID3");
 			}
 		}
 		else if (mat != g_mat_addrs[g_mat_addr_selected])
@@ -154,8 +164,8 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 
 			if (g_mat_log_print_one_round)
 			{
-				matrix_print_s(&detected_model->m[0][0], "detected model inv");
-				matrix_print_s(&detected_view->m[0][0], "detected view inv");
+				matrix_print_s(&detected_model->m[0][0], "detected model ID3inv");
+				matrix_print_s(&detected_view->m[0][0], "detected view ID3inv");
 			}
 		}
 	}

@@ -119,15 +119,27 @@ static void ProjectionMatrix_GLtoD3D( FLOAT *m )
 		m[3*4+2] -= zF /( zN - zF );
 	} else {
 		//3D projection
-		//Restore znear and zfar from projection matrix
-		GLfloat fC = m[2*4+2];
-		GLfloat fD = m[3*4+2];
-		GLfloat fQ =( 1.0f + fC ) /( 1.0f - fC );
-		GLfloat zF =( fD *( 1.0f + fQ ) ) /( 2.0f * fQ );
-		GLfloat zN =( fD * zF ) /( fD - 2.0f*zF );
-		//Convert GL perspective projection to D3D
-		m[2*4+2] -= zN /( zN - zF );
-		m[3*4+2] *= 0.5f;
+		//first check for infinite zfar plane
+		//without this check, fQ below will be 0.0 and then
+		//  we will runto into float inf and nans with those formulas
+		if ( m[2*4+2] == -1.0f )
+		{
+			//the only fix needed is to divide D by 2
+			m[3*4+2] *= 0.5f;
+		}
+		else
+		{
+			//Restore znear and zfar from projection matrix
+			GLfloat fC = m[2*4+2];
+			GLfloat fD = m[3*4+2];
+			GLfloat fQ =( 1.0f + fC ) /( 1.0f - fC );
+			//WG: do we need to check for fQ != 0 ?
+			GLfloat zF =( fD *( 1.0f + fQ ) ) /( 2.0f * fQ );
+			GLfloat zN =( fD * zF ) /( fD - 2.0f*zF );
+			//Convert GL perspective projection to D3D
+			m[2*4+2] -= zN /( zN - zF );
+			m[3*4+2] *= 0.5f;
+		}
 	}
 }
 
@@ -301,7 +313,11 @@ OPENGL_API void WINAPI glOrtho( GLdouble left, GLdouble right, GLdouble bottom, 
 {
 	if( !D3DState.currentMatrixStack ) return;
 	D3DXMATRIX m;
-	D3DXMatrixOrthoOffCenterRH( &m,(FLOAT)left,(FLOAT)right,(FLOAT)bottom,(FLOAT)top,(FLOAT)zNear,(FLOAT)zFar );
+	D3DXMatrixOrthoOffCenterRH( &m,(FLOAT)left + D3DState.viewport_offX,
+		(FLOAT)right + D3DState.viewport_offX,
+		(FLOAT)bottom - D3DState.viewport_offY,
+		(FLOAT)top - D3DState.viewport_offY,
+		(FLOAT)zNear,(FLOAT)zFar );
 	D3DState.currentMatrixStack->multiply( m );
 	*D3DState.currentMatrixModified = true;
 	CheckTexCoordOffset_Hack( true );
