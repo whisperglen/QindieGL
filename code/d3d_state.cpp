@@ -877,7 +877,7 @@ void D3DState_SetDefaults()
 
 		//always transform texture coordinates
 		//!FIXME: maybe we should track texture matrix, and disable it if it is identity?
-		D3DGlobal.pDevice->SetTextureStageState( i, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_COUNT4 | D3DTTFF_PROJECTED );
+		//D3DGlobal.pDevice->SetTextureStageState( i, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_COUNT4 | D3DTTFF_PROJECTED );
 	}
 
 	D3DXMATRIX d3dIdentityMatrix;
