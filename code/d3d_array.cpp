@@ -245,10 +245,10 @@ int D3DVABuffer :: SetMinimumIndexBufferSize( int numIndices )
 	return currentIndexBuffer;
 }
 
-void D3DVABuffer :: SetupTexCoords( const float *texcoords, const float *position, const float *normal, int stage, float *out_texcoords )
+void D3DVABuffer :: SetupTexCoords( const float *texcoords, int num_coords, const float *position, const float *normal, int stage, float *out_texcoords )
 {
 	if (!D3DState.EnableState.texGenEnabled[stage]) {
-		memcpy( out_texcoords, texcoords, sizeof(float)*4 );
+		memcpy( out_texcoords, texcoords, sizeof(float)*num_coords );
 		return;
 	}
 
@@ -259,7 +259,7 @@ void D3DVABuffer :: SetupTexCoords( const float *texcoords, const float *positio
 	float tr_position[4];
 	float tr_normal[3];
 
-	for (int i = 0; i < 4; ++i, ++in_coords, ++out_coords) {
+	for (int i = 0; i < num_coords; ++i, ++in_coords, ++out_coords) {
 		if (!(D3DState.EnableState.texGenEnabled[stage] & (1 << i))) {
 			*out_coords = *in_coords;
 		} else {
@@ -310,8 +310,24 @@ void D3DVABuffer :: Lock( GLint first, GLint last )
 	int numSamplers = 0;
 	for ( int j = 0; j < D3DGlobal.maxActiveTMU; ++j ) {
 		if (D3DState.EnableState.textureEnabled[j]) {
-			m_vertexSize += 4;
-			fvf |= D3DFVF_TEXCOORDSIZE4(numSamplers);
+			int numCoords = D3DState.ClientVertexArrayState.texCoordInfo[j].elementCount;
+			m_vertexSize += numCoords;
+			switch (numCoords)
+			{
+			case 1:
+				fvf |= D3DFVF_TEXCOORDSIZE1(numSamplers);
+				break;
+			case 2:
+				fvf |= D3DFVF_TEXCOORDSIZE2(numSamplers);
+				break;
+			case 3:
+				fvf |= D3DFVF_TEXCOORDSIZE3(numSamplers);
+				break;
+			default:
+			case 4:
+				fvf |= D3DFVF_TEXCOORDSIZE4(numSamplers);
+				break;
+			}
 			++numSamplers;
 		}
 	}
@@ -330,86 +346,240 @@ void D3DVABuffer :: Lock( GLint first, GLint last )
 		D3DGlobal.lastError = hr;
 		return;
 	}
-	
-	//Fill vertex buffer with data
-	for (int i = 0; i < count; ++i) {
-		const int elemIndex = first + i;
-		vertexData[2] = 0.0f;
-		vertexData[3] = 1.0f;
-		
-		if (elemIndex >= D3DState.ClientVertexArrayState.vertexInfo._internal.compiledFirst &&
-			elemIndex <= D3DState.ClientVertexArrayState.vertexInfo._internal.compiledLast) {
-			memcpy( vertexData, D3DGlobal.compiledVertexArray.compiledVertexData + elemIndex*numVertexCoords, sizeof(GLfloat)*numVertexCoords );
-		} else {
-			D3DVA_CopyArrayToFloats( &D3DState.ClientVertexArrayState.vertexInfo, elemIndex, vertexData ); 
-		}
-		memcpy(pLockedVertices, vertexData, sizeof(GLfloat)*numVertexCoords);
-		pLockedVertices += numVertexCoords;
-	
-		if (fvf & D3DFVF_NORMAL) {
-			if (elemIndex >= D3DState.ClientVertexArrayState.normalInfo._internal.compiledFirst &&
-				elemIndex <= D3DState.ClientVertexArrayState.normalInfo._internal.compiledLast) {
-				memcpy( normalData, D3DGlobal.compiledVertexArray.compiledNormalData + elemIndex*3, sizeof(GLfloat)*3 );
-			} else {
-				D3DVA_CopyArrayToFloats( &D3DState.ClientVertexArrayState.normalInfo, elemIndex, normalData );
-			}
-			memcpy(pLockedVertices, normalData, sizeof(normalData));
-			pLockedVertices += 3;
-		} else {
-			memcpy(normalData, defaultNormal, sizeof(defaultNormal));
-		}
 
-		if (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_COLOR_BIT) {
-			if (elemIndex >= D3DState.ClientVertexArrayState.colorInfo._internal.compiledFirst &&
-				elemIndex <= D3DState.ClientVertexArrayState.colorInfo._internal.compiledLast) {
-				*(DWORD*)pLockedVertices = D3DGlobal.compiledVertexArray.compiledColorData[elemIndex];
-			} else {
-				GLubyte color[4] = { 255, 255, 255, 255 };
-				D3DVA_CopyArrayToUBytes( &D3DState.ClientVertexArrayState.colorInfo, elemIndex, color );
-				*(DWORD*)pLockedVertices = D3DCOLOR_ARGB( color[3], color[0], color[1], color[2] );
-			}
-		} else {
-			*(DWORD*)pLockedVertices = D3DState.CurrentState.currentColor;
+	bool qualify_for_fast_path = false;
+	int tex[2] = { -1, -1 };
+	const D3DVAInfo* pVAInfo;
+	do
+	{
+		if ( ! D3DGlobal.settings.drawcallFastPath)
+		{
+			break;
 		}
-		++pLockedVertices;
-		
-		if (fvf & D3DFVF_SPECULAR) {
-			GLubyte color[4] = { 0, 0, 0, 0 };
-			if (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_COLOR2_BIT) {
-				D3DVA_CopyArrayToUBytes( &D3DState.ClientVertexArrayState.color2Info, elemIndex, color );
-			}
-			if (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_FOG_BIT) {
-				D3DVA_CopyArrayToUBytes( &D3DState.ClientVertexArrayState.fogInfo, elemIndex, color + 3 );
-			}
-			*(DWORD*)pLockedVertices = D3DCOLOR_ARGB( color[3], color[0], color[1], color[2] );
-			++pLockedVertices;
+		if (D3DState.ClientVertexArrayState.vertexInfo._internal.compiledFirst)
+		{
+			//WG: Assume this covers all other elements that can be stored in ._internal, incl. normals, color etc
+			break;
 		}
-
-		for ( int j = 0; j < D3DGlobal.maxActiveTMU; ++j ) {
-			if (D3DState.EnableState.textureEnabled[j]) {
+		pVAInfo = &D3DState.ClientVertexArrayState.vertexInfo;
+		if (pVAInfo->elementType != GL_FLOAT || pVAInfo->elementCount != 3)
+		{
+			break;
+		}
+		if (fvf & D3DFVF_NORMAL)
+		{
+			pVAInfo = &D3DState.ClientVertexArrayState.normalInfo;
+			if (pVAInfo->elementType != GL_FLOAT || pVAInfo->elementCount != 3)
+				break;
+		}
+		pVAInfo = &D3DState.ClientVertexArrayState.colorInfo;
+		if (((D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_COLOR_BIT) != 0) &&
+			(pVAInfo->elementType != GL_BYTE) && (pVAInfo->elementType != GL_UNSIGNED_BYTE))
+		{
+			break;
+		}
+		if (fvf & D3DFVF_SPECULAR)
+		{
+			PRINT_ONCE("Consider implementing D3DFVF_SPECULAR in FastPath for a speed improvement!");
+			break;
+		}
+		if (numSamplers > 2)
+		{
+			break;
+		}
+		int texidx = 0;
+		for (int j = 0; j < D3DGlobal.maxActiveTMU; j++)
+		{
+			if (D3DState.EnableState.textureEnabled[j])
+			{
 				DWORD vaTextureBit = 1 << (VA_TEXTURE_BIT_SHIFT + j);
-				if (D3DState.ClientVertexArrayState.vertexArrayEnable & vaTextureBit) {
-					if (elemIndex >= D3DState.ClientVertexArrayState.texCoordInfo[j]._internal.compiledFirst &&
-						elemIndex <= D3DState.ClientVertexArrayState.texCoordInfo[j]._internal.compiledLast) {
-						SetupTexCoords( D3DGlobal.compiledVertexArray.compiledTexCoordData[j] + elemIndex*4, vertexData, normalData, j, pLockedVertices );
-					} else {
+				if (D3DState.EnableState.texGenEnabled[j])
+				{
+					goto FAST_PATH_CHECK_ABORT;
+				}
+				if (D3DState.ClientVertexArrayState.texCoordInfo[j]._internal.compiledFirst)
+				{
+					goto FAST_PATH_CHECK_ABORT;
+				}
+				if (D3DState.ClientVertexArrayState.vertexArrayEnable & vaTextureBit)
+				{
+					tex[texidx] = j;
+					texidx++;
+				}
+			}
+		}
+		qualify_for_fast_path = true;
+	} while (0);
+FAST_PATH_CHECK_ABORT:
+
+	if (qualify_for_fast_path)
+	{
+		//Fast path
+		float* dest = pLockedVertices;
+
+		pVAInfo = &D3DState.ClientVertexArrayState.vertexInfo;
+		const float* verts = (const float*)pVAInfo->data;
+		const int verts_inc = pVAInfo->stride ? pVAInfo->stride / sizeof(float) : pVAInfo->elementCount;
+		verts += first * verts_inc;
+		
+		pVAInfo = &D3DState.ClientVertexArrayState.normalInfo;
+		const float* norms = (const float*)pVAInfo->data;
+		const int norms_inc = pVAInfo->stride ? pVAInfo->stride / sizeof(float) : pVAInfo->elementCount;
+		norms += first * norms_inc;
+
+		pVAInfo = &D3DState.ClientVertexArrayState.colorInfo;
+		const unsigned char* cols = (const byte*)pVAInfo->data;
+		const int cols_inc = pVAInfo->stride ? pVAInfo->stride : pVAInfo->elementCount;
+		cols += first * cols_inc;
+
+		const DWORD color = D3DState.CurrentState.currentColor;
+		const float* tex0 = 0;
+		int tex0_inc = 0;
+		const float* tex1 = 0;
+		int tex1_inc = 0;
+		if (tex[0] != -1)
+		{
+			pVAInfo = &D3DState.ClientVertexArrayState.texCoordInfo[tex[0]];
+			tex0 = (const float*)pVAInfo->data;
+			tex0_inc = pVAInfo->stride ? pVAInfo->stride / sizeof(float) : pVAInfo->elementCount;
+			tex0 += first * tex0_inc;
+		}
+		if (tex[1] != -1)
+		{
+			pVAInfo = &D3DState.ClientVertexArrayState.texCoordInfo[tex[1]];
+			tex1 = (const float*)pVAInfo->data;
+			tex1_inc = pVAInfo->stride ? pVAInfo->stride / sizeof(float) : pVAInfo->elementCount;
+			tex1 += first * tex1_inc;
+		}
+
+		for (int i = 0; i < count; ++i)
+		{
+			//copy vertices
+			dest[0] = verts[0]; dest[1] = verts[1]; dest[2] = verts[2];
+			verts += verts_inc;
+			dest += 3;
+
+			//copy normals
+			if (fvf & D3DFVF_NORMAL)
+			{
+				dest[0] = norms[0]; dest[1] = norms[1]; dest[2] = norms[2];
+				norms += norms_inc;
+				dest += 3;
+			}
+
+			//copy color
+			if (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_COLOR_BIT)
+			{
+				*(DWORD*)dest = D3DCOLOR_ARGB(cols[3], cols[0], cols[1], cols[2]);
+				cols += cols_inc;
+			}
+			else
+			{
+				*(DWORD*)dest = color;
+			}
+			dest++;
+
+			//copy first texture
+			if (tex0)
+			{
+				dest[0] = tex0[0]; dest[1] = tex0[1];
+				tex0 += tex0_inc;
+				dest += 2;
+			}
+
+			//copy second texture
+			if (tex1)
+			{
+				dest[0] = tex1[0]; dest[1] = tex1[1];
+				tex1 += tex1_inc;
+				dest += 2;
+			}
+
+		}
+	}
+	else
+	{
+		//Fill vertex buffer with data
+		for (int i = 0; i < count; ++i) {
+			const int elemIndex = first + i;
+			vertexData[2] = 0.0f;
+			vertexData[3] = 1.0f;
+
+			if (elemIndex >= D3DState.ClientVertexArrayState.vertexInfo._internal.compiledFirst &&
+				elemIndex <= D3DState.ClientVertexArrayState.vertexInfo._internal.compiledLast) {
+				memcpy( vertexData, D3DGlobal.compiledVertexArray.compiledVertexData + elemIndex*numVertexCoords, sizeof(GLfloat)*numVertexCoords );
+			} else {
+				D3DVA_CopyArrayToFloats( &D3DState.ClientVertexArrayState.vertexInfo, elemIndex, vertexData );
+			}
+			memcpy(pLockedVertices, vertexData, sizeof(GLfloat)*numVertexCoords);
+			pLockedVertices += numVertexCoords;
+
+			if (fvf & D3DFVF_NORMAL) {
+				if (elemIndex >= D3DState.ClientVertexArrayState.normalInfo._internal.compiledFirst &&
+					elemIndex <= D3DState.ClientVertexArrayState.normalInfo._internal.compiledLast) {
+					memcpy( normalData, D3DGlobal.compiledVertexArray.compiledNormalData + elemIndex*3, sizeof(GLfloat)*3 );
+				} else {
+					D3DVA_CopyArrayToFloats( &D3DState.ClientVertexArrayState.normalInfo, elemIndex, normalData );
+				}
+				memcpy(pLockedVertices, normalData, sizeof(normalData));
+				pLockedVertices += 3;
+			} else {
+				memcpy(normalData, defaultNormal, sizeof(defaultNormal));
+			}
+
+			if (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_COLOR_BIT) {
+				if (elemIndex >= D3DState.ClientVertexArrayState.colorInfo._internal.compiledFirst &&
+					elemIndex <= D3DState.ClientVertexArrayState.colorInfo._internal.compiledLast) {
+					*(DWORD*)pLockedVertices = D3DGlobal.compiledVertexArray.compiledColorData[elemIndex];
+				} else {
+					GLubyte color[4] = { 255, 255, 255, 255 };
+					D3DVA_CopyArrayToUBytes( &D3DState.ClientVertexArrayState.colorInfo, elemIndex, color );
+					*(DWORD*)pLockedVertices = D3DCOLOR_ARGB( color[3], color[0], color[1], color[2] );
+				}
+			} else {
+				*(DWORD*)pLockedVertices = D3DState.CurrentState.currentColor;
+			}
+			++pLockedVertices;
+
+			if (fvf & D3DFVF_SPECULAR) {
+				GLubyte color[4] = { 0, 0, 0, 0 };
+				if (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_COLOR2_BIT) {
+					D3DVA_CopyArrayToUBytes( &D3DState.ClientVertexArrayState.color2Info, elemIndex, color );
+				}
+				if (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_FOG_BIT) {
+					D3DVA_CopyArrayToUBytes( &D3DState.ClientVertexArrayState.fogInfo, elemIndex, color + 3 );
+				}
+				*(DWORD*)pLockedVertices = D3DCOLOR_ARGB( color[3], color[0], color[1], color[2] );
+				++pLockedVertices;
+			}
+
+			for ( int j = 0; j < D3DGlobal.maxActiveTMU; ++j ) {
+				if (D3DState.EnableState.textureEnabled[j]) {
+					DWORD vaTextureBit = 1 << (VA_TEXTURE_BIT_SHIFT + j);
+					int numCoords = D3DState.ClientVertexArrayState.texCoordInfo[j].elementCount;
+					if (D3DState.ClientVertexArrayState.vertexArrayEnable & vaTextureBit) {
+						if (elemIndex >= D3DState.ClientVertexArrayState.texCoordInfo[j]._internal.compiledFirst &&
+							elemIndex <= D3DState.ClientVertexArrayState.texCoordInfo[j]._internal.compiledLast) {
+							SetupTexCoords( D3DGlobal.compiledVertexArray.compiledTexCoordData[j] + elemIndex*4, numCoords, vertexData, normalData, j, pLockedVertices );
+						} else {
+							GLfloat texcoord[4] = { 0, 0, 0, 1 };
+							D3DVA_CopyArrayToFloats( &D3DState.ClientVertexArrayState.texCoordInfo[j], elemIndex, texcoord );
+							if (D3DState.TransformState.texcoordFixEnabled) {
+								texcoord[0] += D3DState.TransformState.texcoordFix[0];
+								texcoord[1] += D3DState.TransformState.texcoordFix[1];
+							}
+							SetupTexCoords( texcoord, numCoords, vertexData, normalData, j, pLockedVertices );
+						}
+					} else if (D3DState.EnableState.texGenEnabled[j]) {
 						GLfloat texcoord[4] = { 0, 0, 0, 1 };
-						D3DVA_CopyArrayToFloats( &D3DState.ClientVertexArrayState.texCoordInfo[j], elemIndex, texcoord );
 						if (D3DState.TransformState.texcoordFixEnabled) {
 							texcoord[0] += D3DState.TransformState.texcoordFix[0];
 							texcoord[1] += D3DState.TransformState.texcoordFix[1];
 						}
-						SetupTexCoords( texcoord, vertexData, normalData, j, pLockedVertices );
+						SetupTexCoords( texcoord, numCoords, vertexData, normalData, j, pLockedVertices );
 					}
-				} else if (D3DState.EnableState.texGenEnabled[j]) {
-					GLfloat texcoord[4] = { 0, 0, 0, 1 };
-					if (D3DState.TransformState.texcoordFixEnabled) {
-						texcoord[0] += D3DState.TransformState.texcoordFix[0];
-						texcoord[1] += D3DState.TransformState.texcoordFix[1];
-					}
-					SetupTexCoords( texcoord, vertexData, normalData, j, pLockedVertices );
+					pLockedVertices += numCoords;
 				}
-				pLockedVertices += 4;
 			}
 		}
 	}

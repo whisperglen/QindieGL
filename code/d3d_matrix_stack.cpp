@@ -31,6 +31,7 @@ void D3DStateMatrix :: set_dirty()
 	m_inverse_dirty = TRUE;
 	m_transpose_dirty = TRUE;
 	m_invtrans_dirty = TRUE;
+	m_identity_dirty = TRUE;
 	m_identity = FALSE;
 }
 
@@ -39,7 +40,15 @@ void D3DStateMatrix :: set_identity()
 	m_inverse_dirty = TRUE;
 	m_transpose_dirty = TRUE;
 	m_invtrans_dirty = TRUE;
+
+	m_identity_dirty = FALSE;
 	m_identity = TRUE;
+}
+
+BOOL D3DStateMatrix::is_identity()
+{
+	check_identity();
+	return m_identity;
 }
 
 void D3DStateMatrix :: check_inverse()
@@ -76,6 +85,14 @@ void D3DStateMatrix :: check_invtrans()
 			D3DXMatrixTranspose( &m_invtrans, &m_inverse );
 		}
 		m_invtrans_dirty = FALSE;
+	}
+}
+
+void D3DStateMatrix :: check_identity()
+{
+	if (m_identity_dirty) {
+		m_identity = D3DXMatrixIsIdentity(&m_matrix);
+		m_identity_dirty = FALSE;
 	}
 }
 

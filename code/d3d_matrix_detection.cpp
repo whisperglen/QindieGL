@@ -247,7 +247,7 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 			g_mat_addr_selected = g_mat_addr_count;
 			msg_newDefault = true;
 		}
-		logPrintf("MatrixDetection new pointer stored[%d]: %p. %s\n", g_mat_addr_count, mat, (msg_newDefault ? "It has been autoselected as the new camera." : ""));
+		logPrintf("MatrixDetection new pointer stored[%d]: %p. %s\n", g_mat_addr_count, mat, (msg_newDefault ? "Marked as active camera." : ""));
 		g_mat_addr_count++;
 	}
 	for (int i = 0; i < g_mat_log_idx; i++)

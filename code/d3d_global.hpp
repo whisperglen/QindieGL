@@ -152,6 +152,7 @@ typedef struct D3DGlobal_s
 		DWORD				multisample;
 		DWORD				projectionFix;
 		DWORD				texcoordFix;
+		DWORD				drawcallFastPath;
 		DWORD				useSSE;
 	} settings;
 	struct {

@@ -31,6 +31,7 @@ public:
 
 	void set_dirty();
 	void set_identity();
+	BOOL is_identity();
 
 	operator D3DXMATRIX *()				{ return &m_matrix; }
 	operator const D3DXMATRIX *() const	{ return &m_matrix; }
@@ -42,6 +43,7 @@ private:
 	void check_inverse();
 	void check_transpose();
 	void check_invtrans();
+	void check_identity();
 
 private:
 	D3DXMATRIX	m_matrix;
@@ -51,6 +53,7 @@ private:
 	BOOL		m_inverse_dirty;
 	BOOL		m_transpose_dirty;
 	BOOL		m_invtrans_dirty;
+	BOOL		m_identity_dirty;
 	BOOL		m_identity;
 };
 

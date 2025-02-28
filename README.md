@@ -12,11 +12,11 @@ I can detect the camera global (by comparing the pointers) and the model matrix 
 We'll see if this is sufficient.
 <br/>
 For idtech2 games, I've noticed the game builds up the camera matrix with gl rotate and translate, then saves it for later use;
-I've used this (getvalue) as trigger to make it the camera matrix, and any later scale/rotate/translate would be considered model camera.
+I've used this (getvalue) as trigger to make it the camera matrix, and any later scale/rotate/translate would be considered model matrix.
 
 A method for stabilising geometry hashes is in it's inception, stay tuned.
 
-Tested with: American McGee's Alice, Heavy Metal FAKK2, Star Trek Elite Force 2, Quake2, Heretic2.
+Tested with: American McGee's Alice, CoD 2003, Heavy Metal FAKK2, Star Trek Elite Force 2, Quake2, Heretic2.
 
 ## Included in this project:
 

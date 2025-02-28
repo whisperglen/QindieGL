@@ -448,10 +448,15 @@ void D3DState_SetTexture()
 		bool matrixChanged = D3DState.TextureState.textureEnableChanged || D3DState.textureMatrixModified[i];
 		if (matrixChanged) {
 			D3DState.textureMatrixModified[i] = false;
-			hr = D3DGlobal.pDevice->SetTransform( (D3DTRANSFORMSTATETYPE)(D3DTS_TEXTURE0 + currentSampler), D3DGlobal.textureMatrixStack[i]->top() );
-			if (FAILED(hr)) {
-				D3DGlobal.lastError = hr;
-				break;
+			D3DStateMatrix& mat = D3DGlobal.textureMatrixStack[i]->top();
+			if ( !mat.is_identity() )
+			{
+				PRINT_ONCE("WARNING: Texture transform matrix used! Consider disabling DrawCallFastPath.\n");
+				hr = D3DGlobal.pDevice->SetTransform( (D3DTRANSFORMSTATETYPE)(D3DTS_TEXTURE0 + currentSampler), mat );
+				if (FAILED(hr)) {
+					D3DGlobal.lastError = hr;
+					break;
+				}
 			}
 		}
 
@@ -877,7 +882,7 @@ void D3DState_SetDefaults()
 
 		//always transform texture coordinates
 		//!FIXME: maybe we should track texture matrix, and disable it if it is identity?
-		D3DGlobal.pDevice->SetTextureStageState( i, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_COUNT4 | D3DTTFF_PROJECTED );
+		//D3DGlobal.pDevice->SetTextureStageState( i, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_COUNT4 | D3DTTFF_PROJECTED );
 	}
 
 	D3DXMATRIX d3dIdentityMatrix;
