@@ -98,6 +98,13 @@ const void* hook_find_pattern( unsigned char* pat, int patsz )
 	return ret;
 }
 
+void* hook_loadptr( const void* addr )
+{
+	void* ret = 0;
+	memcpy( &ret, addr, sizeof( ret ) );
+	return ret;
+}
+
 void hook_do_init(const char *exename, const char* dllname, const char *gamename)
 {
 	LONG error;
@@ -166,4 +173,11 @@ void hook_do_deinit()
 	//DetourDetach(&(PVOID&)fp_exit, hk_exit);
 	//error = DetourTransactionCommit();
 	//if(error != NO_ERROR) logPrintf("hook_do_deinit: DetourTransactionCommit failed: %d \n", error);
+
+	hook_surface_sorting_do_deinit();
+}
+
+void hook_frame_ended()
+{
+	hook_surface_sorting_frame_ended();
 }

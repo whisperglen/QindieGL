@@ -3,6 +3,7 @@
 #include "d3d_helpers.hpp"
 #include "d3d_wrapper.hpp"
 #include "d3d_global.hpp"
+#include "d3d_utils.hpp"
 
 #include <iostream>
 #include <fstream>
@@ -81,6 +82,9 @@ static float g_mat_identity[16] =
 	0.0, 0.0, 0.0, 1.0
 };
 
+static D3DXMATRIX g_mat_cache;
+static D3DXMATRIX g_mat_cache_inverse;
+
 enum detection_mode_e
 {
 	DETECTION_NONE = 0,
@@ -104,6 +108,28 @@ inline bool matrix_is_identity(const float* mat)
 inline bool matrix_is_transposed(const float* a, const float* b)
 {
 	return matrix_detect_are_equal(a, b, 12);
+}
+
+D3DXMATRIX *matrix_get_inverse( const float* mat )
+{
+	if ( 0 == memcmp( &g_mat_cache.m[0][0], mat, sizeof( g_mat_cache.m ) ) )
+	{
+		return &g_mat_cache_inverse;
+	}
+	memcpy( &g_mat_cache.m[0][0], mat, sizeof( g_mat_cache.m ) );
+	void *tmp = D3DXMatrixInverse(&g_mat_cache_inverse, NULL, &g_mat_cache);
+	if ( tmp == NULL )
+	{
+		char out[145];
+		unsigned int* ptr = (unsigned int*)mat;
+		snprintf( out, sizeof( out ), "%x %x %x %x\n%x %x %x %x\n%x %x %x %x\n%x %x %x %x",
+			ptr[0], ptr[1], ptr[2], ptr[3],
+			ptr[4], ptr[5], ptr[6], ptr[7],
+			ptr[8], ptr[9], ptr[10], ptr[11],
+			ptr[12], ptr[13], ptr[14], ptr[15] );
+		PRINT_ONCE("WARNING: matrix inverse failed: %s\n", out);
+	}
+	return &g_mat_cache_inverse;
 }
 
 void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, D3DXMATRIX* detected_view)
@@ -157,9 +183,8 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 		}
 		else if (mat != g_mat_addrs[g_mat_addr_selected])
 		{
-			D3DXMATRIX camera = D3DXMATRIX((const float*)(g_mat_addrs[g_mat_addr_selected])), camera_inv, local = D3DXMATRIX(mat);
-			D3DXMatrixInverse(&camera_inv, NULL, &camera);
-			D3DXMatrixMultiply(detected_model, &local, &camera_inv);
+			D3DXMATRIX local = D3DXMATRIX(mat);
+			D3DXMatrixMultiply(detected_model, &local, matrix_get_inverse((const float*)(g_mat_addrs[g_mat_addr_selected])));
 			memcpy(&detected_view->m[0][0], g_mat_addrs[g_mat_addr_selected], sizeof(detected_view->m));
 
 			if (g_mat_log_print_one_round)

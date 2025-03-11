@@ -30,6 +30,7 @@
 #include "d3d_matrix_stack.hpp"
 #include "d3d_matrix_detection.hpp"
 #include "d3d_helpers.hpp"
+#include "hooking.h"
 
 #include <tchar.h>
 #include <string.h>
@@ -83,7 +84,8 @@ void D3DGlobal_Init( bool clearGlobals )
 		g_iniavailable = false;
 	}
 
-	matrix_detect_configuration_reset();
+	if (!clearGlobals)
+		matrix_detect_configuration_reset();
 }
 
 void D3DGlobal_Reset()
@@ -811,7 +813,7 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 
 	D3DGlobal.settings.multisample = D3DGlobal_GetRegistryValue( "MultiSample", "Settings", 0 );
 	D3DGlobal.settings.projectionFix = D3DGlobal_GetRegistryValue( "ProjectionFix", "Settings", 0 );
-	D3DGlobal.settings.infProjectionZFar = D3DGlobal_GetRegistryValue( "ProjectionMaxZFar", "Settings", 0 );
+	D3DGlobal.settings.projectionMaxZFar = D3DGlobal_GetRegistryValue( "ProjectionMaxZFar", "Settings", 0 );
 	D3DGlobal.settings.drawcallFastPath = D3DGlobal_GetRegistryValue( "DrawCallFastPath", "Settings", 0 );
 	D3DGlobal.settings.texcoordFix = D3DGlobal_GetRegistryValue( "TexCoordFix", "Settings", 0 );
 	D3DGlobal.settings.useSSE = D3DGlobal_GetRegistryValue( "UseSSE", "Settings", 0 );
@@ -1201,6 +1203,9 @@ OPENGL_API BOOL WINAPI wrap_wglSwapBuffers( HDC )
 		}
 
 		matrix_detect_frame_ended();
+		hook_frame_ended();
+		//call this last, as it clears they key pressed/released flag
+		keypress_frame_ended();
 	}
 
 	if (D3DGlobal.pVABuffer)

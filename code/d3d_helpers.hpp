@@ -5,7 +5,7 @@
 #pragma warning( push )
 #pragma warning( disable : 4201)
 
-typedef union inputs
+typedef union key_inputs_u
 {
 	struct {
 		int updown : 2;
@@ -20,13 +20,14 @@ typedef union inputs
 		unsigned int i : 1;
 		unsigned int o : 1;
 		unsigned int u : 1;
+		unsigned int p : 1;
 	};
 	unsigned int all;
 } key_inputs_t;
 
+#pragma warning( pop )
+
 key_inputs_t keypress_get();
-
-
-#pragma warning( pop ) 
+void keypress_frame_ended();
 
 #endif

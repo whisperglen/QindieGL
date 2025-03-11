@@ -21,6 +21,7 @@
 #include "d3d_wrapper.hpp"
 #include "d3d_global.hpp"
 #include "d3d_utils.hpp"
+#include "hooking.h"
 
 #include <string>
 #include <tchar.h>
@@ -115,8 +116,8 @@ static bool hook_dll_on_load_check() { return false; }
 static void hook_on_process_attach() { }
 static void hook_do_init(const char*, const char*, const char*) { }
 static void hook_do_deinit() { }
+void hook_frame_ended() { }
 #else
-#include "hooking.h"
 #pragma comment(lib, "idtech3_mixup.lib")
 #endif
 

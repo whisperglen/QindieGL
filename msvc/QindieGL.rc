@@ -1,6 +1,6 @@
 1 VERSIONINFO
- FILEVERSION 1,1,5,0
- PRODUCTVERSION 1,1,5,0
+ FILEVERSION 1,1,6,0
+ PRODUCTVERSION 1,1,6,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -17,12 +17,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "Crystice Softworks"
             VALUE "FileDescription", "QindieGL"
-            VALUE "FileVersion", "1.1.5.0"
+            VALUE "FileVersion", "1.1.6.0"
             VALUE "InternalName", "opengl32.dll"
             VALUE "LegalCopyright", "Copyright (C) 2016"
             VALUE "OriginalFilename", "opengl32.dll"
             VALUE "ProductName", "QindieGL"
-            VALUE "ProductVersion", "1.1.5.0"
+            VALUE "ProductVersion", "1.1.6.0"
         END
     END
     BLOCK "VarFileInfo"
