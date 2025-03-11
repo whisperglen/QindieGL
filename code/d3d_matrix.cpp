@@ -124,8 +124,18 @@ static void ProjectionMatrix_GLtoD3D( FLOAT *m )
 		//  we will runto into float inf and nans with those formulas
 		if ( m[2*4+2] == -1.0f )
 		{
-			//the only fix needed is to divide D by 2
-			m[3*4+2] *= 0.5f;
+			if ( D3DGlobal.settings.infProjectionZFar )
+			{
+				GLfloat zF = (GLfloat)D3DGlobal.settings.infProjectionZFar;
+				GLfloat zN = -m[3*4+2] * 0.5f;
+				m[2*4+2] = zF/(zN - zF);
+				m[3*4+2] = zN*zF/(zN - zF);
+			}
+			else
+			{
+				//the only fix needed is to divide D by 2
+				m[3*4+2] *= 0.5f;
+			}
 		}
 		else
 		{

@@ -151,6 +151,7 @@ typedef struct D3DGlobal_s
 	struct {
 		DWORD				multisample;
 		DWORD				projectionFix;
+		DWORD               infProjectionZFar;
 		DWORD				texcoordFix;
 		DWORD				drawcallFastPath;
 		DWORD				useSSE;

@@ -40,9 +40,9 @@ Please perform the following steps to install and enable QindieGL:
 
 1. Copy `QindieGL.ini` to the game directory. Modify in this file any settings particular to your game.
 2. Place `opengl32.dll` to the directory where the executable file of the game is located.
-3a. Most probably the game will not load the local `opengl32.dll` due to GPU driver app interference: Rename the executable e.g. quake2dx.exe
-3. Run the game; make sure the `QindieGL.log` file is created; this means that game has successfully hooked the wrapper.
-4. If you want to restore the native OpenGL renderer, delete the `opengl32.dll` file from the game executable's directory.
+3. Most probably the game will not load the local `opengl32.dll` due to GPU driver app interference: Rename the executable e.g. quake2dx.exe
+4. Run the game; make sure the `QindieGL.log` file is created; this means that game has successfully hooked the wrapper.
+5. If you want to restore the native OpenGL renderer, delete the `opengl32.dll` file from the game executable's directory.
 
 Please also read **Security Notice** before using QindieGL!
 

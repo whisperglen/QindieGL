@@ -24,9 +24,12 @@
 #include "d3d_utils.hpp"
 #include "d3d_immediate.hpp"
 #include "d3d_array.hpp"
+#include "d3d_matrix_stack.hpp"
 
 //!DO NOT UNCOMMENT THIS UNLESS YOU MAKE PERFORMANCE TESTS!
 //#define VA_USE_IMMEDIATE_MODE
+
+inline static void on_glVertexPointer( GLint size, GLenum type, GLsizei stride, const GLvoid* pointer );
 
 //==================================================================================
 // Vertex arrays
@@ -293,8 +296,12 @@ void D3DVABuffer :: Lock( GLint first, GLint last )
 	GLsizei count = last - first + 1;
 
 	//Compute vertex size and FVF
-	int fvf = (D3DFVF_DIFFUSE) | ((D3DState.ClientVertexArrayState.vertexInfo.elementCount == 4) ? D3DFVF_XYZW : D3DFVF_XYZ);
-	int numVertexCoords = (D3DState.ClientVertexArrayState.vertexInfo.elementCount == 4) ? 4 : 3;
+	// WG: D3DFVF_XYZW requires shader processing according to docs
+	//int fvf = (D3DFVF_DIFFUSE) | ((D3DState.ClientVertexArrayState.vertexInfo.elementCount == 4) ? D3DFVF_XYZW : D3DFVF_XYZ);
+	//int numVertexCoords = (D3DState.ClientVertexArrayState.vertexInfo.elementCount == 4) ? 4 : 3;
+	int fvf = D3DFVF_DIFFUSE | D3DFVF_XYZ;
+	int numVertexCoords = 3;
+	bool homogenousCoords = (D3DState.ClientVertexArrayState.vertexInfo.elementCount == 4);
 	m_vertexSize = numVertexCoords + 1;
 
 	if (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_NORMAL_BIT) {
@@ -347,44 +354,55 @@ void D3DVABuffer :: Lock( GLint first, GLint last )
 		return;
 	}
 
+#define FAST_PATH_SAMPLERS 3
+	int fast_path_abort_reason = 0;
 	bool qualify_for_fast_path = false;
-	int tex[2] = { -1, -1 };
+	int tex[FAST_PATH_SAMPLERS] = { -1, -1, -1 };
 	const D3DVAInfo* pVAInfo;
 	do
 	{
 		if ( ! D3DGlobal.settings.drawcallFastPath)
 		{
+			fast_path_abort_reason = __LINE__;
 			break;
 		}
 		if (D3DState.ClientVertexArrayState.vertexInfo._internal.compiledFirst)
 		{
 			//WG: Assume this covers all other elements that can be stored in ._internal, incl. normals, color etc
+			fast_path_abort_reason = __LINE__;
 			break;
 		}
 		pVAInfo = &D3DState.ClientVertexArrayState.vertexInfo;
 		if (pVAInfo->elementType != GL_FLOAT || pVAInfo->elementCount != 3)
 		{
+			fast_path_abort_reason = __LINE__;
 			break;
 		}
 		if (fvf & D3DFVF_NORMAL)
 		{
 			pVAInfo = &D3DState.ClientVertexArrayState.normalInfo;
-			if (pVAInfo->elementType != GL_FLOAT || pVAInfo->elementCount != 3)
+			if ( pVAInfo->elementType != GL_FLOAT || pVAInfo->elementCount != 3 )
+			{
+				fast_path_abort_reason = __LINE__;
 				break;
+			}
 		}
 		pVAInfo = &D3DState.ClientVertexArrayState.colorInfo;
 		if (((D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_COLOR_BIT) != 0) &&
 			(pVAInfo->elementType != GL_BYTE) && (pVAInfo->elementType != GL_UNSIGNED_BYTE))
 		{
+			fast_path_abort_reason = __LINE__;
 			break;
 		}
 		if (fvf & D3DFVF_SPECULAR)
 		{
 			PRINT_ONCE("Consider implementing D3DFVF_SPECULAR in FastPath for a speed improvement!");
+			fast_path_abort_reason = __LINE__;
 			break;
 		}
-		if (numSamplers > 2)
+		if (numSamplers > FAST_PATH_SAMPLERS)
 		{
+			fast_path_abort_reason = __LINE__;
 			break;
 		}
 		int texidx = 0;
@@ -395,10 +413,12 @@ void D3DVABuffer :: Lock( GLint first, GLint last )
 				DWORD vaTextureBit = 1 << (VA_TEXTURE_BIT_SHIFT + j);
 				if (D3DState.EnableState.texGenEnabled[j])
 				{
+					fast_path_abort_reason = __LINE__;
 					goto FAST_PATH_CHECK_ABORT;
 				}
 				if (D3DState.ClientVertexArrayState.texCoordInfo[j]._internal.compiledFirst)
 				{
+					fast_path_abort_reason = __LINE__;
 					goto FAST_PATH_CHECK_ABORT;
 				}
 				if (D3DState.ClientVertexArrayState.vertexArrayEnable & vaTextureBit)
@@ -433,23 +453,16 @@ FAST_PATH_CHECK_ABORT:
 		cols += first * cols_inc;
 
 		const DWORD color = D3DState.CurrentState.currentColor;
-		const float* tex0 = 0;
-		int tex0_inc = 0;
-		const float* tex1 = 0;
-		int tex1_inc = 0;
-		if (tex[0] != -1)
+		const float* texp[FAST_PATH_SAMPLERS] = { 0 };
+		int tex_inc[FAST_PATH_SAMPLERS];
+		for ( int j = 0; j < FAST_PATH_SAMPLERS; j++ )
 		{
-			pVAInfo = &D3DState.ClientVertexArrayState.texCoordInfo[tex[0]];
-			tex0 = (const float*)pVAInfo->data;
-			tex0_inc = pVAInfo->stride ? pVAInfo->stride / sizeof(float) : pVAInfo->elementCount;
-			tex0 += first * tex0_inc;
-		}
-		if (tex[1] != -1)
-		{
-			pVAInfo = &D3DState.ClientVertexArrayState.texCoordInfo[tex[1]];
-			tex1 = (const float*)pVAInfo->data;
-			tex1_inc = pVAInfo->stride ? pVAInfo->stride / sizeof(float) : pVAInfo->elementCount;
-			tex1 += first * tex1_inc;
+			if ( tex[j] == -1 )
+				continue;
+			pVAInfo = &D3DState.ClientVertexArrayState.texCoordInfo[tex[j]];
+			texp[j] = (const float*)pVAInfo->data;
+			tex_inc[j] = pVAInfo->stride ? pVAInfo->stride / sizeof(float) : pVAInfo->elementCount;
+			texp[j] += first * tex_inc[j];
 		}
 
 		for (int i = 0; i < count; ++i)
@@ -479,26 +492,33 @@ FAST_PATH_CHECK_ABORT:
 			}
 			dest++;
 
-			//copy first texture
-			if (tex0)
+			//copy texture coords
+			for ( int j = 0; j < FAST_PATH_SAMPLERS; j++ )
 			{
-				dest[0] = tex0[0]; dest[1] = tex0[1];
-				tex0 += tex0_inc;
-				dest += 2;
-			}
-
-			//copy second texture
-			if (tex1)
-			{
-				dest[0] = tex1[0]; dest[1] = tex1[1];
-				tex1 += tex1_inc;
-				dest += 2;
+				if ( texp[j] )
+				{
+					dest[0] = texp[j][0]; dest[1] = texp[j][1];
+					texp[j] += tex_inc[j];
+					dest += 2;
+				}
 			}
 
 		}
 	}
 	else
 	{
+		float worldMult = 5000.0;
+		D3DXMATRIX shiftmat;
+		if ( homogenousCoords && D3DGlobal.settings.infProjectionZFar )
+		{
+			worldMult = 1.0f * (float)D3DGlobal.settings.infProjectionZFar;
+			worldMult = sqrtf( (worldMult * worldMult) * 0.33f );
+			const D3DXMATRIX* mvmat = D3DGlobal.modelviewMatrixStack->top().inverse();
+			D3DXMatrixScaling( &shiftmat, worldMult, worldMult, worldMult );
+			D3DXMATRIX scratch;
+			D3DXMatrixTranslation( &scratch, mvmat->m[3][0], mvmat->m[3][1], mvmat->m[3][2] );
+			D3DXMatrixMultiply( &shiftmat, &shiftmat, &scratch );
+		}
 		//Fill vertex buffer with data
 		for (int i = 0; i < count; ++i) {
 			const int elemIndex = first + i;
@@ -511,7 +531,22 @@ FAST_PATH_CHECK_ABORT:
 			} else {
 				D3DVA_CopyArrayToFloats( &D3DState.ClientVertexArrayState.vertexInfo, elemIndex, vertexData );
 			}
-			memcpy(pLockedVertices, vertexData, sizeof(GLfloat)*numVertexCoords);
+			if ( homogenousCoords )
+			{
+				D3DXVECTOR4 vtrx;
+				D3DXVec3Transform( &vtrx, (D3DXVECTOR3*)vertexData, &shiftmat );
+				pLockedVertices[0] = vtrx.x;
+				pLockedVertices[1] = vtrx.y;
+				pLockedVertices[2] = vtrx.z;
+				if ( numVertexCoords > 3 )
+				{
+					pLockedVertices[3] = vertexData[3];
+				}
+			}
+			else
+			{
+				memcpy( pLockedVertices, vertexData, sizeof( GLfloat )*numVertexCoords );
+			}
 			pLockedVertices += numVertexCoords;
 
 			if (fvf & D3DFVF_NORMAL) {
@@ -825,6 +860,8 @@ OPENGL_API void WINAPI glVertexPointer( GLint size, GLenum type, GLsizei stride,
 	D3DState.ClientVertexArrayState.vertexInfo.data = reinterpret_cast<const GLubyte*>(pointer);
 	D3DState.ClientVertexArrayState.vertexInfo._internal.compiledFirst = 0;
 	D3DState.ClientVertexArrayState.vertexInfo._internal.compiledLast = -1;
+
+	on_glVertexPointer( size, type, stride, pointer );
 }
 OPENGL_API void WINAPI glEdgeFlagPointer( GLsizei, const GLvoid* )
 {
@@ -1476,4 +1513,19 @@ OPENGL_API void WINAPI glLockArrays( GLint first, GLsizei count )
 			}
 		}
 	}
+}
+
+inline static void on_glVertexPointer( GLint size, GLenum type, GLsizei stride, const GLvoid* pointer )
+{
+	//static void* dp_VertexPointer = D3DGlobal_ReadGameConfPtr("dp_VertexPointer");
+	//static void* dp_NormalPointer = D3DGlobal_ReadGameConfPtr("dp_NormalPointer");
+	//if ( size == 3 && dp_VertexPointer == pointer && dp_NormalPointer )
+	//{
+	//	glEnableClientState( GL_NORMAL_ARRAY );
+	//	glNormalPointer( type, stride, dp_NormalPointer );
+	//}
+	//else
+	//{
+	//	glDisableClientState( GL_NORMAL_ARRAY );
+	//}
 }
