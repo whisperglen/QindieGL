@@ -7,15 +7,16 @@
 
 Since my modification of Return to Castle Wolfenstein open source to support RTX-remix, I was wondering if other idtech3 games could be enhanced with camera detection and stable geometry.
 
-So far I have released a camera hack for idtech3: I noticed RTCW stores the camera and the modelview matrix (model/world * camera) in two globals;<br/>
-I can detect the camera global (by comparing the pointers) and the model matrix can be obtained by multiplying modelview * camera-inverse.<br/>
-We'll see if this is sufficient.<br/>
-For idtech2 games, I've noticed the game builds up the camera matrix with gl rotate and translate, then saves it for later use;<br/>
+So far I have released a camera hack for idtech3: I noticed RTCW stores the camera and the modelview matrix (model/world * camera) in two globals;
+I can detect the camera global (by comparing the pointers) and the model matrix can be obtained by multiplying modelview * camera-inverse.
+We'll see if this is sufficient.
+
+For idtech2 games, I've noticed the game builds up the camera matrix with gl rotate and translate, then saves it for later use;
 I've used this (getvalue) as trigger to make it the camera matrix, and any later scale/rotate/translate would be considered model matrix.
 
-A method for stabilising geometry hashes is in it's inception, stay tuned.
+WIP: Stabilising geometry hashes for remix is integrated as a beta for FAKK2, and partially for CoD, Alice.
 
-Tested with: American McGee's Alice, CoD 2003, Heavy Metal FAKK2, Star Trek Elite Force 2, Open Jedi Knight, Quake2, Heretic2.
+Tested with: American McGee's Alice, CoD 2003, Heavy Metal FAKK2, Star Trek Elite Force 2, Open Jedi Knight, Quake2, Heretic2.<br/>
 NOTE: RTSS interferes with proper Remix functionality; add NvRemixBridge.exe to the exception list (OJK needs this to be able to launch).
 
 ## Included in this project:

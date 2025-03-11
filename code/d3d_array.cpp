@@ -507,14 +507,13 @@ FAST_PATH_CHECK_ABORT:
 	}
 	else
 	{
-		float worldMult = 5000.0;
 		D3DXMATRIX shiftmat;
-		if ( homogenousCoords && D3DGlobal.settings.infProjectionZFar )
+		if ( homogenousCoords && D3DGlobal.settings.projectionMaxZFar )
 		{
-			worldMult = 1.0f * (float)D3DGlobal.settings.infProjectionZFar;
-			worldMult = sqrtf( (worldMult * worldMult) * 0.33f );
+			float skyboxScale = 1.0f * (float)D3DGlobal.settings.projectionMaxZFar;
+			skyboxScale = sqrtf( (skyboxScale * skyboxScale) * 0.33f );
 			const D3DXMATRIX* mvmat = D3DGlobal.modelviewMatrixStack->top().inverse();
-			D3DXMatrixScaling( &shiftmat, worldMult, worldMult, worldMult );
+			D3DXMatrixScaling( &shiftmat, skyboxScale, skyboxScale, skyboxScale );
 			D3DXMATRIX scratch;
 			D3DXMatrixTranslation( &scratch, mvmat->m[3][0], mvmat->m[3][1], mvmat->m[3][2] );
 			D3DXMatrixMultiply( &shiftmat, &shiftmat, &scratch );

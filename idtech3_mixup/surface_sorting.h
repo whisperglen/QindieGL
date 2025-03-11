@@ -10,10 +10,7 @@ extern "C" {
 
 void hook_surface_sorting_do_init();
 
-//intercept qsortFast to provide stable sorting of surfaces
-void hook_qsortFast(void* base, unsigned num, unsigned width);
-
-
+void hook_surface_sorting_frame_ended();
 
 
 #ifdef __cplusplus

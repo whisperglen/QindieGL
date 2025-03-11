@@ -167,3 +167,8 @@ void hook_do_deinit()
 	//error = DetourTransactionCommit();
 	//if(error != NO_ERROR) logPrintf("hook_do_deinit: DetourTransactionCommit failed: %d \n", error);
 }
+
+void hook_frame_ended()
+{
+	hook_surface_sorting_frame_ended();
+}

@@ -12,6 +12,7 @@ void hook_on_process_attach();
 
 void hook_do_init(const char *exename, const char* dllname, const char *gamename);
 void hook_do_deinit();
+void hook_frame_ended();
 
 int hook_check_address_within_range(void* adr);
 int hook_unprotect( void* ptr, int size );

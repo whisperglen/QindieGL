@@ -23,6 +23,7 @@
 #include "d3d_state.hpp"
 #include "d3d_matrix_stack.hpp"
 #include "d3d_matrix_detection.hpp"
+#include "d3d_utils.hpp"
 //==================================================================================
 // Some words about projection matrices
 //----------------------------------------------------------------------------------
@@ -124,9 +125,11 @@ static void ProjectionMatrix_GLtoD3D( FLOAT *m )
 		//  we will runto into float inf and nans with those formulas
 		if ( m[2*4+2] == -1.0f )
 		{
-			if ( D3DGlobal.settings.infProjectionZFar )
+			PRINT_ONCE( "Infinite ZFar form of Projection Matrix detected.\n" );
+
+			if ( D3DGlobal.settings.projectionMaxZFar )
 			{
-				GLfloat zF = (GLfloat)D3DGlobal.settings.infProjectionZFar;
+				GLfloat zF = (GLfloat)D3DGlobal.settings.projectionMaxZFar;
 				GLfloat zN = -m[3*4+2] * 0.5f;
 				m[2*4+2] = zF/(zN - zF);
 				m[3*4+2] = zN*zF/(zN - zF);
