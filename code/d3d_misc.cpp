@@ -234,8 +234,8 @@ OPENGL_API void WINAPI glViewport( GLint x, GLint y, GLsizei width, GLsizei heig
 
 	if (x < 0 || y < 0)
 	{
-		float tx = (x >= 0) ? 0.0f : (float)x;
-		float ty = (y >= 0) ? 0.0f : (float)y;
+		int tx = (x >= 0) ? 0 : x;
+		int ty = (y >= 0) ? 0 : y;
 		D3DMATRIX *pm = D3DGlobal.projectionMatrixStack->top();
 		// for idtech3, in ortho case, first it sets glViewport then calls glOrtho, so we store the offsets,
 		//  and they will be used there; the matrix already stored is old and does not make sense to be checked;
@@ -261,8 +261,8 @@ OPENGL_API void WINAPI glViewport( GLint x, GLint y, GLsizei width, GLsizei heig
 			//perspective case
 			//we need to adjust the projection matrix to an offcenter proj matrix
 			// What if game loads a new matrix after this call?
-			float x0 = 2.0f * (-tx) / width;
-			float x1 = 2.0f * (ty) / height;
+			float x0 = 2.0f * (-(float)tx) / width;
+			float x1 = 2.0f * ((float)ty) / height;
 			pm->m[2][0] = x0;
 			pm->m[2][1] = x1;
 		}

@@ -25,11 +25,12 @@
 #include "d3d_immediate.hpp"
 #include "d3d_array.hpp"
 #include "d3d_matrix_stack.hpp"
+#include "d3d_helpers.hpp"
 
 //!DO NOT UNCOMMENT THIS UNLESS YOU MAKE PERFORMANCE TESTS!
 //#define VA_USE_IMMEDIATE_MODE
 
-inline static void on_glVertexPointer( GLint size, GLenum type, GLsizei stride, const GLvoid* pointer );
+static void on_glVertexPointer( GLint size, GLenum type, GLsizei stride, const GLvoid* pointer );
 
 //==================================================================================
 // Vertex arrays
@@ -318,6 +319,10 @@ void D3DVABuffer :: Lock( GLint first, GLint last )
 	for ( int j = 0; j < D3DGlobal.maxActiveTMU; ++j ) {
 		if (D3DState.EnableState.textureEnabled[j]) {
 			int numCoords = D3DState.ClientVertexArrayState.texCoordInfo[j].elementCount;
+			if ( D3DState.TextureState.transformEnabled )
+			{
+				numCoords = 4;
+			}
 			m_vertexSize += numCoords;
 			switch (numCoords)
 			{
@@ -399,6 +404,11 @@ void D3DVABuffer :: Lock( GLint first, GLint last )
 			PRINT_ONCE("Consider implementing D3DFVF_SPECULAR in FastPath for a speed improvement!");
 			fast_path_abort_reason = __LINE__;
 			break;
+		}
+		if ( D3DState.TextureState.transformEnabled )
+		{
+			fast_path_abort_reason = __LINE__;
+			goto FAST_PATH_CHECK_ABORT;
 		}
 		if (numSamplers > FAST_PATH_SAMPLERS)
 		{
@@ -591,6 +601,10 @@ FAST_PATH_CHECK_ABORT:
 				if (D3DState.EnableState.textureEnabled[j]) {
 					DWORD vaTextureBit = 1 << (VA_TEXTURE_BIT_SHIFT + j);
 					int numCoords = D3DState.ClientVertexArrayState.texCoordInfo[j].elementCount;
+					if ( D3DState.TextureState.transformEnabled )
+					{
+						numCoords = 4;
+					}
 					if (D3DState.ClientVertexArrayState.vertexArrayEnable & vaTextureBit) {
 						if (elemIndex >= D3DState.ClientVertexArrayState.texCoordInfo[j]._internal.compiledFirst &&
 							elemIndex <= D3DState.ClientVertexArrayState.texCoordInfo[j]._internal.compiledLast) {
@@ -860,7 +874,8 @@ OPENGL_API void WINAPI glVertexPointer( GLint size, GLenum type, GLsizei stride,
 	D3DState.ClientVertexArrayState.vertexInfo._internal.compiledFirst = 0;
 	D3DState.ClientVertexArrayState.vertexInfo._internal.compiledLast = -1;
 
-	on_glVertexPointer( size, type, stride, pointer );
+	if( D3DGlobal.normalPtrGuessEnabled )
+		on_glVertexPointer( size, type, stride, pointer );
 }
 OPENGL_API void WINAPI glEdgeFlagPointer( GLsizei, const GLvoid* )
 {
@@ -1514,17 +1529,22 @@ OPENGL_API void WINAPI glLockArrays( GLint first, GLsizei count )
 	}
 }
 
-inline static void on_glVertexPointer( GLint size, GLenum type, GLsizei stride, const GLvoid* pointer )
+static void on_glVertexPointer( GLint size, GLenum type, GLsizei stride, const GLvoid* pointer )
 {
-	//static void* dp_VertexPointer = D3DGlobal_ReadGameConfPtr("dp_VertexPointer");
-	//static void* dp_NormalPointer = D3DGlobal_ReadGameConfPtr("dp_NormalPointer");
-	//if ( size == 3 && dp_VertexPointer == pointer && dp_NormalPointer )
-	//{
-	//	glEnableClientState( GL_NORMAL_ARRAY );
-	//	glNormalPointer( type, stride, dp_NormalPointer );
-	//}
-	//else
-	//{
-	//	glDisableClientState( GL_NORMAL_ARRAY );
-	//}
+	_CRT_UNUSED( size );
+	key_inputs_t keys = keypress_get();
+	if ( (keys.ctrl || keys.alt) && (keys.i || keys.o) )
+	{
+		logPrintf( "DEBUG: VertexPointer:%p\n", pointer );
+	}
+	for ( int i = 0; i < ARRAYSIZE( D3DGlobal.normalPtrGuess ); i++ )
+	{
+		if ( D3DGlobal.normalPtrGuess[i].vertexPtr == pointer )
+		{
+			glEnableClientState( GL_NORMAL_ARRAY );
+			glNormalPointer( type, stride, D3DGlobal.normalPtrGuess[i].normalPtr );
+			return;
+		}
+	}
+	glDisableClientState( GL_NORMAL_ARRAY );
 }

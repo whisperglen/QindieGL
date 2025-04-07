@@ -112,19 +112,23 @@ typedef struct jmp_helper_s
 	byte* addr;
 	byte* data;
 	int datasz;
+	intptr_t verify;
 } jmp_helper_t;
 
 static const void* fp_qsortFast = 0;
+static const void* fp_qsortFast_uc0 = 0;
 static const void* fp_markLeaves = 0;
-static const void** fpp_cvarGet = 0;
-static const void** fpp_cvarSet = 0;
+static const void* fp_cvarGet = 0;
+static const void* fp_cvarSet = 0;
 static const cvar_t* cvar_novis = 0;
 static const int* tr_dp_skyportal = 0;
 static byte* jmp_skyOnscreen = 0;
 static const void* fp_addworldsurf1 = 0;
 static const void* fp_addworldsurf2 = 0;
-static const void* fp_test0 = 0;
-static const void* fp_test1 = 0;
+static const void* fp_retvoid = 0;
+static const void* fp_retzero = 0;
+static const void* fp_retone = 0;
+static const void* fp_retnegone = 0;
 static const int* tr_dp_viewcount = 0;
 static const void* fp_setupfrustum = 0;
 static float* tr_dp_viewfov = 0;
@@ -142,20 +146,20 @@ static void hook_qsortFast(void* base, unsigned int num, unsigned width)
 		PRINT_ONCE("======>>>> qsortFast assert width: %d\n", width);
 		return;
 	}
-	if ( num > 10000 )
+	if ( num > 100000 )
 	{
-		PRINT_ONCE( "======>>>> qsortFast assert numSurfs: %d", num );
+		PRINT_ONCE( "======>>>> qsortFast assert numSurfs: %d\n", num );
 		return;
 	}
 
 	if ( g_dump_data )
 	{
-		drawSurf_t* surf = (drawSurf_t*)base;
-		logPrintf("Dumping presorted data %p %d %d\n", base, num, width);
-		for ( int i = 0; i < num; i++, surf++ )
-		{
-			logPrintf("%d. %x %p %d\n", i, surf->sort, surf->surface, *surf->surface);
-		}
+		//drawSurf_t* surf = (drawSurf_t*)base;
+		//logPrintf("Dumping presorted data %p %d %d\n", base, num, width);
+		//for ( int i = 0; i < num; i++, surf++ )
+		//{
+		//	logPrintf("%d. %x %p %d\n", i, surf->sort, surf->surface, *surf->surface);
+		//}
 	}
 	//{
 	//	//unsigned int mask = ~0x3FF80;
@@ -169,30 +173,32 @@ static void hook_qsortFast(void* base, unsigned int num, unsigned width)
 	qsort(base, num, width, qsort_compare);
 	if ( g_dump_data )
 	{
-		drawSurf_t* surf = (drawSurf_t*)base;
-		logPrintf("Dumping sorted data %p %d %d\n", base, num, width);
-		for ( int i = 0; i < num; i++, surf++ )
-		{
-			logPrintf("%d. %x %p %d\n", i, surf->sort, surf->surface, *surf->surface);
-		}
+		//drawSurf_t* surf = (drawSurf_t*)base;
+		//logPrintf("Dumping sorted data %p %d %d\n", base, num, width);
+		//for ( int i = 0; i < num; i++, surf++ )
+		//{
+		//	logPrintf("%d. %x %p %d\n", i, surf->sort, surf->surface, *surf->surface);
+		//}
 	}
 }
 
-static __declspec(naked) void hook_qsortFast_usercall()
+static __declspec(naked) void hook_qsortFast_uc0()
 {
 	//EAX = 00000456 EBX = 00000008 ECX = 1F23C900
 	__asm {
-		//prolog
+		/* prolog */
 		push ebp
 		//mov  ebp, esp
-		//call cdecl function
+
+		/* call cdecl function */
 		push ebx
 		push eax
 		push ecx
 		//call fp_qsortFast
 		call hook_qsortFast
 		add esp,12
-		//epilog
+
+		/* epilog */
 		//mov esp, ebp
 		pop ebp
 		ret
@@ -205,13 +211,13 @@ static void hook_markLeaves( void )
 
 	if ( !cvar_novis )
 	{
-		cvar_novis = ((cvar_t*(*)( const char *name, const char *value, int flags ))(*fpp_cvarGet))("r_novis", "0", 0x200);
+		cvar_novis = ((cvar_t*(*)( const char *name, const char *value, int flags ))fp_cvarGet)("r_novis", "0", 0x200);
 	}
 
 	int novis = cvar_novis->integer;
 	if ( novis == 1 && *tr_dp_skyportal == 1 )
 	{
-		((void(*)( const char *, const char * ))(*fpp_cvarSet))( "r_novis", "0" );
+		((void(*)( const char *, const char * ))fp_cvarSet)( "r_novis", "0" );
 	}
 	else
 	{
@@ -223,7 +229,7 @@ static void hook_markLeaves( void )
 
 	if ( novis )
 	{
-		((void(*)( const char *, const char * ))(*fpp_cvarSet))( "r_novis", "1" );
+		((void(*)( const char *, const char * ))fp_cvarSet)( "r_novis", "1" );
 	}
 }
 
@@ -286,8 +292,18 @@ static void hook_setupfrustum()
 	//float* fovX = (float*)0x01535108;
 	//float* fovY = (float*)0x0153510c;
 	//cplane_t* frustum = (cplane_t*)0x01535198;
-	//float* axis0 = (float*)0x01534fdc;
+	float* axis0 = (float*)0x01534fdc;
 	//float *origin = (float*)0x01534FD0;
+
+	if ( g_dump_data )
+	{
+		logPrintf("Axis dump:\n");
+		float* axis = axis0;
+		for ( int i = 0; i < 3; i++, axis += 3 )
+		{
+			logPrintf( "%g %g %g\n", axis[0], axis[1], axis[2] );
+		}
+	}
 
 	float orgfovx = tr_dp_viewfov[0];
 	float orgfovy = tr_dp_viewfov[1];
@@ -295,47 +311,72 @@ static void hook_setupfrustum()
 	tr_dp_viewfov[0] = 179.0f;
 	tr_dp_viewfov[1] = 179.0f;
 
+	if ( 0 )
+	{
+		//inverse axis and render backside
+		static vec3_t backup_axis[3];
+		{
+			memcpy( backup_axis, axis0, sizeof( backup_axis ) );
+			float* axis = axis0;
+			for ( int i = 0; i < 2; i += 1 )
+			{
+				axis[i*3 + 0] = -axis[i*3 + 0];
+				axis[i*3 + 1] = -axis[i*3 + 1];
+				axis[i*3 + 2] = -axis[i*3 + 2];
+			}
+			key_inputs_t keys = keypress_get( true );
+			if ( keys.y )
+			{
+				((void(*)())0x4c9090)();
+			}
+		}
+
+		((void(*)())fp_setupfrustum)();
+		((void(*)())0x4caad0)();
+
+		//restore axis and render forward looking
+		memcpy( axis0, backup_axis, sizeof( backup_axis ) );
+	}
+
 	((void(*)())fp_setupfrustum)();
+	//now let the normal rendering flow execute
 
 	tr_dp_viewfov[0] = orgfovx;
 	tr_dp_viewfov[1] = orgfovy;
 	
-	for ( int i = 0; i < 4; i++ )
-	{
-		//frustum[i].normal[0] = axis0[0];
-		//frustum[i].normal[1] = axis0[1];
-		//frustum[i].normal[2] = axis0[2];
-		//frustum[i].type = PLANE_NON_AXIAL;
-		//frustum[i].dist = DotProduct(origin, frustum[i].normal);
-		//SetPlaneSignbits(&frustum[i]);
-	}
-
-	if ( g_dump_data )
-	{
-		//logPrintf( "setupfrustum %f - %f\n", orgfovx, orgfovy );
-		for ( int i = 0; i < 4; i++ )
-		{
-			//logPrintf( "%d: %g - %g\n", i, frustum[i].normal[0], axis0[0] );
-			//logPrintf( "%d: %g - %g\n", i, frustum[i].normal[1], axis0[1] );
-			//logPrintf( "%d: %g - %g\n", i, frustum[i].normal[2], axis0[2] );
-			//axis0 += 3;
-			//frustum[i].normal[0] = axis0[0];
-			//frustum[i].normal[1] = axis0[1];
-			//frustum[i].normal[2] = axis0[2];
-			//frustum[i].dist *= 1000.0f;
-			//SetPlaneSignbits( &frustum[i] );
-		}
-	}
+	//for ( int i = 0; i < 4; i++ )
+	//{
+	//	frustum[i].normal[0] = axis0[0];
+	//	frustum[i].normal[1] = axis0[1];
+	//	frustum[i].normal[2] = axis0[2];
+	//	frustum[i].type = PLANE_NON_AXIAL;
+	//	frustum[i].dist = DotProduct(origin, frustum[i].normal);
+	//	SetPlaneSignbits(&frustum[i]);
+	//}
 }
 
-static void hook_empty0()
+static void hook_retvoid()
 {
 	HOOK_ONLINE_NOTICE();
 
 	return;
 }
 
-static int hook_empty1()
+static int hook_retzero()
+{
+	HOOK_ONLINE_NOTICE();
+
+	return 0;
+}
+
+static int hook_retone()
+{
+	HOOK_ONLINE_NOTICE();
+
+	return 1;
+}
+
+static int hook_retnegone()
 {
 	HOOK_ONLINE_NOTICE();
 
@@ -461,35 +502,53 @@ static bool read_conf()
 {
 	bool not_found = false;
 	bool opt_not_found = false;
-	byte bufsrch[32];
-	int srchsz = 0;
+	byte bufsrch[32];  int srchsz = 0;
 	char name[32];
-	int offset;
-	int j;
+	int i, j;
 
-	fp_qsortFast = config_hex( "qsortFast", false );
+	const int numvarsqsf = 5;
+	{ /** Search for __cdecl qsortFast addresses */
+		const char* searchstr = "qsortFast";
 
-	//search for hex patterns
-	memcpy(name, "qsortFast\0", sizeof("qsortFast\0"));
-	const int name_idxoff = strlen( name );
-	for ( int i = 0; fp_qsortFast == NULL && i < 5; i++)
-	{
-		fp_qsortFast = config_pattern( name, false );
-		name[name_idxoff] = '0' + i;
+		//see if there is a function hex address
+		fp_qsortFast = config_hex( searchstr, false );
+
+		//search for hex patterns
+		strncpy_s( name, sizeof( name ), searchstr, _TRUNCATE );
+		for ( int i = 0; fp_qsortFast == NULL && i < numvarsqsf; i++ )
+		{
+			fp_qsortFast = config_pattern( name, false );
+			snprintf( name, sizeof( name ), "%s%d", searchstr, i );
+		}
+	}
+
+	{ /** Search for __usercall veriant0 qsortFast addresses */
+		const char* searchstr = "qsortFast_uc0";
+
+		//see if there is a function hex address
+		fp_qsortFast_uc0 = config_hex( searchstr, false );
+
+		//search for hex patterns
+		strncpy_s( name, sizeof( name ), searchstr, _TRUNCATE );
+		for ( int i = 0; fp_qsortFast_uc0 == NULL && i < numvarsqsf; i++ )
+		{
+			fp_qsortFast_uc0 = config_pattern( name, false );
+			snprintf( name, sizeof( name ), "%s%d", searchstr, i );
+		}
 	}
 
 	fp_markLeaves = config_hex( "markLeaves", false );
 	if ( fp_markLeaves )
 	{
-		fpp_cvarSet = (const void**)config_hex( "ri_fp_cvarSet", true, &not_found );
-		fpp_cvarGet = (const void**)config_hex( "ri_fp_cvarGet", true, &not_found );
+		fp_cvarSet = (const void**)config_hex( "ri_fp_cvarSet", true, &not_found );
+		fp_cvarGet = (const void**)config_hex( "ri_fp_cvarGet", true, &not_found );
 		tr_dp_skyportal = (const int*)config_hex( "tr_dp_skyportal", true, &not_found );
 	}
 	jmp_skyOnscreen = (byte*)config_hex( "jmp_skyOnscreen", false );
 
 	//search for jmp
 	memset( jmp_helpers, 0, sizeof( jmp_helpers ) );
-	for ( int i = 0, j = 0; i < ARRAYSIZE( jmp_helpers ); i++ )
+	for ( i = 0, j = 0; i < ARRAYSIZE( jmp_helpers ); i++ )
 	{
 		snprintf( name, sizeof( name ), "jmp_target%d", i );
 		byte* addr = (byte*)config_hex( name, false );
@@ -511,6 +570,8 @@ static bool read_conf()
 				jmp_helpers[j].data = &jmp_helper_eb;
 				jmp_helpers[j].datasz = 1;
 			}
+			snprintf( name, sizeof( name ), "jmp_target%d_vrf", i );
+			jmp_helpers[j].verify = (intptr_t)config_hex( name, false );
 			//logPrintf( "SurfaceSort: config %s addr %p custom %d\n", name, jmp_helpers[j].addr, jmp_helpers[j].data != &jmp_helper_eb );
 
 			j++;
@@ -536,8 +597,10 @@ static bool read_conf()
 		tr_dp_viewfov = (float*)hook_loadptr(config_pattern( "tr_dp_viewfov", true, &not_found ));
 	}
 
-	fp_test0 = config_hex( "fp_test0", false );
-	fp_test1 = config_hex( "fp_test1", false );
+	fp_retvoid = config_hex( "fp_retvoid", false );
+	fp_retzero = config_hex( "fp_retzero", false );
+	fp_retone = config_hex( "fp_retone", false );
+	fp_retnegone = config_hex( "fp_retnegone", false );
 
 	return (false == not_found);
 }
@@ -559,7 +622,12 @@ static void do_detour_action( DetourAction_FP detourAction )
 	{
 		if (fp_qsortFast)
 		{
-			error = detourAction(&(PVOID&)fp_qsortFast, hook_qsortFast_usercall);
+			error = detourAction(&(PVOID&)fp_qsortFast, hook_qsortFast);
+			BREAK_ON_DETOUR_ERROR(error, errhint);
+		}
+		if (fp_qsortFast_uc0)
+		{
+			error = detourAction(&(PVOID&)fp_qsortFast_uc0, hook_qsortFast_uc0);
 			BREAK_ON_DETOUR_ERROR(error, errhint);
 		}
 		if (fp_markLeaves)
@@ -582,14 +650,24 @@ static void do_detour_action( DetourAction_FP detourAction )
 			error = detourAction(&(PVOID&)fp_setupfrustum, hook_setupfrustum);
 			BREAK_ON_DETOUR_ERROR(error, errhint);
 		}
-		if ( fp_test0 )
+		if ( fp_retvoid )
 		{
-			error = detourAction(&(PVOID&)fp_test0, hook_empty0);
+			error = detourAction(&(PVOID&)fp_retvoid, hook_retvoid);
 			BREAK_ON_DETOUR_ERROR(error, errhint);
 		}
-		if ( fp_test1 )
+		if ( fp_retzero )
 		{
-			error = detourAction(&(PVOID&)fp_test1, hook_empty1);
+			error = detourAction(&(PVOID&)fp_retzero, hook_retzero);
+			BREAK_ON_DETOUR_ERROR(error, errhint);
+		}
+		if ( fp_retone )
+		{
+			error = detourAction(&(PVOID&)fp_retone, hook_retone);
+			BREAK_ON_DETOUR_ERROR(error, errhint);
+		}
+		if ( fp_retnegone )
+		{
+			error = detourAction(&(PVOID&)fp_retnegone, hook_retnegone);
 			BREAK_ON_DETOUR_ERROR(error, errhint);
 		}
 		error = DetourTransactionCommit();
@@ -617,9 +695,20 @@ void hook_surface_sorting_do_init()
 
 		for ( int i = 0; i < ARRAYSIZE( jmp_helpers ); i++ )
 		{
-			if ( jmp_helpers[i].addr && hook_unprotect( jmp_helpers[i].addr, jmp_helpers[i].datasz ) )
+			if ( jmp_helpers[i].addr )
 			{
-				memcpy( jmp_helpers[i].addr, jmp_helpers[i].data, jmp_helpers[i].datasz );
+				if ( jmp_helpers[i].verify )
+				{
+					if ( 0 != memcmp( jmp_helpers[i].addr, &jmp_helpers[i].verify, sizeof( intptr_t ) ) )
+					{
+						logPrintf( "JMP does not verify skipping:%p verf:%p\n", jmp_helpers[i].addr, jmp_helpers[i].verify );
+						continue;
+					}
+				}
+				if ( hook_unprotect( jmp_helpers[i].addr, jmp_helpers[i].datasz ) )
+				{
+					memcpy( jmp_helpers[i].addr, jmp_helpers[i].data, jmp_helpers[i].datasz );
+				}
 			}
 		}
 	}

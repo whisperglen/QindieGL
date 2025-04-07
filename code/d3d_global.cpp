@@ -299,6 +299,7 @@ void* D3DGlobal_ReadGameConfPtr(const char* valname)
 		if (gamename && g_iniconf.has(gamename) && g_iniconf[gamename].has(valname))
 		{
 			ret = (void*)strtoul( g_iniconf[gamename][valname].c_str(), NULL, 16 );
+			break;
 		}
 		else
 		{
@@ -817,6 +818,30 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 	D3DGlobal.settings.drawcallFastPath = D3DGlobal_GetRegistryValue( "DrawCallFastPath", "Settings", 0 );
 	D3DGlobal.settings.texcoordFix = D3DGlobal_GetRegistryValue( "TexCoordFix", "Settings", 0 );
 	D3DGlobal.settings.useSSE = D3DGlobal_GetRegistryValue( "UseSSE", "Settings", 0 );
+
+	D3DGlobal.normalPtrGuessEnabled = 0;
+	{
+		std::string configname;
+		int i, j;
+		for ( i = 0, j = 0; i < ARRAYSIZE( D3DGlobal.normalPtrGuess ); i++ )
+		{
+			const char* vpname = "dp_VertexPointer";
+			const char* npname = "dp_NormalPointer";
+			D3DGlobal.normalPtrGuess[j].vertexPtr = D3DGlobal_ReadGameConfPtr( configname.assign( vpname ).append( std::to_string( i ) ).c_str() );
+			D3DGlobal.normalPtrGuess[j].normalPtr = D3DGlobal_ReadGameConfPtr( configname.assign( npname ).append( std::to_string( i ) ).c_str() );
+			if ( !!D3DGlobal.normalPtrGuess[j].vertexPtr ^ !!D3DGlobal.normalPtrGuess[j].normalPtr )
+			{
+				logPrintf( "WARNING: dp_VertexPointer%d(%p) or dp_NormalPointer%d(%p) not set, disabling\n", i, D3DGlobal.normalPtrGuess[j].vertexPtr,
+					i, D3DGlobal.normalPtrGuess[j].normalPtr );
+			}
+			else if ( D3DGlobal.normalPtrGuess[j].vertexPtr )
+			{
+				logPrintf( "NormalPtrGuess found pair: %p - %p\n", D3DGlobal.normalPtrGuess[j].vertexPtr, D3DGlobal.normalPtrGuess[j].normalPtr );
+				D3DGlobal.normalPtrGuessEnabled = 1;
+				j++;
+			}
+		}
+	}
 
 	D3DGlobal_CPU_Detect();
 

@@ -449,9 +449,16 @@ void D3DState_SetTexture()
 		if (matrixChanged) {
 			D3DState.textureMatrixModified[i] = false;
 			D3DStateMatrix& mat = D3DGlobal.textureMatrixStack[i]->top();
-			if ( !mat.is_identity() )
+			if ( !mat.is_identity() ||
+				D3DState.TextureState.transformEnabled )
 			{
-				PRINT_ONCE("WARNING: Texture transform matrix used! Consider disabling DrawCallFastPath.\n");
+				if ( !D3DState.TextureState.transformEnabled )
+				{
+					D3DState.TextureState.transformEnabled = TRUE;
+					for (int j = 0; j < D3DGlobal.maxActiveTMU; ++j) {
+						D3DGlobal.pDevice->SetTextureStageState( j, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_COUNT4 | D3DTTFF_PROJECTED );
+					}
+				}
 				hr = D3DGlobal.pDevice->SetTransform( (D3DTRANSFORMSTATETYPE)(D3DTS_TEXTURE0 + currentSampler), mat );
 				if (FAILED(hr)) {
 					D3DGlobal.lastError = hr;

@@ -318,6 +318,7 @@ void matrix_detect_frame_ended()
 	if (keys.o && (keys.ctrl || keys.alt))
 	{
 		g_mat_detection_enabled = !g_mat_detection_enabled;
+		logPrintf( "MatrixDetection changed:%d mode:%d\n", g_mat_detection_enabled, g_mat_detection_mode );
 	}
 
 	if (keys.pgdwn && (keys.ctrl || keys.alt))

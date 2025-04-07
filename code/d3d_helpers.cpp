@@ -16,7 +16,7 @@ key_inputs_t prevstate_clr = { 0 };
 
 #define IS_PRESSED(X) (((X) & 0x8000) != 0)
 
-key_inputs_t keypress_get()
+key_inputs_t keypress_get(boolean immediate)
 {
 	key_inputs_t ret = { 0 };
 
@@ -158,6 +158,11 @@ key_inputs_t keypress_get()
 		ret.p = 1;
 		//prevstate.p = 0;
 		prevstate_clr.p = 1;
+	}
+
+	if ( immediate )
+	{
+		ret.all = prevstate.all & ~prevstate_clr.all;
 	}
 
 	return ret;

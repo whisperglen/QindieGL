@@ -1289,10 +1289,13 @@ OPENGL_API void WINAPI glReadPixels( GLint x, GLint y, GLsizei width, GLsizei he
 	D3DLOCKED_RECT lockrect;
 	RECT srcrect;
 	y = D3DGlobal.hCurrentMode.Height -(height + y);
+	if ( y < 0 ) { y = 0; }
 	srcrect.left = x;
 	srcrect.right = x + width;
 	srcrect.top = y;
 	srcrect.bottom = y + height;
+	if ( srcrect.right > D3DGlobal.hCurrentMode.Width ) srcrect.right = D3DGlobal.hCurrentMode.Width;
+	if ( srcrect.bottom > D3DGlobal.hCurrentMode.Height ) srcrect.bottom = D3DGlobal.hCurrentMode.Height;
 
 	hr = D3DGlobal.pSystemMemRT->LockRect( &lockrect, &srcrect, D3DLOCK_NOSYSLOCK|D3DLOCK_READONLY );
 	if(FAILED(hr)) {
@@ -1303,7 +1306,7 @@ OPENGL_API void WINAPI glReadPixels( GLint x, GLint y, GLsizei width, GLsizei he
 
 	//Pack pixels to destination
 	const GLubyte *srcdata =(GLubyte*)lockrect.pBits;
-	hr = D3DPixels_Pack( width, height, 1, lockrect.Pitch, 0, srcdata, 4, D3D_TEXTYPE_GENERIC, true, format, type, pixels );
+	hr = D3DPixels_Pack( srcrect.right - srcrect.left, srcrect.bottom - srcrect.top, 1, lockrect.Pitch, 0, srcdata, 4, D3D_TEXTYPE_GENERIC, true, format, type, pixels );
 	if(FAILED(hr)) {
 		D3DGlobal.lastError = hr;
 	}

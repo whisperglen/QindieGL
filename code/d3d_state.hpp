@@ -153,6 +153,7 @@ typedef struct D3DState_s
 		DWORD			textureEnvModeChanged[MAX_D3D_TMU];
 		DWORD			textureEnvColor;
 		DWORD			textureReference;
+		DWORD			transformEnabled;
 		struct {
 			GLenum		mode;
 			FLOAT		objectPlane[4];
@@ -259,5 +260,8 @@ extern void D3DState_SetCullMode();
 extern void D3DState_SetDepthBias();
 extern void D3DState_AssureBeginScene();
 extern void D3DState_Check();
+
+extern OPENGL_API void WINAPI glEnableClientState( GLenum cap );
+extern OPENGL_API void WINAPI glDisableClientState( GLenum cap );
 
 #endif //QINDIEGL_D3D_STATE_H

@@ -157,6 +157,11 @@ typedef struct D3DGlobal_s
 		DWORD				useSSE;
 	} settings;
 	struct {
+		void *vertexPtr;
+		void *normalPtr;
+	} normalPtrGuess[5];
+	DWORD normalPtrGuessEnabled;
+	struct {
 		GLfloat*			compiledVertexData;
 		GLfloat*			compiledNormalData;
 		GLfloat*			compiledTexCoordData[MAX_D3D_TMU];

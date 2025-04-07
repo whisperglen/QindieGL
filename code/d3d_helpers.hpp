@@ -27,7 +27,7 @@ typedef union key_inputs_u
 
 #pragma warning( pop )
 
-key_inputs_t keypress_get();
+key_inputs_t keypress_get(boolean immediate = false);
 void keypress_frame_ended();
 
 #endif
