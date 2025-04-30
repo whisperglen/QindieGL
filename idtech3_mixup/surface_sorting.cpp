@@ -143,12 +143,12 @@ static void hook_qsortFast(void* base, unsigned int num, unsigned width)
 
 	if ( width != 8 )
 	{
-		PRINT_ONCE("======>>>> qsortFast assert width: %d\n", width);
+		PRINT_ONCE("ERROR: qsortFast assert width: %d\n", width);
 		return;
 	}
 	if ( num > 100000 )
 	{
-		PRINT_ONCE( "======>>>> qsortFast assert numSurfs: %d\n", num );
+		PRINT_ONCE( "ERROR: qsortFast assert numSurfs: %d\n", num );
 		return;
 	}
 

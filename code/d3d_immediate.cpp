@@ -34,11 +34,21 @@ D3DIMBuffer :: D3DIMBuffer( )
 	m_pBuffer = ( D3DIMBufferVertex* )UTIL_Alloc( m_maxVertexCount * sizeof( D3DIMBufferVertex ) );
 	m_bBegan = false;
 	m_bXYZW = false;
+	for (int i = 0; i < c_MaxSwapFrame; ++i) {
+		m_pVertexBuffer[i] = nullptr;
+		m_vbAllocSize[i] = 0;
+	}
+	m_swapFrame = 0;
 }
 
 D3DIMBuffer :: ~D3DIMBuffer( )
 {
 	UTIL_Free( m_pBuffer );
+	for ( int i = 0; i < c_MaxSwapFrame; ++i ) {
+		if ( m_pVertexBuffer[i] ) {
+			m_pVertexBuffer[i]->Release();
+		}
+	}
 }
 
 void D3DIMBuffer :: EnsureBufferSize( int numVerts )
@@ -49,31 +59,40 @@ void D3DIMBuffer :: EnsureBufferSize( int numVerts )
 	m_pBuffer = ( D3DIMBufferVertex* )UTIL_Realloc( m_pBuffer, m_maxVertexCount * sizeof( D3DIMBufferVertex ) );
 }
 
-UINT D3DIMBuffer :: ReorderBufferToFVF( int fvf )
+UINT D3DIMBuffer :: ReorderBufferToFVF( int fvf, int fvfsz )
 {
 	const D3DIMBufferVertex *src = m_pBuffer;
-	float *dst = ( float* )m_pBuffer;
-	int vertexSize = 0;
+	float *dst = nullptr;
+	HRESULT hr;
 
-	if ( fvf & D3DFVF_XYZ )
-		vertexSize += sizeof(FLOAT)*3;
-	else if ( fvf & D3DFVF_XYZW )
-		vertexSize += sizeof(FLOAT)*4;
-	if ( fvf & D3DFVF_DIFFUSE )
-		vertexSize += sizeof( DWORD );
-	if ( fvf & D3DFVF_SPECULAR )
-		vertexSize += sizeof( DWORD );
-	if ( fvf & D3DFVF_NORMAL )
-		vertexSize += sizeof(FLOAT)*3;
+	if ( m_vbAllocSize[m_swapFrame] < m_vertexCount * fvfsz )
+	{
+		if ( m_pVertexBuffer[m_swapFrame] )
+			m_pVertexBuffer[m_swapFrame]->Release();
 
-	int numSamplers = ( fvf & D3DFVF_TEXCOUNT_MASK ) >> D3DFVF_TEXCOUNT_SHIFT;
-	vertexSize += sizeof(FLOAT)*4*numSamplers;
+		m_vbAllocSize[m_swapFrame] = QINDIEGL_MAX( c_IMBufferGrowSize, m_vertexCount ) * fvfsz;
+		hr = D3DGlobal.pDevice->CreateVertexBuffer( m_vbAllocSize[m_swapFrame], D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY,
+			0, D3DPOOL_DEFAULT, &m_pVertexBuffer[m_swapFrame], nullptr );
+		if ( FAILED( hr ) )
+		{
+			D3DGlobal.lastError = hr;
+			return 0;
+		}
+	}
+
+	hr = m_pVertexBuffer[m_swapFrame]->Lock( 0, m_vertexCount * fvfsz, 
+		(void**)&dst, D3DLOCK_DISCARD );
+	if (FAILED(hr))
+	{
+		D3DGlobal.lastError = hr;
+		return 0;
+	}
 
 	for ( int i = 0; i < m_vertexCount; ++i ) {
-		if ( fvf & D3DFVF_XYZ ) {
+		if ( m_bXYZW == false ) /* D3DFVF_XYZ */ {
 			memcpy( dst, src->position, sizeof(FLOAT)*3 );
 			dst += 3;
-		} else if ( fvf & D3DFVF_XYZW ) {
+		} else /* D3DFVF_XYZW */ {
 			memcpy( dst, src->position, sizeof(FLOAT)*4 );
 			dst += 4;
 		}
@@ -91,15 +110,23 @@ UINT D3DIMBuffer :: ReorderBufferToFVF( int fvf )
 		}
 
 		for ( int j = 0; j < D3DGlobal.maxActiveTMU; ++j ) {
+			int numCoords = 4;
+			if ( D3DState.TextureState.transformEnabled == FALSE )
+			{
+				numCoords = (DWORD( D3DState.CurrentState.isSet.bits.texcoord ) >> (j * 2)) & 0x3;
+				numCoords++;
+			}
 			if ( m_samplerMask & ( 1 << j ) ) {
-				memcpy( dst, src->texCoord[j], sizeof(FLOAT)*4 );
-				dst += 4;
+				memcpy( dst, src->texCoord[j], sizeof(FLOAT)*numCoords );
+				dst += numCoords;
 			}
 		}
 		++src;
 	}
 
-	return vertexSize;
+	m_pVertexBuffer[m_swapFrame]->Unlock();
+
+	return 1;
 }
 
 void D3DIMBuffer :: Begin( GLenum primType )
@@ -125,22 +152,64 @@ void D3DIMBuffer :: End( )
 	}
 
 	//build FVF
-	int iFVF = D3DFVF_NORMAL | D3DFVF_DIFFUSE;
+	int iFVF = 0;
+	int sizeFVF = 0;
 	if ( m_bXYZW )
+	{
+		PRINT_ONCE("ERROR: Homogenous coordinates strike again!\n");
 		iFVF |= D3DFVF_XYZW;
+		sizeFVF += 4 * sizeof( float );
+	}
 	else
+	{
 		iFVF |= D3DFVF_XYZ;
+		sizeFVF += 3 * sizeof( float );
+	}
+	if ( D3DState.CurrentState.isSet.bits.norm )
+	{
+		iFVF |= D3DFVF_NORMAL;
+		sizeFVF += 3 * sizeof( float );
+	}
+	//if ( D3DState.CurrentState.isSet.bits.color )
+	//WG: always set color
+	{
+		iFVF |= D3DFVF_DIFFUSE;
+		sizeFVF += sizeof( DWORD );
+	}
 
 	if ( ( D3DState.EnableState.fogEnabled && D3DState.FogState.fogCoordMode ) ||
-		 D3DState.EnableState.colorSumEnabled )
+		D3DState.EnableState.colorSumEnabled )
+	{
 		iFVF |= D3DFVF_SPECULAR;
+		sizeFVF += sizeof( DWORD );
+	}
 
 	int numSamplers = 0;
 	m_samplerMask = 0;
 	for ( int i = 0; i < D3DGlobal.maxActiveTMU; ++i ) {
 		if ( D3DState.EnableState.textureEnabled[i] ) {
 			m_samplerMask |= ( 1 << i );
-			iFVF |= D3DFVF_TEXCOORDSIZE4( numSamplers );
+			int numCoordsX = D3DState.TextureState.transformEnabled ? 3 :
+				(DWORD( D3DState.CurrentState.isSet.bits.texcoord ) >> (i * 2)) & 0x3;
+			switch ( numCoordsX )
+			{
+			case 0:
+				iFVF |= D3DFVF_TEXCOORDSIZE1( numSamplers );
+				sizeFVF += 1 * sizeof( float );
+				break;
+			case 1:
+				iFVF |= D3DFVF_TEXCOORDSIZE2( numSamplers );
+				sizeFVF += 2 * sizeof( float );
+				break;
+			case 2:
+				iFVF |= D3DFVF_TEXCOORDSIZE3( numSamplers );
+				sizeFVF += 3 * sizeof( float );
+				break;
+			case 3:
+				iFVF |= D3DFVF_TEXCOORDSIZE4( numSamplers );
+				sizeFVF += 4 * sizeof( float );
+				break;
+			}
 			++numSamplers;
 		}
 	}
@@ -154,49 +223,65 @@ void D3DIMBuffer :: End( )
 	}
 
 	//reorder buffer, so it will contain a properly aligned data according to FVF
-	UINT vertexSize = ReorderBufferToFVF( iFVF );
-
-	switch ( m_primitiveType )
+	if ( ReorderBufferToFVF( iFVF, sizeFVF ) )
 	{
-	case GL_POINTS:
-		hr = D3DGlobal.pDevice->DrawPrimitiveUP( D3DPT_POINTLIST, m_vertexCount, m_pBuffer, vertexSize );
-		break;
+		hr = D3DGlobal.pDevice->SetStreamSource( 0, m_pVertexBuffer[m_swapFrame], 0, sizeFVF );
+		if (FAILED(hr)) {
+			D3DGlobal.lastError = hr;
+		}
 
-	case GL_LINES:
-		hr = D3DGlobal.pDevice->DrawPrimitiveUP( D3DPT_LINELIST, m_vertexCount / 2, m_pBuffer, vertexSize );
-		break;
+		switch ( m_primitiveType )
+		{
+		case GL_POINTS:
+			hr = D3DGlobal.pDevice->DrawPrimitive( D3DPT_POINTLIST, 0, m_vertexCount );
+			//hr = D3DGlobal.pDevice->DrawPrimitiveUP( D3DPT_POINTLIST, m_vertexCount, m_pBuffer, vertexSize );
+			break;
 
-	case GL_LINE_STRIP:
-	case GL_LINE_LOOP:
-		hr = D3DGlobal.pDevice->DrawPrimitiveUP( D3DPT_LINESTRIP, m_vertexCount - 1, m_pBuffer, vertexSize );
-		break;
+		case GL_LINES:
+			hr = D3DGlobal.pDevice->DrawPrimitive( D3DPT_LINELIST, 0, m_vertexCount / 2 );
+			//hr = D3DGlobal.pDevice->DrawPrimitiveUP( D3DPT_LINELIST, m_vertexCount / 2, m_pBuffer, vertexSize );
+			break;
 
-	case GL_QUADS:
-		// quads are converted to triangles while specifying vertices
-	case GL_TRIANGLES:
-		// D3DPT_TRIANGLELIST models GL_TRIANGLES when used for either a single triangle or multiple triangles
-		hr = D3DGlobal.pDevice->DrawPrimitiveUP( D3DPT_TRIANGLELIST, m_vertexCount / 3, m_pBuffer, vertexSize );
-		break;
+		case GL_LINE_STRIP:
+		case GL_LINE_LOOP:
+			hr = D3DGlobal.pDevice->DrawPrimitive( D3DPT_LINESTRIP, 0, m_vertexCount - 1 );
+			//hr = D3DGlobal.pDevice->DrawPrimitiveUP( D3DPT_LINESTRIP, m_vertexCount - 1, m_pBuffer, vertexSize );
+			break;
 
-	case GL_QUAD_STRIP:
-		// quadstrip is EXACT the same as tristrip
-	case GL_TRIANGLE_STRIP:
-		// regular tristrip
-		hr = D3DGlobal.pDevice->DrawPrimitiveUP( D3DPT_TRIANGLESTRIP, m_vertexCount - 2, m_pBuffer, vertexSize );
-		break;
+		case GL_QUADS:
+			// quads are converted to triangles while specifying vertices
+		case GL_TRIANGLES:
+			// D3DPT_TRIANGLELIST models GL_TRIANGLES when used for either a single triangle or multiple triangles
+			hr = D3DGlobal.pDevice->DrawPrimitive( D3DPT_TRIANGLELIST, 0, m_vertexCount / 3 );
+			//hr = D3DGlobal.pDevice->DrawPrimitiveUP( D3DPT_TRIANGLELIST, m_vertexCount / 3, m_pBuffer, vertexSize );
+			break;
 
-	case GL_POLYGON:
-		// a GL_POLYGON has the same vertex layout and order as a trifan, and can be used interchangably in OpenGL
-	case GL_TRIANGLE_FAN:
-		// regular trifan
-		hr = D3DGlobal.pDevice->DrawPrimitiveUP( D3DPT_TRIANGLEFAN, m_vertexCount - 2, m_pBuffer, vertexSize );
-		break;
-		
-	default:
-		// unsupported mode
-		logPrintf( "WARNING: glBegin - unsupported mode 0x%x\n", m_primitiveType );
-		break;
+		case GL_QUAD_STRIP:
+			// quadstrip is EXACT the same as tristrip
+		case GL_TRIANGLE_STRIP:
+			// regular tristrip
+			hr = D3DGlobal.pDevice->DrawPrimitive( D3DPT_TRIANGLESTRIP, 0, m_vertexCount - 2 );
+			//hr = D3DGlobal.pDevice->DrawPrimitiveUP( D3DPT_TRIANGLESTRIP, m_vertexCount - 2, m_pBuffer, vertexSize );
+			break;
+
+		case GL_POLYGON:
+			// a GL_POLYGON has the same vertex layout and order as a trifan, and can be used interchangably in OpenGL
+		case GL_TRIANGLE_FAN:
+			// regular trifan
+			hr = D3DGlobal.pDevice->DrawPrimitive( D3DPT_TRIANGLEFAN, 0, m_vertexCount - 2 );
+			//hr = D3DGlobal.pDevice->DrawPrimitiveUP( D3DPT_TRIANGLEFAN, m_vertexCount - 2, m_pBuffer, vertexSize );
+			break;
+
+		default:
+			// unsupported mode
+			logPrintf( "WARNING: glBegin - unsupported mode 0x%x\n", m_primitiveType );
+			break;
+		}
 	}
+
+	++m_swapFrame;
+	if (m_swapFrame >= c_MaxSwapFrame)
+		m_swapFrame = 0;
 
 	m_bBegan = false;
 }
@@ -249,8 +334,8 @@ void D3DIMBuffer :: AddVertex( float x, float y, float z )
 	D3DIMBufferVertex *pVertex = &m_pBuffer[m_vertexCount];
 	++m_vertexCount;
 
-	pVertex->position[0] = x;
-	pVertex->position[1] = y;
+	pVertex->position[0] = x;// +0.5f / D3DState.viewport.Width;
+	pVertex->position[1] = y;// -0.5f / D3DState.viewport.Height;
 	pVertex->position[2] = z;
 	pVertex->position[3] = 1.0f;
 	pVertex->color = D3DState.CurrentState.currentColor;
@@ -284,8 +369,8 @@ void D3DIMBuffer :: AddVertex( float x, float y, float z, float w )
 	D3DIMBufferVertex *pVertex = &m_pBuffer[m_vertexCount];
 	++m_vertexCount;
 
-	pVertex->position[0] = x;
-	pVertex->position[1] = y;
+	pVertex->position[0] = x;// +0.5f / D3DState.viewport.Width;
+	pVertex->position[1] = y;// -0.5f / D3DState.viewport.Height;
 	pVertex->position[2] = z;
 	pVertex->position[3] = w;
 	m_bXYZW = true;
@@ -308,6 +393,7 @@ void D3DIMBuffer :: AddVertex( float x, float y, float z, float w )
 //=========================================
 template<typename T> inline void D3D_SetColor( T red, T green, T blue )
 {
+	D3DState.CurrentState.isSet.bits.color = 1;
 	D3DState.CurrentState.currentColor = D3DCOLOR_ARGB( 
 		0xFF,
 		QINDIEGL_CLAMP( ( red / std::numeric_limits<T>::max( ) ) * 255 ),
@@ -317,6 +403,7 @@ template<typename T> inline void D3D_SetColor( T red, T green, T blue )
 }
 template<typename T> inline void D3D_SetColor( T red, T green, T blue, T alpha )
 {
+	D3DState.CurrentState.isSet.bits.color = 1;
 	D3DState.CurrentState.currentColor = D3DCOLOR_ARGB( 
 		QINDIEGL_CLAMP( ( alpha / std::numeric_limits<T>::max( ) ) * 255 ),
 		QINDIEGL_CLAMP( ( red / std::numeric_limits<T>::max( ) ) * 255 ),
@@ -326,6 +413,7 @@ template<typename T> inline void D3D_SetColor( T red, T green, T blue, T alpha )
 }
 inline void D3D_SetColor( GLbyte red, GLbyte green, GLbyte blue, GLbyte alpha )
 {
+	D3DState.CurrentState.isSet.bits.color = 1;
 	D3DState.CurrentState.currentColor = D3DCOLOR_ARGB( 
 		( BYTE )alpha,
 		( BYTE )red,
@@ -335,6 +423,7 @@ inline void D3D_SetColor( GLbyte red, GLbyte green, GLbyte blue, GLbyte alpha )
 }
 inline void D3D_SetColor( GLubyte red, GLubyte green, GLubyte blue, GLubyte alpha )
 {
+	D3DState.CurrentState.isSet.bits.color = 1;
 	D3DState.CurrentState.currentColor = D3DCOLOR_ARGB( 
 		alpha,
 		red,
@@ -344,6 +433,7 @@ inline void D3D_SetColor( GLubyte red, GLubyte green, GLubyte blue, GLubyte alph
 }
 inline void D3D_SetColor( GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha )
 {
+	D3DState.CurrentState.isSet.bits.color = 1;
 	D3DState.CurrentState.currentColor = D3DCOLOR_ARGB( 
 		QINDIEGL_CLAMP( alpha * 255.0f ),
 		QINDIEGL_CLAMP( red * 255.0f ),
@@ -353,6 +443,7 @@ inline void D3D_SetColor( GLfloat red, GLfloat green, GLfloat blue, GLfloat alph
 }
 inline void D3D_SetColor( GLdouble red, GLdouble green, GLdouble blue, GLdouble alpha )
 {
+	D3DState.CurrentState.isSet.bits.color = 1;
 	D3DState.CurrentState.currentColor = D3DCOLOR_ARGB( 
 		QINDIEGL_CLAMP( (FLOAT)alpha * 255.0f ),
 		QINDIEGL_CLAMP( (FLOAT)red * 255.0f ),
@@ -362,70 +453,81 @@ inline void D3D_SetColor( GLdouble red, GLdouble green, GLdouble blue, GLdouble 
 }
 template<typename T> inline void D3D_SetColor2( T red, T green, T blue )
 {
-	D3DState.CurrentState.currentColor &= 0xFF000000;
-	D3DState.CurrentState.currentColor |= QINDIEGL_CLAMP( ( red / std::numeric_limits<T>::max( ) ) * 255 ) << 16;
-	D3DState.CurrentState.currentColor |= QINDIEGL_CLAMP( ( green / std::numeric_limits<T>::max( ) ) * 255 ) << 8;
-	D3DState.CurrentState.currentColor |= QINDIEGL_CLAMP( ( blue / std::numeric_limits<T>::max( ) ) * 255 );
+	D3DState.CurrentState.isSet.bits.color2 = 1;
+	D3DState.CurrentState.currentColor2 &= 0xFF000000;
+	D3DState.CurrentState.currentColor2 |= QINDIEGL_CLAMP( ( red / std::numeric_limits<T>::max( ) ) * 255 ) << 16;
+	D3DState.CurrentState.currentColor2 |= QINDIEGL_CLAMP( ( green / std::numeric_limits<T>::max( ) ) * 255 ) << 8;
+	D3DState.CurrentState.currentColor2 |= QINDIEGL_CLAMP( ( blue / std::numeric_limits<T>::max( ) ) * 255 );
 }
 inline void D3D_SetColor2( GLbyte red, GLbyte green, GLbyte blue )
 {
-	D3DState.CurrentState.currentColor &= 0xFF000000;
-	D3DState.CurrentState.currentColor |= ( BYTE )red << 16;
-	D3DState.CurrentState.currentColor |= ( BYTE )green << 8;
-	D3DState.CurrentState.currentColor |= ( BYTE )blue;
+	D3DState.CurrentState.isSet.bits.color2 = 1;
+	D3DState.CurrentState.currentColor2 &= 0xFF000000;
+	D3DState.CurrentState.currentColor2 |= ( BYTE )red << 16;
+	D3DState.CurrentState.currentColor2 |= ( BYTE )green << 8;
+	D3DState.CurrentState.currentColor2 |= ( BYTE )blue;
 }
 inline void D3D_SetColor2( GLubyte red, GLubyte green, GLubyte blue )
 {
-	D3DState.CurrentState.currentColor &= 0xFF000000;
-	D3DState.CurrentState.currentColor |= red << 16;
-	D3DState.CurrentState.currentColor |= green << 8;
-	D3DState.CurrentState.currentColor |= blue;
+	D3DState.CurrentState.isSet.bits.color2 = 1;
+	D3DState.CurrentState.currentColor2 &= 0xFF000000;
+	D3DState.CurrentState.currentColor2 |= red << 16;
+	D3DState.CurrentState.currentColor2 |= green << 8;
+	D3DState.CurrentState.currentColor2 |= blue;
 }
 inline void D3D_SetColor2( GLfloat red, GLfloat green, GLfloat blue )
 {
-	D3DState.CurrentState.currentColor &= 0xFF000000;
-	D3DState.CurrentState.currentColor |= QINDIEGL_CLAMP( red * 255.0f ) << 16;
-	D3DState.CurrentState.currentColor |= QINDIEGL_CLAMP( green * 255.0f ) << 8;
-	D3DState.CurrentState.currentColor |= QINDIEGL_CLAMP( blue * 255.0f );
+	D3DState.CurrentState.isSet.bits.color2 = 1;
+	D3DState.CurrentState.currentColor2 &= 0xFF000000;
+	D3DState.CurrentState.currentColor2 |= QINDIEGL_CLAMP( red * 255.0f ) << 16;
+	D3DState.CurrentState.currentColor2 |= QINDIEGL_CLAMP( green * 255.0f ) << 8;
+	D3DState.CurrentState.currentColor2 |= QINDIEGL_CLAMP( blue * 255.0f );
 }
 inline void D3D_SetColor2( GLdouble red, GLdouble green, GLdouble blue )
 {
-	D3DState.CurrentState.currentColor &= 0xFF000000;
-	D3DState.CurrentState.currentColor |= QINDIEGL_CLAMP( (FLOAT)red * 255.0f ) << 16;
-	D3DState.CurrentState.currentColor |= QINDIEGL_CLAMP( (FLOAT)green * 255.0f ) << 8;
-	D3DState.CurrentState.currentColor |= QINDIEGL_CLAMP( (FLOAT)blue * 255.0f );
+	D3DState.CurrentState.isSet.bits.color2 = 1;
+	D3DState.CurrentState.currentColor2 &= 0xFF000000;
+	D3DState.CurrentState.currentColor2 |= QINDIEGL_CLAMP( (FLOAT)red * 255.0f ) << 16;
+	D3DState.CurrentState.currentColor2 |= QINDIEGL_CLAMP( (FLOAT)green * 255.0f ) << 8;
+	D3DState.CurrentState.currentColor2 |= QINDIEGL_CLAMP( (FLOAT)blue * 255.0f );
 }
 inline void D3D_SetFogCoord( GLfloat value )
 {
+	D3DState.CurrentState.isSet.bits.fog = 1;
 	GLubyte byteValue = 255 - static_cast<GLubyte>( QINDIEGL_CLAMP( value * 255.0f ) );
 	D3DState.CurrentState.currentColor2 &= ( byteValue << 24 );
 	D3DState.CurrentState.currentColor2 |= ( byteValue << 24 );
 }
 template<typename T> inline void D3D_SetNormal( T x, T y, T z )
 {
+	D3DState.CurrentState.isSet.bits.norm = 1;
 	D3DState.CurrentState.currentNormal[0] = (FLOAT)x / std::numeric_limits<T>::max( );
 	D3DState.CurrentState.currentNormal[1] = (FLOAT)y / std::numeric_limits<T>::max( );
 	D3DState.CurrentState.currentNormal[2] = (FLOAT)z / std::numeric_limits<T>::max( );
 }
 inline void D3D_SetNormal( GLfloat x, GLfloat y, GLfloat z )
 {
+	D3DState.CurrentState.isSet.bits.norm = 1;
 	D3DState.CurrentState.currentNormal[0] = x;
 	D3DState.CurrentState.currentNormal[1] = y;
 	D3DState.CurrentState.currentNormal[2] = z;
 }
 inline void D3D_SetNormal( GLdouble x, GLdouble y, GLdouble z )
 {
+	D3DState.CurrentState.isSet.bits.norm = 1;
 	D3DState.CurrentState.currentNormal[0] = (FLOAT)x;
 	D3DState.CurrentState.currentNormal[1] = (FLOAT)y;
 	D3DState.CurrentState.currentNormal[2] = (FLOAT)z;
 }
-template<typename T> inline void D3D_SetTexCoord( GLenum target, T s, T t, T r, T q )
+template<typename T> inline void D3D_SetTexCoord( GLenum target, T s, T t, T r, T q, int num )
 {
 	//HACK: workaround for Quake3: it uses targets 0 and 1 instead of GL_TEXTURE0_ARB and GL_TEXTURE1_ARB
 	//HACK: it seems that drivers were fixed after Carmack's code, not vise versa : )
 	int stage = target;
 	if ( stage >= GL_TEXTURE0_ARB ) stage -= GL_TEXTURE0_ARB;
 	if ( stage < 0 || stage >= D3DGlobal.maxActiveTMU ) return;
+
+	D3DState.CurrentState.isSet.bits.texcoord |= DWORD( num -1 ) << (stage * 2);
 
 	D3DState.CurrentState.currentTexCoord[stage][0] = (FLOAT)s;
 	D3DState.CurrentState.currentTexCoord[stage][1] = (FLOAT)t;
@@ -672,131 +774,131 @@ OPENGL_API void WINAPI glNormal3sv( const GLshort *v )
 }
 OPENGL_API void WINAPI glTexCoord1d( GLdouble s )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, 0.0, 0.0, 1.0 );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, 0.0, 0.0, 1.0, 1 );
 }
 OPENGL_API void WINAPI glTexCoord1dv( const GLdouble *v )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], 0.0, 0.0, 1.0 );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], 0.0, 0.0, 1.0, 1 );
 }
 OPENGL_API void WINAPI glTexCoord1f( GLfloat s )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, 0.0f, 0.0f, 1.0f );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, 0.0f, 0.0f, 1.0f, 1 );
 }
 OPENGL_API void WINAPI glTexCoord1fv( const GLfloat *v )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], 0.0f, 0.0f, 1.0f );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], 0.0f, 0.0f, 1.0f, 1 );
 }
 OPENGL_API void WINAPI glTexCoord1i( GLint s )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, 0, 0, 1 );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, 0, 0, 1, 1 );
 }
 OPENGL_API void WINAPI glTexCoord1iv( const GLint *v )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], 0, 0, 1 );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], 0, 0, 1, 1 );
 }
 OPENGL_API void WINAPI glTexCoord1s( GLshort s )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, (GLshort)0, (GLshort)0, (GLshort)1 );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, (GLshort)0, (GLshort)0, (GLshort)1, 1 );
 }
 OPENGL_API void WINAPI glTexCoord1sv( const GLshort *v )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], (GLshort)0, (GLshort)0, (GLshort)1 );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], (GLshort)0, (GLshort)0, (GLshort)1, 1 );
 }
 OPENGL_API void WINAPI glTexCoord2d( GLdouble s, GLdouble t )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, 0.0, 1.0 );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, 0.0, 1.0, 2 );
 }
 OPENGL_API void WINAPI glTexCoord2dv( const GLdouble *v )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], 0.0, 1.0 );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], 0.0, 1.0, 2 );
 }
 OPENGL_API void WINAPI glTexCoord2f( GLfloat s, GLfloat t )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, 0.0f, 1.0f );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, 0.0f, 1.0f, 2 );
 }
 OPENGL_API void WINAPI glTexCoord2fv( const GLfloat *v )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], 0.0f, 1.0f );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], 0.0f, 1.0f, 2 );
 }
 OPENGL_API void WINAPI glTexCoord2i( GLint s, GLint t )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, 0, 1 );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, 0, 1, 2 );
 }
 OPENGL_API void WINAPI glTexCoord2iv( const GLint *v )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], 0, 1 );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], 0, 1, 2 );
 }
 OPENGL_API void WINAPI glTexCoord2s( GLshort s, GLshort t )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, (GLshort)0, (GLshort)1 );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, (GLshort)0, (GLshort)1, 2 );
 }
 OPENGL_API void WINAPI glTexCoord2sv( const GLshort *v )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], (GLshort)0, (GLshort)1 );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], (GLshort)0, (GLshort)1, 2 );
 }
 OPENGL_API void WINAPI glTexCoord3d( GLdouble s, GLdouble t, GLdouble r )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, r, 1.0 );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, r, 1.0, 3 );
 }
 OPENGL_API void WINAPI glTexCoord3dv( const GLdouble *v )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], v[2], 1.0 );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], v[2], 1.0, 3 );
 }
 OPENGL_API void WINAPI glTexCoord3f( GLfloat s, GLfloat t, GLfloat r )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, r, 1.0f );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, r, 1.0f, 3 );
 }
 OPENGL_API void WINAPI glTexCoord3fv( const GLfloat *v )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], v[2], 1.0f );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], v[2], 1.0f, 3 );
 }
 OPENGL_API void WINAPI glTexCoord3i( GLint s, GLint t, GLint r )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, r, 1 );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, r, 1, 3 );
 }
 OPENGL_API void WINAPI glTexCoord3iv( const GLint *v )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], v[2], 1 );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], v[2], 1, 3 );
 }
 OPENGL_API void WINAPI glTexCoord3s( GLshort s, GLshort t, GLshort r )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, r, (GLshort)1 );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, r, (GLshort)1, 3 );
 }
 OPENGL_API void WINAPI glTexCoord3sv( const GLshort *v )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], v[2], (GLshort)1 );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], v[2], (GLshort)1, 3 );
 }
 OPENGL_API void WINAPI glTexCoord4d( GLdouble s, GLdouble t, GLdouble r, GLdouble q )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, r, q );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, r, q, 4 );
 }
 OPENGL_API void WINAPI glTexCoord4dv( const GLdouble *v )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], v[2], v[3] );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], v[2], v[3], 4 );
 }
 OPENGL_API void WINAPI glTexCoord4f( GLfloat s, GLfloat t, GLfloat r, GLfloat q )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, r, q );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, r, q, 4 );
 }
 OPENGL_API void WINAPI glTexCoord4fv( const GLfloat *v )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], v[2], v[3] );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], v[2], v[3], 4 );
 }
 OPENGL_API void WINAPI glTexCoord4i( GLint s, GLint t, GLint r, GLint q )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, r, q );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, r, q, 4 );
 }
 OPENGL_API void WINAPI glTexCoord4iv( const GLint *v )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], v[2], v[3] );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], v[2], v[3], 4 );
 }
 OPENGL_API void WINAPI glTexCoord4s( GLshort s, GLshort t, GLshort r, GLshort q )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, r, q );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, s, t, r, q, 4 );
 }
 OPENGL_API void WINAPI glTexCoord4sv( const GLshort *v )
 {
-	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], v[2], v[3] );
+	D3D_SetTexCoord( GL_TEXTURE0_ARB, v[0], v[1], v[2], v[3], 4 );
 }
 OPENGL_API void WINAPI glEdgeFlag( GLboolean )
 {
@@ -848,139 +950,139 @@ OPENGL_API void WINAPI glIndexubv( const GLubyte* )
 }
 OPENGL_API void WINAPI glMultiTexCoord1s( GLenum target, GLshort s )
 {
-	D3D_SetTexCoord( target, s, (GLshort)0, (GLshort)0, (GLshort)1 );
+	D3D_SetTexCoord( target, s, (GLshort)0, (GLshort)0, (GLshort)1, 1 );
 }
 OPENGL_API void WINAPI glMultiTexCoord1i( GLenum target, GLint s )
 {
-	D3D_SetTexCoord( target, s, 0, 0, 1 );
+	D3D_SetTexCoord( target, s, 0, 0, 1, 1 );
 }
 OPENGL_API void WINAPI glMultiTexCoord1f( GLenum target, GLfloat s )
 {
-	D3D_SetTexCoord( target, s, 0.0f, 0.0f, 1.0f );
+	D3D_SetTexCoord( target, s, 0.0f, 0.0f, 1.0f, 1 );
 }
 OPENGL_API void WINAPI glMultiTexCoord1d( GLenum target, GLdouble s )
 {
-	D3D_SetTexCoord( target, s, 0.0, 0.0, 1.0 );
+	D3D_SetTexCoord( target, s, 0.0, 0.0, 1.0, 1 );
 }
 OPENGL_API void WINAPI glMultiTexCoord2s( GLenum target, GLshort s, GLshort t )
 {
-	D3D_SetTexCoord( target, s, t, (GLshort)0, (GLshort)1 );
+	D3D_SetTexCoord( target, s, t, (GLshort)0, (GLshort)1, 2 );
 }
 OPENGL_API void WINAPI glMultiTexCoord2i( GLenum target, GLint s, GLint t )
 {
-	D3D_SetTexCoord( target, s, t, 0, 1 );
+	D3D_SetTexCoord( target, s, t, 0, 1, 2 );
 }
 OPENGL_API void WINAPI glMultiTexCoord2f( GLenum target, GLfloat s, GLfloat t )
 {
-	D3D_SetTexCoord( target, s, t, 0.0f, 1.0f );
+	D3D_SetTexCoord( target, s, t, 0.0f, 1.0f, 2 );
 }
 OPENGL_API void WINAPI glMultiTexCoord2d( GLenum target, GLdouble s, GLdouble t )
 {
-	D3D_SetTexCoord( target, s, t, 0.0, 1.0 );
+	D3D_SetTexCoord( target, s, t, 0.0, 1.0, 2 );
 }
 OPENGL_API void WINAPI glMultiTexCoord3s( GLenum target, GLshort s, GLshort t, GLshort r )
 {
-	D3D_SetTexCoord( target, s, t, r, (GLshort)1 );
+	D3D_SetTexCoord( target, s, t, r, (GLshort)1, 3 );
 }
 OPENGL_API void WINAPI glMultiTexCoord3i( GLenum target, GLint s, GLint t, GLint r )
 {
-	D3D_SetTexCoord( target, s, t, r, 1 );
+	D3D_SetTexCoord( target, s, t, r, 1, 3 );
 }
 OPENGL_API void WINAPI glMultiTexCoord3f( GLenum target, GLfloat s, GLfloat t, GLfloat r )
 {
-	D3D_SetTexCoord( target, s, t, r, 1.0f );
+	D3D_SetTexCoord( target, s, t, r, 1.0f, 3 );
 }
 OPENGL_API void WINAPI glMultiTexCoord3d( GLenum target, GLdouble s, GLdouble t, GLdouble r )
 {
-	D3D_SetTexCoord( target, s, t, r, 1.0 );
+	D3D_SetTexCoord( target, s, t, r, 1.0, 3 );
 }
 OPENGL_API void WINAPI glMultiTexCoord4s( GLenum target, GLshort s, GLshort t, GLshort r, GLshort q )
 {
-	D3D_SetTexCoord( target, s, t, r, q );
+	D3D_SetTexCoord( target, s, t, r, q, 4 );
 }
 OPENGL_API void WINAPI glMultiTexCoord4i( GLenum target, GLint s, GLint t, GLint r, GLint q )
 {
-	D3D_SetTexCoord( target, s, t, r, q );
+	D3D_SetTexCoord( target, s, t, r, q, 4 );
 }
 OPENGL_API void WINAPI glMultiTexCoord4f( GLenum target, GLfloat s, GLfloat t, GLfloat r, GLfloat q )
 {
-	D3D_SetTexCoord( target, s, t, r, q );
+	D3D_SetTexCoord( target, s, t, r, q, 4 );
 }
 OPENGL_API void WINAPI glMultiTexCoord4d( GLenum target, GLdouble s, GLdouble t, GLdouble r, GLdouble q )
 {
-	D3D_SetTexCoord( target, s, t, r, q );
+	D3D_SetTexCoord( target, s, t, r, q, 4 );
 }
 OPENGL_API void WINAPI glMultiTexCoord1sv( GLenum target, const GLshort *v )
 {
-	D3D_SetTexCoord( target, v[0], (GLshort)0, (GLshort)0, (GLshort)1 );
+	D3D_SetTexCoord( target, v[0], (GLshort)0, (GLshort)0, (GLshort)1, 1 );
 }
 OPENGL_API void WINAPI glMultiTexCoord1iv( GLenum target, const GLint *v )
 {
-	D3D_SetTexCoord( target, v[0], 0, 0, 1 );
+	D3D_SetTexCoord( target, v[0], 0, 0, 1, 1 );
 }
 OPENGL_API void WINAPI glMultiTexCoord1fv( GLenum target, const GLfloat *v )
 {
-	D3D_SetTexCoord( target, v[0], 0.0f, 0.0f, 1.0f );
+	D3D_SetTexCoord( target, v[0], 0.0f, 0.0f, 1.0f, 1 );
 }
 OPENGL_API void WINAPI glMultiTexCoord1dv( GLenum target, const GLdouble *v )
 {
-	D3D_SetTexCoord( target, v[0], 0.0, 0.0, 1.0 );
+	D3D_SetTexCoord( target, v[0], 0.0, 0.0, 1.0, 1 );
 }
 OPENGL_API void WINAPI glMultiTexCoord2sv( GLenum target, const GLshort *v )
 {
-	D3D_SetTexCoord( target, v[0], v[1], (GLshort)0, (GLshort)1 );
+	D3D_SetTexCoord( target, v[0], v[1], (GLshort)0, (GLshort)1, 2 );
 }
 OPENGL_API void WINAPI glMultiTexCoord2iv( GLenum target, const GLint *v )
 {
-	D3D_SetTexCoord( target, v[0], v[1], 0, 1 );
+	D3D_SetTexCoord( target, v[0], v[1], 0, 1, 2 );
 }
 OPENGL_API void WINAPI glMultiTexCoord2fv( GLenum target, const GLfloat *v )
 {
-	D3D_SetTexCoord( target, v[0], v[1], 0.0f, 1.0f );
+	D3D_SetTexCoord( target, v[0], v[1], 0.0f, 1.0f, 2 );
 }
 OPENGL_API void WINAPI glMultiTexCoord2dv( GLenum target, const GLdouble *v )
 {
-	D3D_SetTexCoord( target, v[0], v[1], 0.0, 1.0 );
+	D3D_SetTexCoord( target, v[0], v[1], 0.0, 1.0, 2 );
 }
 OPENGL_API void WINAPI glMultiTexCoord3sv( GLenum target, const GLshort *v )
 {
-	D3D_SetTexCoord( target, v[0], v[1], v[2], (GLshort)1 );
+	D3D_SetTexCoord( target, v[0], v[1], v[2], (GLshort)1, 3 );
 }
 OPENGL_API void WINAPI glMultiTexCoord3iv( GLenum target, const GLint *v )
 {
-	D3D_SetTexCoord( target, v[0], v[1], v[2], 1 );
+	D3D_SetTexCoord( target, v[0], v[1], v[2], 1, 3 );
 }
 OPENGL_API void WINAPI glMultiTexCoord3fv( GLenum target, const GLfloat *v )
 {
-	D3D_SetTexCoord( target, v[0], v[1], v[2], 1.0f );
+	D3D_SetTexCoord( target, v[0], v[1], v[2], 1.0f, 3 );
 }
 OPENGL_API void WINAPI glMultiTexCoord3dv( GLenum target, const GLdouble *v )
 {
-	D3D_SetTexCoord( target, v[0], v[1], v[2], 1.0 );
+	D3D_SetTexCoord( target, v[0], v[1], v[2], 1.0, 3 );
 }
 OPENGL_API void WINAPI glMultiTexCoord4sv( GLenum target, const GLshort *v )
 {
-	D3D_SetTexCoord( target, v[0], v[1], v[3], v[4] );
+	D3D_SetTexCoord( target, v[0], v[1], v[3], v[4], 4 );
 }
 OPENGL_API void WINAPI glMultiTexCoord4iv( GLenum target, const GLint *v )
 {
-	D3D_SetTexCoord( target, v[0], v[1], v[3], v[4] );
+	D3D_SetTexCoord( target, v[0], v[1], v[3], v[4], 4 );
 }
 OPENGL_API void WINAPI glMultiTexCoord4fv( GLenum target, const GLfloat *v )
 {
-	D3D_SetTexCoord( target, v[0], v[1], v[3], v[4] );
+	D3D_SetTexCoord( target, v[0], v[1], v[3], v[4], 4 );
 }
 OPENGL_API void WINAPI glMultiTexCoord4dv( GLenum target, const GLdouble *v )
 {
-	D3D_SetTexCoord( target, v[0], v[1], v[3], v[4] );
+	D3D_SetTexCoord( target, v[0], v[1], v[3], v[4], 4 );
 }
 OPENGL_API void WINAPI glMTexCoord2f( GLenum target, GLfloat s, GLfloat t )
 {
-	D3D_SetTexCoord( target + GL_TEXTURE0_ARB - GL_TEXTURE0_SGIS, s, t, 0.0f, 1.0f );
+	D3D_SetTexCoord( target + GL_TEXTURE0_ARB - GL_TEXTURE0_SGIS, s, t, 0.0f, 1.0f, 4 );
 }
 OPENGL_API void WINAPI glMTexCoord2fv( GLenum target, const GLfloat *v )
 {
-	D3D_SetTexCoord( target + GL_TEXTURE0_ARB - GL_TEXTURE0_SGIS, v[0], v[1], 0.0f, 1.0f );
+	D3D_SetTexCoord( target + GL_TEXTURE0_ARB - GL_TEXTURE0_SGIS, v[0], v[1], 0.0f, 1.0f, 4 );
 }
 OPENGL_API void WINAPI glFogCoordd( GLdouble coord )
 {
@@ -1121,6 +1223,7 @@ OPENGL_API void WINAPI glBegin( GLenum mode )
 	D3DState_AssureBeginScene( );
 	assert( D3DGlobal.pIMBuffer != NULL );
 	D3DGlobal.pIMBuffer->Begin( mode );
+	D3DState.CurrentState.isSet.all = 0;
 }
 
 OPENGL_API void WINAPI glEnd( )

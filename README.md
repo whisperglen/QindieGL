@@ -16,7 +16,8 @@ I've used this (getvalue) as trigger to make it the camera matrix, and any later
 
 WIP: Stabilising geometry hashes for remix is integrated as a beta for FAKK2, and partially for CoD, Alice.
 
-Tested with: American McGee's Alice, CoD 2003, Heavy Metal FAKK2, Star Trek Elite Force 2, Open Jedi Knight, Quake2, Heretic2.<br/>
+Tested with: American McGee's Alice, CoD 2003, Heavy Metal FAKK2, Star Trek Elite Force 2, Open Jedi Knight, Quake2, Heretic2.
+
 NOTE: RTSS interferes with proper Remix functionality; add NvRemixBridge.exe to the exception list (OJK needs this to be able to launch).
 
 ## Included in this project:

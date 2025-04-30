@@ -317,7 +317,10 @@ void D3DVABuffer :: Lock( GLint first, GLint last )
 	
 	int numSamplers = 0;
 	for ( int j = 0; j < D3DGlobal.maxActiveTMU; ++j ) {
-		if (D3DState.EnableState.textureEnabled[j]) {
+		if (D3DState.EnableState.textureEnabled[j] &&
+				(VA_TEXTURE_BIT_IS_SET(D3DState.ClientVertexArrayState.vertexArrayEnable, j) || D3DState.EnableState.texGenEnabled[j])
+			)
+		{
 			int numCoords = D3DState.ClientVertexArrayState.texCoordInfo[j].elementCount;
 			if ( D3DState.TextureState.transformEnabled )
 			{
@@ -401,14 +404,14 @@ void D3DVABuffer :: Lock( GLint first, GLint last )
 		}
 		if (fvf & D3DFVF_SPECULAR)
 		{
-			PRINT_ONCE("Consider implementing D3DFVF_SPECULAR in FastPath for a speed improvement!");
+			PRINT_ONCE("WARNING: Consider implementing D3DFVF_SPECULAR in FastPath for a speed improvement!\n");
 			fast_path_abort_reason = __LINE__;
 			break;
 		}
 		if ( D3DState.TextureState.transformEnabled )
 		{
 			fast_path_abort_reason = __LINE__;
-			goto FAST_PATH_CHECK_ABORT;
+			break;
 		}
 		if (numSamplers > FAST_PATH_SAMPLERS)
 		{
@@ -420,7 +423,6 @@ void D3DVABuffer :: Lock( GLint first, GLint last )
 		{
 			if (D3DState.EnableState.textureEnabled[j])
 			{
-				DWORD vaTextureBit = 1 << (VA_TEXTURE_BIT_SHIFT + j);
 				if (D3DState.EnableState.texGenEnabled[j])
 				{
 					fast_path_abort_reason = __LINE__;
@@ -431,7 +433,7 @@ void D3DVABuffer :: Lock( GLint first, GLint last )
 					fast_path_abort_reason = __LINE__;
 					goto FAST_PATH_CHECK_ABORT;
 				}
-				if (D3DState.ClientVertexArrayState.vertexArrayEnable & vaTextureBit)
+				if (VA_TEXTURE_BIT_IS_SET(D3DState.ClientVertexArrayState.vertexArrayEnable, j))
 				{
 					tex[texidx] = j;
 					texidx++;
@@ -518,10 +520,15 @@ FAST_PATH_CHECK_ABORT:
 	else
 	{
 		D3DXMATRIX shiftmat;
-		if ( homogenousCoords && D3DGlobal.settings.projectionMaxZFar )
+		if ( homogenousCoords )
 		{
-			float skyboxScale = 1.0f * (float)D3DGlobal.settings.projectionMaxZFar;
-			skyboxScale = sqrtf( (skyboxScale * skyboxScale) * 0.33f );
+			float skyboxScale = 3000.0f;
+			if ( D3DGlobal.settings.projectionMaxZFar )
+			{
+				skyboxScale = (float)D3DGlobal.settings.projectionMaxZFar;
+				//place the sky cube inside the sphere with radius ZFar
+				skyboxScale = sqrtf( (skyboxScale * skyboxScale) * 0.33f );
+			}
 			const D3DXMATRIX* mvmat = D3DGlobal.modelviewMatrixStack->top().inverse();
 			D3DXMatrixScaling( &shiftmat, skyboxScale, skyboxScale, skyboxScale );
 			D3DXMATRIX scratch;
@@ -599,13 +606,12 @@ FAST_PATH_CHECK_ABORT:
 
 			for ( int j = 0; j < D3DGlobal.maxActiveTMU; ++j ) {
 				if (D3DState.EnableState.textureEnabled[j]) {
-					DWORD vaTextureBit = 1 << (VA_TEXTURE_BIT_SHIFT + j);
 					int numCoords = D3DState.ClientVertexArrayState.texCoordInfo[j].elementCount;
 					if ( D3DState.TextureState.transformEnabled )
 					{
 						numCoords = 4;
 					}
-					if (D3DState.ClientVertexArrayState.vertexArrayEnable & vaTextureBit) {
+					if (VA_TEXTURE_BIT_IS_SET(D3DState.ClientVertexArrayState.vertexArrayEnable, j)) {
 						if (elemIndex >= D3DState.ClientVertexArrayState.texCoordInfo[j]._internal.compiledFirst &&
 							elemIndex <= D3DState.ClientVertexArrayState.texCoordInfo[j]._internal.compiledLast) {
 							SetupTexCoords( D3DGlobal.compiledVertexArray.compiledTexCoordData[j] + elemIndex*4, numCoords, vertexData, normalData, j, pLockedVertices );
@@ -618,6 +624,7 @@ FAST_PATH_CHECK_ABORT:
 							}
 							SetupTexCoords( texcoord, numCoords, vertexData, normalData, j, pLockedVertices );
 						}
+						pLockedVertices += numCoords;
 					} else if (D3DState.EnableState.texGenEnabled[j]) {
 						GLfloat texcoord[4] = { 0, 0, 0, 1 };
 						if (D3DState.TransformState.texcoordFixEnabled) {
@@ -625,8 +632,8 @@ FAST_PATH_CHECK_ABORT:
 							texcoord[1] += D3DState.TransformState.texcoordFix[1];
 						}
 						SetupTexCoords( texcoord, numCoords, vertexData, normalData, j, pLockedVertices );
+						pLockedVertices += numCoords;
 					}
-					pLockedVertices += numCoords;
 				}
 			}
 		}
@@ -1532,11 +1539,12 @@ OPENGL_API void WINAPI glLockArrays( GLint first, GLsizei count )
 static void on_glVertexPointer( GLint size, GLenum type, GLsizei stride, const GLvoid* pointer )
 {
 	_CRT_UNUSED( size );
-	key_inputs_t keys = keypress_get();
-	if ( (keys.ctrl || keys.alt) && (keys.i || keys.o) )
-	{
-		logPrintf( "DEBUG: VertexPointer:%p\n", pointer );
-	}
+	//PRINT_ONCE( "DEBUG: VertexPointer:%p\n", pointer );
+	//key_inputs_t keys = keypress_get();
+	//if ( (keys.ctrl || keys.alt) && (keys.i || keys.o) )
+	//{
+	//	logPrintf( "DEBUG: VertexPointer:%p\n", pointer );
+	//}
 	for ( int i = 0; i < ARRAYSIZE( D3DGlobal.normalPtrGuess ); i++ )
 	{
 		if ( D3DGlobal.normalPtrGuess[i].vertexPtr == pointer )

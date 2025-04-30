@@ -55,6 +55,16 @@ typedef struct D3DState_s
 		DWORD			currentColor2;
 		FLOAT			currentNormal[3];
 		FLOAT			currentTexCoord[MAX_D3D_TMU][4];
+		union {
+			struct {
+				DWORD       color : 1;
+				DWORD       color2 : 1;
+				DWORD       norm : 1;
+				DWORD       fog : 1;
+				DWORD       texcoord : 16;
+			} bits;
+			DWORD           all;
+		}               isSet;
 	} CurrentState;
 	struct {
 		DWORD			depthTestFunc;
