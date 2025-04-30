@@ -81,6 +81,8 @@ enum eVertexArrayEnable
 #define VA_TEXTURE_BIT_SHIFT	8
 #define VA_TEXTURE_BIT_MASK		0xff00
 
+#define VA_TEXTURE_BIT_IS_SET(VAR, BITNUM) (((VAR) & (1 << (VA_TEXTURE_BIT_SHIFT + (BITNUM)))) != 0)
+
 typedef struct D3DVAInfo_s
 {
 	GLint			elementCount;

@@ -24,6 +24,7 @@
 class D3DIMBuffer
 {
 	static const size_t c_IMBufferGrowSize = 256;
+	static const GLsizei c_MaxSwapFrame = 2;
 	typedef struct
 	{
 		float position[4];
@@ -42,11 +43,14 @@ public:
 
 protected:
 	void EnsureBufferSize( int numVerts );
-	UINT ReorderBufferToFVF( int fvf );
+	UINT ReorderBufferToFVF( int fvf, int fvfsz );
 	void SetupTexCoords( D3DIMBufferVertex *pVertex, int stage );
 
 private:
 	D3DIMBufferVertex *m_pBuffer;
+	LPDIRECT3DVERTEXBUFFER9		m_pVertexBuffer[c_MaxSwapFrame];
+	GLsizei						m_vbAllocSize[c_MaxSwapFrame];
+	GLint						m_swapFrame;
 	DWORD		m_samplerMask;
 	GLenum		m_primitiveType;
 	int			m_maxVertexCount;
