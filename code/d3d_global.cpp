@@ -281,6 +281,7 @@ int D3DGlobal_ReadGameConf(const char* valname)
 		if (gamename && g_iniconf.has(gamename) && g_iniconf[gamename].has(valname))
 		{
 			ret = strtoul( g_iniconf[gamename][valname].c_str(), NULL, 10 );
+			break;
 		}
 		else
 		{

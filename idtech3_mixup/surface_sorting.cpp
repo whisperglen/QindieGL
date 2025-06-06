@@ -540,8 +540,8 @@ static bool read_conf()
 	fp_markLeaves = config_hex( "markLeaves", false );
 	if ( fp_markLeaves )
 	{
-		fp_cvarSet = (const void**)config_hex( "ri_fp_cvarSet", true, &not_found );
-		fp_cvarGet = (const void**)config_hex( "ri_fp_cvarGet", true, &not_found );
+		fp_cvarSet = (const void**)config_hex( "fp_cvarSet", true, &not_found );
+		fp_cvarGet = (const void**)config_hex( "fp_cvarGet", true, &not_found );
 		tr_dp_skyportal = (const int*)config_hex( "tr_dp_skyportal", true, &not_found );
 	}
 	jmp_skyOnscreen = (byte*)config_hex( "jmp_skyOnscreen", false );

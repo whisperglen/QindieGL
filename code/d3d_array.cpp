@@ -527,7 +527,8 @@ FAST_PATH_CHECK_ABORT:
 			{
 				skyboxScale = (float)D3DGlobal.settings.projectionMaxZFar;
 				//place the sky cube inside the sphere with radius ZFar
-				skyboxScale = sqrtf( (skyboxScale * skyboxScale) * 0.33f );
+				//skyboxScale = sqrtf( (skyboxScale * skyboxScale) * 0.33f );
+				skyboxScale *= 0.5744f;
 			}
 			const D3DXMATRIX* mvmat = D3DGlobal.modelviewMatrixStack->top().inverse();
 			D3DXMatrixScaling( &shiftmat, skyboxScale, skyboxScale, skyboxScale );
@@ -591,7 +592,7 @@ FAST_PATH_CHECK_ABORT:
 				*(DWORD*)pLockedVertices = D3DState.CurrentState.currentColor;
 			}
 			++pLockedVertices;
-
+			
 			if (fvf & D3DFVF_SPECULAR) {
 				GLubyte color[4] = { 0, 0, 0, 0 };
 				if (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_COLOR2_BIT) {
