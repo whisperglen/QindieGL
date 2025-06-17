@@ -24,13 +24,14 @@ env:
 jobs:
   create_release:
     name: Create release
-    runs-on: windows-2019
+    runs-on: windows-2022
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
+      id: ${{ steps.create_release.outputs.id }}
     steps:
       - name: Create release
         id: create_release
-        uses: actions/create-release@v1
+        uses: comnoco/create-release-action@v2.0.5
         with:
           draft: false
           prerelease: false
@@ -39,7 +40,7 @@ jobs:
 
   build:
     needs: create_release
-    runs-on: windows-2019
+    runs-on: windows-2022
     strategy:
       matrix:
         config: [Release, ReleaseNoDetours]
@@ -73,9 +74,15 @@ jobs:
       run: 7z a -tzip ${{matrix.zip_name}} ./bin/${{matrix.config}}/*
 
     - name: Upload artifact
-      uses: actions/upload-release-asset@v1
+      uses: actions/github-script@v4
       with:
-        upload_url: ${{ needs.create_release.outputs.upload_url }}
-        asset_path: ./${{matrix.zip_name}}
-        asset_name: ${{matrix.zip_name}}
-        asset_content_type: application/zip
+        script: |
+          const fs = require('fs');
+          // Upload the release asset
+          await github.repos.uploadReleaseAsset({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            release_id: ${{ needs.create_release.outputs.id }},
+            name: "${{matrix.zip_name}}",
+            data: await fs.readFileSync("${{matrix.zip_name}}")
+          });

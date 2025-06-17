@@ -112,10 +112,10 @@ static TCHAR dllname[PATH_SZ] = { 0 };
 
 //#define QINDIEGLSRC_NO_DETOURS
 #ifdef QINDIEGLSRC_NO_DETOURS
-static bool hook_dll_on_load_check() { return false; }
-static void hook_on_process_attach() { }
-static void hook_do_init(const char*, const char*, const char*) { }
-static void hook_do_deinit() { }
+bool hook_dll_on_load_check() { return false; }
+void hook_on_process_attach() { }
+void hook_do_init(const char*, const char*, const char*) { }
+void hook_do_deinit() { }
 void hook_frame_ended() { }
 #else
 #pragma comment(lib, "idtech3_mixup.lib")
