@@ -208,11 +208,13 @@ EXPORTS
 	glPolygonStipple 
 	glPopAttrib 
 	glPopClientAttrib 
+	glPopDebugGroup
 	glPopMatrix 
 	glPopName 
 	glPrioritizeTextures 
 	glPushAttrib 
 	glPushClientAttrib 
+	glPushDebugGroup
 	glPushMatrix
 	glPushName 
 	glRasterPos2d 

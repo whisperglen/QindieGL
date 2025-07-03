@@ -795,6 +795,17 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 			return 0;
 		}
 
+		D3DGlobal.dbgBeginEvent = (pfnD3DPERF_BeginEvent)GetProcAddress(D3DGlobal.hD3DDll, "D3DPERF_BeginEvent");
+		if (!D3DGlobal.dbgBeginEvent) {
+			logPrintf("wglCreateContext: failed to get address of \"D3DPERF_BeginEvent\" from d3d9.dll\n");
+			return 0;
+		}
+		D3DGlobal.dbgEndEvent = (pfnD3DPERF_EndEvent)GetProcAddress(D3DGlobal.hD3DDll, "D3DPERF_EndEvent");
+		if (!D3DGlobal.dbgEndEvent) {
+			logPrintf("wglCreateContext: failed to get address of \"D3DPERF_EndEvent\" from d3d9.dll\n");
+			return 0;
+		}
+
 		if (nullptr == (D3DGlobal.pD3D = d3dCreateFn(D3D_SDK_VERSION)) ) {
 			logPrintf("wglCreateContext: failed to initialize Direct3D\n");
 			return 0;

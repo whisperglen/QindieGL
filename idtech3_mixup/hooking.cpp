@@ -7,6 +7,7 @@
 #include "d3d_wrapper.hpp"
 #include "d3d_global.hpp"
 #include "surface_sorting.h"
+#include "h2_rsurf.h"
 
 void* fp_exit = exit; //ExitProcess;
 
@@ -23,12 +24,12 @@ DECLSPEC_NORETURN void __cdecl hk_exit(int code)
 	TerminateProcess(GetCurrentProcess(), code);
 }
 
-bool hook_dll_on_load_check()
+int hook_dll_on_load_check()
 {
 	if (DetourIsHelperProcess()) {
-		return true;
+		return TRUE;
 	}
-	return false;
+	return FALSE;
 }
 
 void hook_on_process_attach()
@@ -48,13 +49,28 @@ int hook_check_address_within_range(void* adr)
 	return FALSE;
 }
 
-int hook_unprotect( void* ptr, int size )
+int hook_unprotect( void* ptr, int size, unsigned long *restore )
 {
 	DWORD error;
 	DWORD dwOld = 0;
 	if (!VirtualProtect(ptr, size, PAGE_EXECUTE_READWRITE, &dwOld)) {
 		error = GetLastError();
-		logPrintf("VirtualProtect failed for %p with 0x%x\n", ptr, error);
+		logPrintf("VirtualProtect failed RW for %p with 0x%x\n", ptr, error);
+		return FALSE;
+	}
+	if ( restore )
+		*restore = dwOld;
+
+	return TRUE;
+}
+
+int hook_protect( void* ptr, int size, unsigned long restore )
+{
+	DWORD error;
+	DWORD dwOld = 0;
+	if (!VirtualProtect(ptr, size, restore, &dwOld)) {
+		error = GetLastError();
+		logPrintf("VirtualProtect failed op:%x for %p with 0x%x\n", restore, ptr, error);
 		return FALSE;
 	}
 	return TRUE;
@@ -102,6 +118,17 @@ void* hook_loadptr( const void* addr )
 {
 	void* ret = 0;
 	memcpy( &ret, addr, sizeof( ret ) );
+	return ret;
+}
+
+void* hook_offset_to_addr( void* offset )
+{
+	void* ret = 0;
+	if ( exedata.SizeOfImage > (DWORD)offset )
+	{
+		ret = (uint8_t*)exedata.lpBaseOfDll + (intptr_t)offset;
+	}
+
 	return ret;
 }
 
@@ -160,6 +187,11 @@ void hook_do_init(const char *exename, const char* dllname, const char *gamename
 	}
 
     hook_surface_sorting_do_init();
+
+	if ( D3DGlobal_ReadGameConfPtr( "patch_h2_rsurf" ) )
+	{
+		h2_rsurf_init();
+	}
 }
 
 void hook_do_deinit()
@@ -175,9 +207,15 @@ void hook_do_deinit()
 	//if(error != NO_ERROR) logPrintf("hook_do_deinit: DetourTransactionCommit failed: %d \n", error);
 
 	hook_surface_sorting_do_deinit();
+
+	if ( D3DGlobal_ReadGameConfPtr( "patch_h2_rsurf" ) )
+	{
+		h2_rsurf_deinit();
+	}
 }
 
 void hook_frame_ended()
 {
 	hook_surface_sorting_frame_ended();
+	h2_rsurf_frame_ended();
 }

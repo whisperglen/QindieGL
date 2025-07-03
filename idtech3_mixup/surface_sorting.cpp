@@ -412,6 +412,7 @@ static void* config_hex(const char* name, bool required, bool *not_found = 0)
 	ret = D3DGlobal_ReadGameConfPtr( name );
 	if (ret)
 	{
+		ret = hook_offset_to_addr( ret );
 		logPrintf("SurfaceSort: config %s found %p\n", name, ret);
 		return ret;
 	}
@@ -688,9 +689,12 @@ void hook_surface_sorting_do_init()
 	{
 		do_detour_action(DetourAttach);
 
-		if ( jmp_skyOnscreen && hook_unprotect(jmp_skyOnscreen, 1) )
+		unsigned long restore;
+
+		if ( jmp_skyOnscreen && hook_unprotect(jmp_skyOnscreen, 1, &restore) )
 		{
 			jmp_skyOnscreen[0] = 0xeb;
+			hook_protect( jmp_skyOnscreen, 1, restore );
 		}
 
 		for ( int i = 0; i < ARRAYSIZE( jmp_helpers ); i++ )
@@ -705,9 +709,10 @@ void hook_surface_sorting_do_init()
 						continue;
 					}
 				}
-				if ( hook_unprotect( jmp_helpers[i].addr, jmp_helpers[i].datasz ) )
+				if ( hook_unprotect( jmp_helpers[i].addr, jmp_helpers[i].datasz, &restore ) )
 				{
 					memcpy( jmp_helpers[i].addr, jmp_helpers[i].data, jmp_helpers[i].datasz );
+					hook_protect( jmp_helpers[i].addr, jmp_helpers[i].datasz, restore );
 				}
 			}
 		}

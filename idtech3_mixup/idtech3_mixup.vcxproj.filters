@@ -21,12 +21,18 @@
     <ClCompile Include="hooking.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="h2_rsurf.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="surface_sorting.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="hooking.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="h2_rsurf.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

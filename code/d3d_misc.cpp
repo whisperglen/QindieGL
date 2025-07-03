@@ -295,3 +295,18 @@ OPENGL_API void WINAPI glDebugEntry( DWORD, DWORD )
 {
 	//what the hell is that?
 }
+OPENGL_API void WINAPI glPushDebugGroup( GLenum source, GLuint id, GLsizei length, const char* message )
+{
+	static WCHAR wmessage[2048];
+	if ( D3DGlobal.dbgBeginEvent )
+	{
+		D3DCOLOR color = id;
+		mbstowcs( wmessage, message, ARRAYSIZE( wmessage ) );
+		D3DGlobal.dbgBeginEvent( color, wmessage );
+	}
+}
+OPENGL_API void WINAPI glPopDebugGroup( void )
+{
+	if ( D3DGlobal.dbgEndEvent )
+		D3DGlobal.dbgEndEvent();
+}

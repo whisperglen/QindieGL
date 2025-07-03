@@ -112,7 +112,7 @@ static TCHAR dllname[PATH_SZ] = { 0 };
 
 //#define QINDIEGLSRC_NO_DETOURS
 #ifdef QINDIEGLSRC_NO_DETOURS
-bool hook_dll_on_load_check() { return false; }
+int hook_dll_on_load_check() { return false; }
 void hook_on_process_attach() { }
 void hook_do_init(const char*, const char*, const char*) { }
 void hook_do_deinit() { }

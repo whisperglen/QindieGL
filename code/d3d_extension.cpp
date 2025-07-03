@@ -38,8 +38,8 @@ OPENGL_API const char* WINAPI wglGetExtensionsStringARB( HDC )
 
 typedef struct glext_entry_point_s
 {
-	char *name;
-	char *extname;
+	const char *name;
+	const char *extname;
 	int  enabled;
 	PROC func;
 } glext_entry_point_t;

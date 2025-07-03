@@ -22,6 +22,8 @@
 #define QINDIEGL_D3D_GLOBAL_H
 
 typedef IDirect3D9* (WINAPI *pfnDirect3DCreate9)( UINT SDKVersion );
+typedef int (WINAPI *pfnD3DPERF_BeginEvent)( D3DCOLOR col, LPCWSTR wszName );
+typedef int (WINAPI *pfnD3DPERF_EndEvent)( void );
 
 enum eInternalTextureTarget
 {
@@ -126,6 +128,8 @@ typedef struct D3DGlobal_s
 	LPDIRECT3DSWAPCHAIN9	pSwapChain;
 	LPDIRECT3DSURFACE9		pSystemMemRT;
 	LPDIRECT3DSURFACE9		pSystemMemFB;
+	pfnD3DPERF_BeginEvent   dbgBeginEvent;
+	pfnD3DPERF_EndEvent     dbgEndEvent;
 	int						iBPP;
 	bool					vSync;
 	bool					hasDepthStencil;
