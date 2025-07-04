@@ -412,6 +412,18 @@ typedef struct cvar_s
 #define RI_CVAR_GET 5
 #define RI_CVAR_SET 7
 
+#define vecmax(a,m)             ((a) > m ? m : (a))
+
+#define DotProduct(x,y)			(x[0]*y[0]+x[1]*y[1]+x[2]*y[2])
+#define VectorSubtract(a,b,c)	(c[0]=a[0]-b[0],c[1]=a[1]-b[1],c[2]=a[2]-b[2])
+#define VectorAdd(a,b,c)		(c[0]=a[0]+b[0],c[1]=a[1]+b[1],c[2]=a[2]+b[2])
+#define VectorCopy(a,b)			(b[0]=a[0],b[1]=a[1],b[2]=a[2])
+#define VectorCopyMax(a,b,m)	(b[0]=vecmax(a[0],m),b[1]=vecmax(a[1],m),b[2]=vecmax(a[2],m))
+#define VectorScale(v,s,o)      ((o)[0]=(v)[0]*(s),(o)[1]=(v)[1]*(s),(o)[2]=(v)[2]*(s))
+#define VectorClear(a)			(a[0]=a[1]=a[2]=0)
+#define VectorNegate(a,b)		(b[0]=-a[0],b[1]=-a[1],b[2]=-a[2])
+#define VectorSet(v, x, y, z)	(v[0]=(x), v[1]=(y), v[2]=(z))
+
 extern "C" {
 typedef void	(*ri_Printf) (int print_level, const char *str, ...);
 typedef void	(*ri_Error) (int code, char *fmt, ...);
@@ -442,6 +454,8 @@ static int* dp_gl_state_lightmap_textures;// = 0x5ff6c
 #define gl_state_lightmap_textures (*dp_gl_state_lightmap_textures)
 static int* dp_c_brush_polys;// = 0x5fd40
 #define c_brush_polys (*dp_c_brush_polys)
+float **dp_s_lerped;// = 0x5f9cc
+#define s_lerped (*dp_s_lerped)
 static cvar2_t* r_fullbright;
 static cvar2_t* gl_drawflat;
 static cvar2_t* gl_sortmulti;
@@ -488,6 +502,7 @@ static surfList_t g_surfList = { 0 };
 
 static void h2_intercept_RecursiveWorldNode( mnode_t* node );
 static qboolean h2_intercept_R_CullAliasModel( vec3_t bbox[8], void* e /*entity_t* e*/ );
+static void h2_bridge_to_MeshFillBuffer();
 static void R_RecursiveWorldNodeEx( mnode_t* node );
 static void R_SortAndDrawSurfaces( drawSurf_t* surfs, int numSurfs );
 static void R_AddDrawSurf( msurface_t* surf );
@@ -514,6 +529,7 @@ void h2_rsurf_init()
 			r_newrefdef_lightstyles = (lightstyle_t*)((intptr_t)0x5fcbc + (intptr_t)ref_gl_data.lpBaseOfDll);
 			dp_gl_state_lightmap_textures = (int*)((intptr_t)0x5ff6c + (intptr_t)ref_gl_data.lpBaseOfDll);
 			dp_c_brush_polys = (int*)((intptr_t)0x5fd40 + (intptr_t)ref_gl_data.lpBaseOfDll);
+			dp_s_lerped = PTR_FROM_OFFSET( float**, 0x5f9cc );
 
 			R_TextureAnimation = (image_t*(*)(const mtexinfo_t *))((intptr_t)0xae70 + (intptr_t)ref_gl_data.lpBaseOfDll);
 			fp_qglMultiTexCoord2fARB = (void (APIENTRY **)(GLenum,GLfloat,GLfloat))((intptr_t)0x53770 + (intptr_t)ref_gl_data.lpBaseOfDll);
@@ -533,7 +549,7 @@ void h2_rsurf_init()
 			r_nocull = ((ri_Cvar_Get)dp_ri[RI_CVAR_GET] )("r_nocull", "0", 0);
 			gl_dynamic = ((ri_Cvar_Get)dp_ri[RI_CVAR_GET] )("gl_dynamic", "1", 0);
 			rmx_skiplightmaps = ((ri_Cvar_Get)dp_ri[RI_CVAR_GET] )("rmx_skiplightmaps", "1", 0);
-			rmx_nocull = ((ri_Cvar_Get)dp_ri[RI_CVAR_GET] )("rmx_nocull", "1", 0);
+			rmx_nocull = ((ri_Cvar_Get)dp_ri[RI_CVAR_GET] )("rmx_nocull", "2", 0);
 			rmx_novis = ((ri_Cvar_Get)dp_ri[RI_CVAR_GET] )("rmx_novis", "1", 0);
 			rmx_generic = ((ri_Cvar_Get)dp_ri[RI_CVAR_GET] )("rmx_generic", "-1", 0);
 
@@ -555,7 +571,7 @@ void h2_rsurf_init()
 				}
 			}
 			else
-				logPrintf("h2_rsurf_init: the CALL instr does not match %x %x\n", code[0], val);
+				logPrintf("h2_rsurf_init:R_DrawWorld: the CALL instr does not match %x %x\n", code[0], val);
 
 			//R_DrawAliasModel calls R_CullAliasModel
 			//e8 d0 09 00 00
@@ -574,7 +590,43 @@ void h2_rsurf_init()
 				}
 			}
 			else
-				logPrintf("h2_rsurf_init: the CALL instr does not match %x %x\n", code[0], val);
+				logPrintf("h2_rsurf_init:R_DrawAliasModel: the CALL instr does not match %x %x\n", code[0], val);
+
+			//GL_DrawFlexFrameLerp draws the vertices
+			//8b 2f 83 c7 this is where the draw loop starts
+			code = PTR_FROM_OFFSET(byte*, 0x28ab);
+			val = 0;
+			memcpy( &val, &code[0], 4 );
+			if ( val == 0xc7832f8b )
+			{
+				unsigned long restore;
+				if ( hook_unprotect( code, 471, &restore ) )
+				{
+					//copy our asm bridge code over
+					byte* src = (byte*)h2_bridge_to_MeshFillBuffer;
+					int nopcnt = 0;
+					int i = 0;
+					for ( ; i < 471 && nopcnt < 5; i++ )
+					{
+						code[i] = src[i];
+						if ( code[i] == 0x90 )
+							nopcnt++;
+					}
+
+					if ( nopcnt == 5 )
+					{
+						//now that we reached the nop instructions, make a jmp to end of draw loop
+						byte* endcall = PTR_FROM_OFFSET( byte*, 0x29d6 ); //this is where the loop ends
+						val = endcall - &code[i];
+						code[i-5] = 0xe9;//jmp relative
+						memcpy( &code[i-4], &val, 4 );
+					}
+
+					hook_protect( code, 471, restore );
+				}
+			}
+			else
+				logPrintf("h2_rsurf_init:GL_DrawFlexFrameLerp: the instr does not match %x\n", val);
 		}
 		//else
 		//	logPrintf("h2_rsurf_init: size of ref_gl does not match %d vs %d, patching will most likely result in crash. Aborted.\n", modulesize, ref_gl_data.SizeOfImage);
@@ -641,9 +693,28 @@ static qboolean h2_intercept_R_CullAliasModel( vec3_t bbox[8], void* e /*entity_
 	}
 }
 
-static inline float DotProduct(const vec3_t v1, const vec3_t v2)
+static void R_MeshFillBuffer( int* order, float alpha );
+//not sure if we need a ptr to function to make sure the call is absolute, not relative
+//relative call would mean we have to somehow adjust that, how? search for e8?
+static void (*fp_MeshFillBuffer)(int* order, float alpha) = R_MeshFillBuffer;
+
+static __declspec(naked) void h2_bridge_to_MeshFillBuffer()
 {
-	return (v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]);
+	__asm {
+		MOV EDX,dword ptr [ESP + 0x24] //alpha
+		push edx
+		push edi //order
+		
+		call fp_MeshFillBuffer
+		add esp,8
+
+		//placeholder for our jmp relative to end of loop
+		nop
+		nop
+		nop
+		nop
+		nop
+	}
 }
 
 static void R_RecursiveWorldNodeEx(mnode_t* node)
@@ -983,11 +1054,18 @@ static void R_SortAndDrawSurfaces( drawSurf_t* surfs, int numSurfs )
 	R_RenderSurfs(two_textures);
 }
 
+typedef union colorinfo_u
+{
+	byte b[4];
+	unsigned all;
+} colorinfo_t;
+
 #define MAX_VERTEXES 4000
 #define MAX_INDEXES (6*MAX_VERTEXES)
 struct vertexData_s
 {
 	float xyz[3];
+	colorinfo_t clr;
 	float tex0[2];
 	float tex1[2];
 };
@@ -1045,6 +1123,7 @@ static void R_PopulateDrawBuffer( msurface_t* surf, int is_dynamic, int is_flowi
 			}
 			ibuf[0] = index++;
 			VectorCopy( v, draw->xyz );
+			draw->clr.all = 0xffffffff;
 			draw->tex0[0] = v[3]+scroll;
 			draw->tex0[1] = v[4];
 			draw->tex1[0] = v[5];
@@ -1056,6 +1135,134 @@ static void R_PopulateDrawBuffer( msurface_t* surf, int is_dynamic, int is_flowi
 		g_drawBuff.numVertexes += p->numverts;
 		g_drawBuff.numIndexes += totalindexes;
 	}
+}
+
+static void R_MeshFillBuffer(int *order, float alpha)
+{
+	while ( 1 )
+	{
+		int strategy;
+		// get the vertex count and primitive type
+		int count = *order++;
+		if (!count)
+			break;		// done
+		if (count < 0)
+		{
+			count = -count;
+			//qglBegin (GL_TRIANGLE_FAN);
+			strategy = 0;
+		}
+		else
+		{
+			//qglBegin (GL_TRIANGLE_STRIP);
+			strategy = 1;
+		}
+		int index_xyz;
+		struct vertexData_s* vb;
+		unsigned short* ib;
+		//unsigned clralpha = vecmax( alpha * 255, 255 );
+
+		int totalindexes = (3 * count) - 6;
+		R_CheckDrawBufferSpace( count, totalindexes, false );
+
+		int i;
+		int index = g_drawBuff.numVertexes;
+		ib = &g_drawBuff.indexes[g_drawBuff.numIndexes];
+		vb = &g_drawBuff.vertexes[g_drawBuff.numVertexes];
+		int start = index;
+
+		//if ( currententity->flags & ( RF_SHELL_RED | RF_SHELL_GREEN | RF_SHELL_BLUE ) )
+		//{
+		//	for ( i = 0; i < count; i++ )
+		//	{
+		//		if ( i > 2 )
+		//		{
+		//			switch ( strategy )
+		//			{
+		//			case 0:
+		//				ib[0] = start;
+		//				ib[1] = index - 1;
+		//				ib += 2;
+		//				break;
+		//			case 1: { //triangle strip: switch winding strategy depending on even/uneven index
+		//				int uneven = i & 1;
+		//				ib[!uneven] = index -1;
+		//				ib[uneven] = index -2;
+		//				ib += 2;
+		//				break; }
+		//			}
+		//		}
+
+		//		index_xyz = order[2];
+		//		order += 3;
+
+		//		//qglColor4f( shadelight[0], shadelight[1], shadelight[2], alpha);
+		//		//qglVertex3fv (s_lerped[index_xyz]);
+		//		float* vsrc = s_lerped + index_xyz * 3;
+		//		VectorCopy( vsrc, vb->xyz );
+		//		vb->clr.all = 0xffffffff;
+		//		//vec3_t clrval;
+		//		//VectorScale( shadelight, 255, clrval );
+		//		//VectorCopyMax( clrval, vb->clr.b, 255 );
+		//		//vb->clr.b[3] = clralpha;
+
+		//	} //while (--count);
+		//}
+		//else
+		{
+			for ( i = 0; i < count; i++ )
+			{
+				if ( i > 2 )
+				{
+					switch ( strategy )
+					{
+					case 0:
+						ib[0] = start;
+						ib[1] = index - 1;
+						ib += 2;
+						break;
+					case 1: { //triangle strip: switch winding strategy depending on even/uneven index
+						int uneven = i & 1;
+						ib[!uneven] = index -1;
+						ib[uneven] = index -2;
+						ib += 2;
+						break; }
+					}
+				}
+				ib[0] = index++;
+
+				// texture coordinates come from the draw list
+				//qglTexCoord2f (((float *)order)[0], ((float *)order)[1]);
+				vb->tex0[0] = ((float *)order)[0];
+				vb->tex0[1] = ((float *)order)[1];
+				index_xyz = order[2];
+				order += 3;
+
+				// normals and vertexes come from the frame list
+				//float l = shadedots[verts[index_xyz].lightnormalindex];
+
+				//qglColor4f (l* shadelight[0], l*shadelight[1], l*shadelight[2], alpha);
+				//qglVertex3fv (s_lerped[index_xyz]);
+				float* vsrc = s_lerped + index_xyz * 3;
+				VectorCopy( vsrc, vb->xyz );
+				vb->clr.all = 0xffffffff;
+				//vec3_t clrval;
+				//float clrscale = l * 255;
+				//VectorScaleP( shadelight, clrscale, clrval );
+				//VectorCopyMax( clrval, vb->clr.b, 255 );
+				//vb->clr.b[3] = clralpha;
+				vb++;
+				ib++;
+			} //while (--count);
+		}
+
+		g_drawBuff.numVertexes += count;
+		g_drawBuff.numIndexes += totalindexes;
+		//qglEnd ();
+
+	}
+
+	R_RenderSurfs( false );
 }
 
 static int qsort_compare( const void *arg1, const void *arg2 )
@@ -1096,6 +1303,7 @@ OPENGL_API void WINAPI glClearColor( GLclampf red, GLclampf green, GLclampf blue
 OPENGL_API void WINAPI glEnableClientState( GLenum cap );
 OPENGL_API void WINAPI glVertexPointer( GLint size, GLenum type, GLsizei stride, const GLvoid* pointer );
 OPENGL_API void WINAPI glClientActiveTexture( GLenum texture );
+OPENGL_API void WINAPI glColorPointer( GLint size, GLenum type, GLsizei stride, const GLvoid* pointer );
 OPENGL_API void WINAPI glTexCoordPointer( GLint size, GLenum type, GLsizei stride, const GLvoid* pointer );
 OPENGL_API void WINAPI glDrawArrays( GLenum mode, GLint first, GLsizei count );
 OPENGL_API void WINAPI glDrawElements( GLenum mode, GLsizei count, GLenum type, const GLvoid* indices );
@@ -1109,6 +1317,8 @@ static void R_RenderSurfs( int two_textures )
 
 		glEnableClientState( GL_VERTEX_ARRAY );
 		glVertexPointer( 3, GL_FLOAT, sizeof( struct vertexData_s ), g_drawBuff.vertexes[0].xyz );
+		glEnableClientState( GL_COLOR_ARRAY );
+		glColorPointer( 4, GL_UNSIGNED_BYTE, sizeof( struct vertexData_s ), g_drawBuff.vertexes[0].clr.b );
 		glClientActiveTexture( GL_TEXTURE0_ARB );
 		glEnableClientState( GL_TEXTURE_COORD_ARRAY );
 		glTexCoordPointer( 2, GL_FLOAT, sizeof( struct vertexData_s ), g_drawBuff.vertexes[0].tex0 );
@@ -1126,6 +1336,7 @@ static void R_RenderSurfs( int two_textures )
 			glClientActiveTexture( GL_TEXTURE0_ARB );
 		}
 		glDisableClientState( GL_TEXTURE_COORD_ARRAY );
+		glDisableClientState( GL_COLOR_ARRAY );
 		glDisableClientState( GL_VERTEX_ARRAY );
 
 		g_drawBuff.numIndexes = 0;
