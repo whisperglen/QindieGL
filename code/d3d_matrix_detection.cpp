@@ -70,7 +70,7 @@ static int g_mat_log_global_count = 0;
 
 static int g_mat_log_print_one_round = 0;
 
-void* g_mat_addrs[3];
+void* g_mat_addrs[5];
 int g_mat_addr_count = 0;
 int g_mat_addr_selected = 0;
 
@@ -85,11 +85,15 @@ static float g_mat_identity[16] =
 static D3DXMATRIX g_mat_cache;
 static D3DXMATRIX g_mat_cache_inverse;
 
+static D3DXMATRIX g_camera_cache;
+static BOOL g_camera_cache_firstpush = TRUE;
+
 enum detection_mode_e
 {
-	DETECTION_NONE = 0,
-	DETECTION_IDTECH2 = 1,
-	DETECTION_IDTECH3 = 2
+	DETECTION_NONE          = 0,
+	DETECTION_IDTECH2       = 1,
+	DETECTION_IDTECH3       = 2,
+	DETECTION_FIRST_PUSH    = 3,
 };
 
 bool g_mat_detection_enabled = false;
@@ -136,7 +140,7 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 {
 	unsigned int flags = 0;
 #if 1
-	if (g_mat_detection_enabled == FALSE || g_mat_detection_mode == DETECTION_NONE)
+	if (g_mat_detection_enabled == false || g_mat_detection_mode == DETECTION_NONE)
 	{
 		memcpy(&detected_model->m[0][0], mat, 16*sizeof(float));
 		D3DXMatrixIdentity(detected_view);
@@ -167,7 +171,7 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 				logPrintf( "matrix simple (detected identity)\n" );
 			}
 		}
-		else if (matrix_is_flippingmat(mat))
+		else if (matrix_is_flippingmat(mat) /*|| matrix_is_flippingmat((const float*)g_mat_addrs[g_mat_addr_selected])*/)
 		{
 			D3DXMatrixIdentity(detected_model);
 			memcpy(&detected_view->m[0][0], mat, 16*sizeof(float));
@@ -271,7 +275,7 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 			break;
 		}
 	}
-	if (!mat_already_stored && g_mat_addr_count < ARRAYSIZE(g_mat_addrs))
+	if (!mat_already_stored && g_mat_addr_count < ARRAYSIZE(g_mat_addrs) && !matrix_is_flippingmat(mat))
 	{
 		bool msg_newDefault = false;
 		g_mat_addrs[g_mat_addr_count] = (void*)mat;
@@ -283,33 +287,7 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 		logPrintf("MatrixDetection new pointer stored[%d]: %p. %s\n", g_mat_addr_count, mat, (msg_newDefault ? "Marked as active camera." : ""));
 		g_mat_addr_count++;
 	}
-	if ( g_mat_log_print_one_round )
-	{
-		for ( int i = 0; i < g_mat_log_idx; i++ )
-		{
-			if ( matrix_detect_are_equal( mat, g_mat_log_data[i].mat, 0 ) )
-			{
-				g_mat_log_data[i].usage++;
-				g_mat_log_data[i].flags |= flags;
-				g_mat_log_data[i].seq_num.push_back( g_mat_log_global_count );
-				g_mat_log_data[i].seq_ptr.push_back( (void*)mat );
-				g_mat_log_global_count++;
-				return;
-			}
-		}
-		if ( g_mat_log_idx < ARRAYSIZE( g_mat_log_data ) )
-		{
-			memcpy( g_mat_log_data[g_mat_log_idx].mat, mat, sizeof( g_mat_log_data[0].mat ) );
-			g_mat_log_data[g_mat_log_idx].usage = 1;
-			g_mat_log_data[g_mat_log_idx].flags = flags;
-			g_mat_log_data[g_mat_log_idx].seq_num.clear();
-			g_mat_log_data[g_mat_log_idx].seq_num.push_back( g_mat_log_global_count );
-			g_mat_log_data[g_mat_log_idx].seq_ptr.clear();
-			g_mat_log_data[g_mat_log_idx].seq_ptr.push_back( (void*)mat );
-			g_mat_log_global_count++;
-			g_mat_log_idx++;
-		}
-	}
+	matrix_log_statistics_add( mat, flags );
 }
 
 void matrix_detect_on_world_retrieve(const float* mat, D3DXMATRIX* detected_model, D3DXMATRIX* detected_view)
@@ -322,8 +300,42 @@ void matrix_detect_on_world_retrieve(const float* mat, D3DXMATRIX* detected_mode
 	}
 }
 
+void matrix_detect_on_pushmatrix( const float* mat )
+{
+	if ( g_mat_detection_mode == DETECTION_FIRST_PUSH &&
+		g_camera_cache_firstpush && !matrix_is_identity(mat) )
+	{
+		g_camera_cache_firstpush = FALSE;
+		memcpy( &g_camera_cache.m[0][0], mat, sizeof( g_camera_cache.m ) );
+	}
+}
+
+void matrix_detect_process_before_setmatrix( const D3DXMATRIX* modelview, D3DXMATRIX* detected_model, D3DXMATRIX* detected_view )
+{
+	if ( g_mat_detection_mode ==  DETECTION_FIRST_PUSH )
+	{
+		if ( matrix_is_identity( &modelview->m[0][0] ) )
+		{
+			D3DXMatrixIdentity( detected_model );
+			D3DXMatrixIdentity( detected_view );
+		}
+		else if ( matrix_detect_are_equal( &modelview->m[0][0], &g_camera_cache.m[0][0], 16 ) )
+		{
+			D3DXMatrixIdentity( detected_model );
+			memcpy( &detected_view->m[0][0], &g_camera_cache.m[0][0], sizeof( detected_view->m ) );
+		}
+		else
+		{
+			D3DXMatrixMultiply( detected_model, modelview, matrix_get_inverse( &g_camera_cache.m[0][0] ) );
+			memcpy( &detected_view->m[0][0], &g_camera_cache.m[0][0], sizeof( detected_view->m ) );
+		}
+	}
+}
+
 void matrix_detect_frame_ended()
 {
+	g_camera_cache_firstpush = TRUE;
+
 	key_inputs_t keys = keypress_get();
 
 	if (keys.o && (keys.ctrl || keys.alt))
@@ -356,6 +368,7 @@ void matrix_detect_frame_ended()
 			matrix_print(g_mat_log_data[i].mat, i, g_mat_log_data[i].usage, g_mat_log_data[i].flags, g_mat_log_data[i].seq_num.data(), g_mat_log_data[i].seq_ptr.data());
 		}
 
+		logPrintf( "++ matrix log complete ++\n" );
 	}
 
 	g_mat_log_idx = 0;
@@ -366,34 +379,14 @@ void matrix_detect_frame_ended()
 	if ( keys.i && (keys.ctrl || keys.alt) )
 	{
 		g_mat_log_print_one_round |= 1;
+		logPrintf( "++ matrix log start short ++\n" );
 	}
 
 	if (keys.u && (keys.ctrl || keys.alt))
 	{
 		g_mat_log_print_one_round |= 2;
+		logPrintf( "++ matrix log start full ++\n" );
 	}
-}
-
-static int read_confval(const char* valname, mINI::INIStructure &ini)
-{
-	int ret = 0;
-	const char* gamename = D3DGlobal_GetGameName();
-	for(int tries = 0; tries < 2; tries++)
-	{
-		if (gamename && ini.has(gamename) && ini[gamename].has(valname))
-		{
-			try {
-				ret = std::stoi(ini[gamename][valname]);
-			} catch (const std::exception &e) {
-				logPrintf("MatrixDetection: EXCEPTION %s\n", e.what());
-			}
-		}
-		else
-		{
-			gamename = GLOBAL_GAMENAME;
-		}
-	}
-	return ret;
 }
 
 void matrix_detect_configuration_reset()
@@ -402,9 +395,8 @@ void matrix_detect_configuration_reset()
 	g_mat_addr_count = 0;
 	g_mat_addr_selected = 0;
 
-	mINI::INIStructure &ini = *((mINI::INIStructure *)D3DGlobal_GetIniHandler());
-	g_mat_detection_enabled = read_confval("enable_camera_detection", ini);
-	g_mat_detection_mode = read_confval("camera_detection_mode", ini);
+	g_mat_detection_enabled = D3DGlobal_ReadGameConf("enable_camera_detection");
+	g_mat_detection_mode = D3DGlobal_ReadGameConf("camera_detection_mode");
 
 	logPrintf("MatrixDetection enabled:%d mode:%d\n", g_mat_detection_enabled, g_mat_detection_mode);
 }
@@ -461,12 +453,48 @@ void matrix_print(const float* mat, int ordinal, int usage_count, unsigned int f
 
 OPENGL_API void WINAPI matrix_print_s(const float* mat, const char *info)
 {
-	if (g_mat_log_print_one_round)
+	if (g_mat_log_print_one_round & 2)
 	{
 		logPrintf("matrix simple (%s)\n  %f %f %f %f\n  %f %f %f %f\n  %f %f %f %f\n  %f %f %f %f\n", info,
 			mat[0], mat[1], mat[2], mat[3],
 			mat[4], mat[5], mat[6], mat[7],
 			mat[8], mat[9], mat[10], mat[11],
 			mat[12], mat[13], mat[14], mat[15]);
+	}
+}
+
+bool matrix_logging_active()
+{
+	return (g_mat_log_print_one_round & 2) != 0;
+}
+
+void matrix_log_statistics_add( const float* mat, unsigned int flags )
+{
+	if ( g_mat_log_print_one_round )
+	{
+		for ( int i = 0; i < g_mat_log_idx; i++ )
+		{
+			if ( matrix_detect_are_equal( mat, g_mat_log_data[i].mat, 0 ) )
+			{
+				g_mat_log_data[i].usage++;
+				g_mat_log_data[i].flags |= flags;
+				g_mat_log_data[i].seq_num.push_back( g_mat_log_global_count );
+				g_mat_log_data[i].seq_ptr.push_back( (void*)mat );
+				g_mat_log_global_count++;
+				return;
+			}
+		}
+		if ( g_mat_log_idx < ARRAYSIZE( g_mat_log_data ) )
+		{
+			memcpy( g_mat_log_data[g_mat_log_idx].mat, mat, sizeof( g_mat_log_data[0].mat ) );
+			g_mat_log_data[g_mat_log_idx].usage = 1;
+			g_mat_log_data[g_mat_log_idx].flags = flags;
+			g_mat_log_data[g_mat_log_idx].seq_num.clear();
+			g_mat_log_data[g_mat_log_idx].seq_num.push_back( g_mat_log_global_count );
+			g_mat_log_data[g_mat_log_idx].seq_ptr.clear();
+			g_mat_log_data[g_mat_log_idx].seq_ptr.push_back( (void*)mat );
+			g_mat_log_global_count++;
+			g_mat_log_idx++;
+		}
 	}
 }

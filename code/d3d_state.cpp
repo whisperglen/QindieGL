@@ -199,6 +199,16 @@ static void D3DState_SetTransform()
 	if (D3DState.modelViewMatrixModified) {
 		D3DState.modelViewMatrixModified = false;
 		static bool prev_dectection_enabled = false;
+
+		if ( matrix_logging_active() )
+		{
+			logPrintf( ">>>>>>>>>> Matrix SetTransform >>>>>>>>>>\n" );
+			matrix_print_s( &(*(D3DGlobal.modelviewMatrixStack->top())).m[0][0], "SetTransform ModelView" );
+			//matrix_print_s( &(*(D3DGlobal.modelMatrixStack->top())).m[0][0], "SetTransform Model" );
+			//matrix_print_s( &(*(D3DGlobal.viewMatrixStack->top())).m[0][0], "SetTransform View" );
+		}
+		matrix_log_statistics_add( &(*(D3DGlobal.modelviewMatrixStack->top())).m[0][0], 0 );
+
 		if (!matrix_detect_is_detection_enabled())
 		{
 			hr = D3DGlobal.pDevice->SetTransform( D3DTS_WORLD, D3DGlobal.modelviewMatrixStack->top() );
@@ -223,6 +233,8 @@ static void D3DState_SetTransform()
 		}
 		else
 		{
+			matrix_detect_process_before_setmatrix(D3DGlobal.modelviewMatrixStack->top(),  D3DGlobal.modelMatrixStack->top(), D3DGlobal.viewMatrixStack->top());
+
 			hr = D3DGlobal.pDevice->SetTransform(D3DTS_WORLD, D3DGlobal.modelMatrixStack->top());
 			if (FAILED(hr)) {
 				D3DGlobal.lastError = hr;
@@ -385,8 +397,11 @@ static void D3DState_SetTextureEnv( int stage, int sampler, eTexTypeInternal int
 		D3DGlobal.pDevice->SetTextureStageState( sampler, D3DTSS_COLOROP, D3DTOP_BLENDTEXTUREALPHA );
 		D3DGlobal.pDevice->SetTextureStageState( sampler, D3DTSS_COLORARG1, D3DTA_TEXTURE );
 		D3DGlobal.pDevice->SetTextureStageState( sampler, D3DTSS_COLORARG2, D3DTA_CURRENT );
-		D3DGlobal.pDevice->SetTextureStageState( sampler, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1 );
-		D3DGlobal.pDevice->SetTextureStageState( sampler, D3DTSS_ALPHAARG1, D3DTA_CURRENT );
+		//D3DGlobal.pDevice->SetTextureStageState( sampler, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1 );
+		//D3DGlobal.pDevice->SetTextureStageState( sampler, D3DTSS_ALPHAARG1, D3DTA_CURRENT );
+		D3DGlobal.pDevice->SetTextureStageState( sampler, D3DTSS_ALPHAOP, D3DTOP_SELECTARG2 );
+		D3DGlobal.pDevice->SetTextureStageState( sampler, D3DTSS_ALPHAARG1, D3DTA_TEXTURE );
+		D3DGlobal.pDevice->SetTextureStageState( sampler, D3DTSS_ALPHAARG2, D3DTA_CURRENT );
 		break;
 	case GL_BLEND:
 //		logPrintf("Stage %i, sampler %i: GL_BLEND\n", stage, sampler);

@@ -361,6 +361,8 @@ template<typename T> static void glGet( GLenum pname, T *params )
 			matrix_detect_on_world_retrieve(&pm->m[0][0], &model, &view);
 			D3DGlobal.modelMatrixStack->load(model);
 			D3DGlobal.viewMatrixStack->load(view);
+			if ( matrix_logging_active() )
+				logPrintf( "Matrix GetModelView\n" );
 			return;
 		}
 	case GL_PROJECTION_MATRIX:
