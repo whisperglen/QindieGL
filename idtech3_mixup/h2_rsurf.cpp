@@ -503,6 +503,7 @@ static surfList_t g_surfList = { 0 };
 static void h2_intercept_RecursiveWorldNode( mnode_t* node );
 static qboolean h2_intercept_R_CullAliasModel( vec3_t bbox[8], void* e /*entity_t* e*/ );
 static void h2_bridge_to_MeshFillBuffer();
+static void h2_check_crtent_frame_vs_oldframe();
 static void R_RecursiveWorldNodeEx( mnode_t* node );
 static void R_SortAndDrawSurfaces( drawSurf_t* surfs, int numSurfs );
 static void R_AddDrawSurf( msurface_t* surf );
@@ -627,6 +628,33 @@ void h2_rsurf_init()
 			}
 			else
 				logPrintf("h2_rsurf_init:GL_DrawFlexFrameLerp: the instr does not match %x\n", val);
+
+			//R_DrawAliasModel checks r_lerpmodels
+			//8b 15 fc fe
+			code = PTR_FROM_OFFSET(byte*, 0x2558);
+			val = 0;
+			memcpy( &val, &code[0], 4 );
+			if ( val == 0xfefc158b )
+			{
+				unsigned long restore;
+				if ( hook_unprotect( code, 21, &restore ) )
+				{
+					//copy our asm bridge code over
+					byte* src = (byte*)h2_check_crtent_frame_vs_oldframe;
+					int nops = 0;
+					int i = 0;
+					for ( ; i < 20; i++ )
+					{
+						code[i] = src[i];
+					}
+					//should stop at jz
+					code[i] = 0x75;//put jnz
+
+					hook_protect( code, 21, restore );
+				}
+			}
+			else
+				logPrintf("h2_rsurf_init:R_DrawAliasModel: the instr does not match %x\n", val);
 		}
 		//else
 		//	logPrintf("h2_rsurf_init: size of ref_gl does not match %d vs %d, patching will most likely result in crash. Aborted.\n", modulesize, ref_gl_data.SizeOfImage);
@@ -704,11 +732,35 @@ static __declspec(naked) void h2_bridge_to_MeshFillBuffer()
 		MOV EDX,dword ptr [ESP + 0x24] //alpha
 		push edx
 		push edi //order
-		
+
 		call fp_MeshFillBuffer
 		add esp,8
 
 		//placeholder for our jmp relative to end of loop
+		nop
+		nop
+		nop
+		nop
+		nop
+	}
+}
+
+static __declspec(naked) void h2_check_crtent_frame_vs_oldframe()
+{
+	__asm {
+		MOV        EAX,dword ptr [ECX + 0x1c]
+		CMP        EAX,dword ptr [ECX + 0x44]
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
 		nop
 		nop
 		nop
