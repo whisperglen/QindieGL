@@ -21,7 +21,7 @@
     <ClCompile Include="hooking.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="h2_rsurf.cpp">
+    <ClCompile Include="h2_refgl.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -32,7 +32,7 @@
     <ClInclude Include="hooking.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="h2_rsurf.h">
+    <ClInclude Include="h2_refgl.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

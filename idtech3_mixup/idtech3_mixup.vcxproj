@@ -108,12 +108,12 @@
     </ProjectReference>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="h2_rsurf.cpp" />
+    <ClCompile Include="h2_refgl.cpp" />
     <ClCompile Include="hooking.cpp" />
     <ClCompile Include="surface_sorting.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="h2_rsurf.h" />
+    <ClInclude Include="h2_refgl.h" />
     <ClInclude Include="hooking.h" />
     <ClInclude Include="surface_sorting.h" />
   </ItemGroup>

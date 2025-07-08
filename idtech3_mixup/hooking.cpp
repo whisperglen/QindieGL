@@ -7,7 +7,7 @@
 #include "d3d_wrapper.hpp"
 #include "d3d_global.hpp"
 #include "surface_sorting.h"
-#include "h2_rsurf.h"
+#include "h2_refgl.h"
 
 void* fp_exit = exit; //ExitProcess;
 
@@ -188,9 +188,9 @@ void hook_do_init(const char *exename, const char* dllname, const char *gamename
 
     hook_surface_sorting_do_init();
 
-	if ( D3DGlobal_ReadGameConfPtr( "patch_h2_rsurf" ) )
+	if ( D3DGlobal_ReadGameConfPtr( "patch_h2_refgl" ) )
 	{
-		h2_rsurf_init();
+		h2_refgl_init();
 	}
 }
 
@@ -208,14 +208,14 @@ void hook_do_deinit()
 
 	hook_surface_sorting_do_deinit();
 
-	if ( D3DGlobal_ReadGameConfPtr( "patch_h2_rsurf" ) )
+	if ( D3DGlobal_ReadGameConfPtr( "patch_h2_refgl" ) )
 	{
-		h2_rsurf_deinit();
+		h2_refgl_deinit();
 	}
 }
 
 void hook_frame_ended()
 {
 	hook_surface_sorting_frame_ended();
-	h2_rsurf_frame_ended();
+	h2_refgl_frame_ended();
 }

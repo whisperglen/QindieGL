@@ -1,0 +1,75 @@
+diff --git a/extern/detours/vc/Detours.vcxproj b/extern/detours/vc/Detours.vcxproj
+index bc676e4..4cf4631 100644
+--- a/extern/detours/vc/Detours.vcxproj
++++ b/extern/detours/vc/Detours.vcxproj
+@@ -15,7 +15,7 @@
+     <ProjectGuid>{37489709-8054-4903-9C49-A79846049FC9}</ProjectGuid>
+     <Keyword>Win32Proj</Keyword>
+     <RootNamespace>Detours</RootNamespace>
+-    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
++    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
+   </PropertyGroup>
+   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+diff --git a/idtech3_mixup/idtech3_mixup.vcxproj b/idtech3_mixup/idtech3_mixup.vcxproj
+index 1cf2ca1..ddc396a 100644
+--- a/idtech3_mixup/idtech3_mixup.vcxproj
++++ b/idtech3_mixup/idtech3_mixup.vcxproj
+@@ -16,18 +16,19 @@
+     <ProjectGuid>{cf9edb31-92bc-45ed-82ff-efa71f3dcce5}</ProjectGuid>
+     <RootNamespace>idtech3mixup</RootNamespace>
+     <ProjectName>idtech3_mixup</ProjectName>
++    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
+   </PropertyGroup>
+   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+     <ConfigurationType>StaticLibrary</ConfigurationType>
+     <UseDebugLibraries>true</UseDebugLibraries>
+-    <PlatformToolset>v142</PlatformToolset>
++    <PlatformToolset>v141</PlatformToolset>
+     <CharacterSet>MultiByte</CharacterSet>
+   </PropertyGroup>
+   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+     <ConfigurationType>StaticLibrary</ConfigurationType>
+     <UseDebugLibraries>false</UseDebugLibraries>
+-    <PlatformToolset>v142</PlatformToolset>
++    <PlatformToolset>v141</PlatformToolset>
+     <WholeProgramOptimization>true</WholeProgramOptimization>
+     <CharacterSet>MultiByte</CharacterSet>
+   </PropertyGroup>
+diff --git a/msvc/QindieGL-src.vcxproj b/msvc/QindieGL-src.vcxproj
+index e72d488..fee5249 100644
+--- a/msvc/QindieGL-src.vcxproj
++++ b/msvc/QindieGL-src.vcxproj
+@@ -19,27 +19,28 @@
+     <Keyword>Win32Proj</Keyword>
+     <RootNamespace>QindieGLsrc</RootNamespace>
+     <ProjectName>QindieGL</ProjectName>
++    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
+   </PropertyGroup>
+   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+     <ConfigurationType>DynamicLibrary</ConfigurationType>
+     <UseDebugLibraries>true</UseDebugLibraries>
+     <CharacterSet>MultiByte</CharacterSet>
+-    <PlatformToolset>v142</PlatformToolset>
++    <PlatformToolset>v141</PlatformToolset>
+   </PropertyGroup>
+   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+     <ConfigurationType>DynamicLibrary</ConfigurationType>
+     <UseDebugLibraries>false</UseDebugLibraries>
+     <WholeProgramOptimization>true</WholeProgramOptimization>
+     <CharacterSet>MultiByte</CharacterSet>
+-    <PlatformToolset>v142</PlatformToolset>
++    <PlatformToolset>v141</PlatformToolset>
+   </PropertyGroup>
+   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoDetours|Win32'" Label="Configuration">
+     <ConfigurationType>DynamicLibrary</ConfigurationType>
+     <UseDebugLibraries>false</UseDebugLibraries>
+     <WholeProgramOptimization>true</WholeProgramOptimization>
+     <CharacterSet>MultiByte</CharacterSet>
+-    <PlatformToolset>v142</PlatformToolset>
++    <PlatformToolset>v141</PlatformToolset>
+   </PropertyGroup>
+   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+   <ImportGroup Label="ExtensionSettings">

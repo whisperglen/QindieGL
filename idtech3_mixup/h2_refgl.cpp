@@ -3,7 +3,7 @@
 #include <Windows.h>
 #include <psapi.h>
 #include <stdint.h>
-#include "h2_rsurf.h"
+#include "h2_refgl.h"
 #include "detours.h"
 #define NO_GL_PROTOTYPES
 #include "gl_headers/gl.h"
@@ -48,7 +48,7 @@ typedef struct paletteRGB_s
 	byte b;
 } paletteRGB_t;
 
-typedef struct image_s //mxd. Changed in H2. Original size: 104 bytes
+typedef struct image_s
 {
 	struct image_s* next;
 	char name[MAX_QPATH];				// Game path, including extension.
@@ -205,8 +205,7 @@ typedef struct
 
 #define MAX_FRAMES		64
 
-#if 1
-typedef unsigned char   undefined;
+typedef unsigned char undefined;
 typedef struct model_s
 {
 	char name[64];
@@ -295,80 +294,6 @@ typedef struct model_s
 	int *extradata;
 	int extradatasize;
 }  model_t;
-#else
-typedef struct model_s
-{
-	char		name[MAX_QPATH];
-
-	int			registration_sequence;
-
-	modtype_t	type;
-	int			numframes;
-
-	int			flags;
-
-	//
-	// volume occupied by the model graphics
-	//		
-	vec3_t		mins, maxs;
-	float		radius;
-
-	//
-	// solid volume for clipping 
-	//
-	qboolean	clipbox;
-	vec3_t		clipmins, clipmaxs;
-
-	//
-	// brush model
-	//
-	int			firstmodelsurface, nummodelsurfaces;
-	int			lightmap;		// only for submodels
-
-	int			numsubmodels;
-	mmodel_t	*submodels;
-
-	int			numplanes;
-	cplane_t	*planes;
-
-	int			numleafs;		// number of visible leafs, not counting 0
-	mleaf_t		*leafs;
-
-	int			numvertexes;
-	mvertex_t	*vertexes;
-
-	int			numedges;
-	medge_t		*edges;
-
-	int			numnodes;
-	int			firstnode;
-	mnode_t		*nodes;
-
-	int			numtexinfo;
-	mtexinfo_t	*texinfo;
-
-	int			numsurfaces;
-	msurface_t	*surfaces;
-
-	//int			numsurfedges;
-	//int			*surfedges;
-
-	//int			nummarksurfaces;
-	//msurface_t	**marksurfaces;
-
-	//dvis_t		*vis;
-
-	//byte		*lightdata;
-
-	//// for alias models and skins
-	//image_t		*skins[MAX_MD2SKINS];
-
-	//fmdl_t		*fmodel;
-
-	//int			extradatasize;
-	//void		*extradata;
-} model_t;
-#endif
 
 typedef struct cvar_s
 {
@@ -379,7 +304,7 @@ typedef struct cvar_s
 	qboolean modified; // Set each time the cvar is changed.
 	float value;
 	struct cvar_s* next;
-} cvar2_t;
+} cvarq2_t;
 
 #define CONTENTS_SOLID			0x00000001
 
@@ -412,23 +337,29 @@ typedef struct cvar_s
 #define RI_CVAR_GET 5
 #define RI_CVAR_SET 7
 
+#define riPRINTF(LVL,...) ((ri_Printf)dp_ri[RI_PRINTF_OFF])( LVL, __VA_ARGS__ )
+#define riERROR(CODE,...) ((ri_Error)dp_ri[RI_ERROR_OFF])( CODE, __VA_ARGS__ )
+#define riCVAR_GET(NAME,VAL,FLAGS) ((ri_Cvar_Get)dp_ri[RI_CVAR_GET] )(NAME,VAL,FLAGS)
+#define riCVAR_SET(NAME,VAL) ((ri_Cvar_Set)dp_ri[RI_CVAR_SET] )(NAME,VAL)
+
 #define vecmax(a,m)             ((a) > m ? m : (a))
 
 #define DotProduct(x,y)			(x[0]*y[0]+x[1]*y[1]+x[2]*y[2])
 #define VectorSubtract(a,b,c)	(c[0]=a[0]-b[0],c[1]=a[1]-b[1],c[2]=a[2]-b[2])
 #define VectorAdd(a,b,c)		(c[0]=a[0]+b[0],c[1]=a[1]+b[1],c[2]=a[2]+b[2])
 #define VectorCopy(a,b)			(b[0]=a[0],b[1]=a[1],b[2]=a[2])
-#define VectorCopyMax(a,b,m)	(b[0]=vecmax(a[0],m),b[1]=vecmax(a[1],m),b[2]=vecmax(a[2],m))
+#define VectorCopyClamp(a,b,m)	(b[0]=vecmax(a[0],m),b[1]=vecmax(a[1],m),b[2]=vecmax(a[2],m))
 #define VectorScale(v,s,o)      ((o)[0]=(v)[0]*(s),(o)[1]=(v)[1]*(s),(o)[2]=(v)[2]*(s))
 #define VectorClear(a)			(a[0]=a[1]=a[2]=0)
 #define VectorNegate(a,b)		(b[0]=-a[0],b[1]=-a[1],b[2]=-a[2])
 #define VectorSet(v, x, y, z)	(v[0]=(x), v[1]=(y), v[2]=(z))
+#define VectorMA( v, s, b, o )  ( ( o )[0] = ( v )[0] + ( b )[0] * ( s ),( o )[1] = ( v )[1] + ( b )[1] * ( s ),( o )[2] = ( v )[2] + ( b )[2] * ( s ) )
 
 extern "C" {
 typedef void	(*ri_Printf) (int print_level, const char *str, ...);
 typedef void	(*ri_Error) (int code, char *fmt, ...);
-typedef cvar2_t* (*ri_Cvar_Get) (const char *name, const char *value, int flags);
-typedef cvar2_t* (*ri_Cvar_Set)( const char *name, const char *value );
+typedef cvarq2_t* (*ri_Cvar_Get) (const char *name, const char *value, int flags);
+typedef cvarq2_t* (*ri_Cvar_Set)( const char *name, const char *value );
 
 static intptr_t* dp_ri;// = 0x5fd60
 
@@ -456,15 +387,30 @@ static int* dp_c_brush_polys;// = 0x5fd40
 #define c_brush_polys (*dp_c_brush_polys)
 float **dp_s_lerped;// = 0x5f9cc
 #define s_lerped (*dp_s_lerped)
-static cvar2_t* r_fullbright;
-static cvar2_t* gl_drawflat;
-static cvar2_t* gl_sortmulti;
-static cvar2_t* r_nocull;
-static cvar2_t* gl_dynamic;
-static cvar2_t* rmx_skiplightmaps;
-static cvar2_t* rmx_nocull;
-static cvar2_t* rmx_novis;
-static cvar2_t* rmx_generic;
+float *shadelight;// = 0x383b0
+float **dp_shadedots;// = 0x2e8c8
+#define shadedots (*dp_shadedots)
+int **dp_currententity;// = 0x5fe7c
+#define currententity (*dp_currententity)
+byte **dp_currentskelverts;// = 0x5f984
+#define currentskelverts (*dp_currentskelverts)
+int **dp_fmodel;// = 0x5f9fc
+#define fmodel (*dp_fmodel)
+float *bytedirs;// = 0x2a130
+image_t **dp_r_notexture;// = 0x5fbc4
+#define r_notexture (*dp_r_notexture)
+int *dp_currenttmu;// = 0x5ff78
+#define currenttmu (*dp_currenttmu)
+int *currenttexture;// = 0x5ff70
+static cvarq2_t* r_fullbright;
+static cvarq2_t* gl_drawflat;
+static cvarq2_t* gl_sortmulti;
+static cvarq2_t* r_nocull;
+static cvarq2_t* gl_dynamic;
+static cvarq2_t* rmx_skiplightmaps;
+static cvarq2_t* rmx_novis;
+static cvarq2_t* rmx_normals;
+static cvarq2_t* rmx_generic;
 
 static image_t* (*R_TextureAnimation)(const mtexinfo_t* tex);// = 0xae70;
 static void (APIENTRY** fp_qglMultiTexCoord2fARB)(GLenum target, GLfloat s, GLfloat t);// = 0x53428 0x53770
@@ -479,6 +425,7 @@ static void (*R_SetCacheState)( msurface_t* surf );// = 0x5270
 static void (*GL_MBind)(GLenum target, int texnum);// = 0x3650
 static void (*GL_EnableMultitexture)( qboolean enable );// = 0x33a0
 static qboolean (*R_CullAliasModel)( vec3_t bbox[8], void* /*entity_t* e*/ );// = 0x2b20
+static image_t* (*GL_FindImage)( const char* name, const imagetype_t type );// = 0x4090
 }
 
 #define PTR_FROM_OFFSET(typecast, offset) (typecast)((intptr_t)(offset) + (intptr_t)ref_gl_data.lpBaseOfDll)
@@ -486,6 +433,8 @@ static qboolean (*R_CullAliasModel)( vec3_t bbox[8], void* /*entity_t* e*/ );// 
 const char* modulename = "ref_gl.dll";
 static DWORD modulesize = 253952;
 static MODULEINFO ref_gl_data;
+
+static image_t *r_whiteimage = NULL;
 
 typedef struct drawSurf_s {
 	unsigned    sort;
@@ -502,21 +451,23 @@ static surfList_t g_surfList = { 0 };
 
 static void h2_intercept_RecursiveWorldNode( mnode_t* node );
 static qboolean h2_intercept_R_CullAliasModel( vec3_t bbox[8], void* e /*entity_t* e*/ );
-static void h2_bridge_to_MeshFillBuffer();
+static void h2_bridge_to_MeshBuildVertexBuffer();
 static void h2_check_crtent_frame_vs_oldframe();
 static void R_RecursiveWorldNodeEx( mnode_t* node );
 static void R_SortAndDrawSurfaces( drawSurf_t* surfs, int numSurfs );
 static void R_AddDrawSurf( msurface_t* surf );
 
-void h2_rsurf_init()
+void h2_generic_fixes();
+
+void h2_refgl_init()
 {
 	ZeroMemory(&ref_gl_data, sizeof(ref_gl_data));
 	HMODULE refdll = GetModuleHandle( modulename );
 	if (refdll && GetModuleInformation(GetCurrentProcess(), refdll, &ref_gl_data, sizeof(ref_gl_data)))
 	{
-		logPrintf("h2_rsurf_init: ref_gl base:%p size:%d ep:%p \n", ref_gl_data.lpBaseOfDll, ref_gl_data.SizeOfImage, ref_gl_data.EntryPoint);
+		logPrintf("h2_refgl_init: ref_gl base:%p size:%d ep:%p \n", ref_gl_data.lpBaseOfDll, ref_gl_data.SizeOfImage, ref_gl_data.EntryPoint);
 
-		//if ( modulesize == ref_gl_data.SizeOfImage ) //doesn't match, scrap it
+		//if ( modulesize == ref_gl_data.SizeOfImage ) //doesn't match, disable this; maybe find another way to match the dll version
 		{
 			dp_r_visframecount = (int*)((intptr_t)0x5fe38 + (intptr_t)ref_gl_data.lpBaseOfDll);
 			dp_r_framecount = (int*)((intptr_t)0x5fd20 + (intptr_t)ref_gl_data.lpBaseOfDll);
@@ -531,6 +482,15 @@ void h2_rsurf_init()
 			dp_gl_state_lightmap_textures = (int*)((intptr_t)0x5ff6c + (intptr_t)ref_gl_data.lpBaseOfDll);
 			dp_c_brush_polys = (int*)((intptr_t)0x5fd40 + (intptr_t)ref_gl_data.lpBaseOfDll);
 			dp_s_lerped = PTR_FROM_OFFSET( float**, 0x5f9cc );
+			shadelight = PTR_FROM_OFFSET( float*, 0x383b0 );
+			dp_shadedots = PTR_FROM_OFFSET( float**, 0x2e8c8 );
+			dp_currententity = PTR_FROM_OFFSET( int**, 0x5fe7c );
+			dp_fmodel = PTR_FROM_OFFSET( int**, 0x5f9fc );
+			dp_currentskelverts = PTR_FROM_OFFSET( byte**, 0x5f984 );
+			bytedirs = PTR_FROM_OFFSET( float*, 0x2a130 );
+			dp_r_notexture = PTR_FROM_OFFSET( image_t**, 0x5fbc4 );
+			dp_currenttmu = PTR_FROM_OFFSET( int*, 0x5ff78 );
+			currenttexture = PTR_FROM_OFFSET( int*, 0x5ff70 );
 
 			R_TextureAnimation = (image_t*(*)(const mtexinfo_t *))((intptr_t)0xae70 + (intptr_t)ref_gl_data.lpBaseOfDll);
 			fp_qglMultiTexCoord2fARB = (void (APIENTRY **)(GLenum,GLfloat,GLfloat))((intptr_t)0x53770 + (intptr_t)ref_gl_data.lpBaseOfDll);
@@ -543,41 +503,47 @@ void h2_rsurf_init()
 			GL_MBind = (void (*)(GLenum,int))((intptr_t)0x3650 + (intptr_t)ref_gl_data.lpBaseOfDll);
 			GL_EnableMultitexture = (void (*)(qboolean))((intptr_t)0x33a0 + (intptr_t)ref_gl_data.lpBaseOfDll);
 			R_CullAliasModel = PTR_FROM_OFFSET( qboolean (*)(vec3_t [],void *), 0x2b20 );
+			GL_FindImage = PTR_FROM_OFFSET( image_t *(*)(const char *,const imagetype_t), 0x4090 );
 
-			r_fullbright = ((ri_Cvar_Get)dp_ri[RI_CVAR_GET] )("r_fullbright", "0", 0);
-			gl_drawflat = ((ri_Cvar_Get)dp_ri[RI_CVAR_GET] )("gl_drawflat", "0", 0);
-			gl_sortmulti = ((ri_Cvar_Get)dp_ri[RI_CVAR_GET] )("gl_sortmulti", "0", 1);
-			r_nocull = ((ri_Cvar_Get)dp_ri[RI_CVAR_GET] )("r_nocull", "0", 0);
-			gl_dynamic = ((ri_Cvar_Get)dp_ri[RI_CVAR_GET] )("gl_dynamic", "1", 0);
-			rmx_skiplightmaps = ((ri_Cvar_Get)dp_ri[RI_CVAR_GET] )("rmx_skiplightmaps", "1", 0);
-			rmx_nocull = ((ri_Cvar_Get)dp_ri[RI_CVAR_GET] )("rmx_nocull", "2", 0);
-			rmx_novis = ((ri_Cvar_Get)dp_ri[RI_CVAR_GET] )("rmx_novis", "1", 0);
-			rmx_generic = ((ri_Cvar_Get)dp_ri[RI_CVAR_GET] )("rmx_generic", "-1", 0);
+			r_fullbright = riCVAR_GET("r_fullbright", "0", 0);
+			gl_drawflat = riCVAR_GET("gl_drawflat", "0", 0);
+			gl_sortmulti = riCVAR_GET("gl_sortmulti", "0", 1);
+			r_nocull = riCVAR_GET("r_nocull", "0", 0);
+			gl_dynamic = riCVAR_GET("gl_dynamic", "1", 0);
+			rmx_skiplightmaps = riCVAR_GET("rmx_skiplightmaps", "0", 0);
+			rmx_novis = riCVAR_GET("rmx_novis", "1", 0);
+			rmx_normals = riCVAR_GET("rmx_normals", "0", 0);
+			rmx_generic = riCVAR_GET("rmx_generic", "-1", 0);
 
-			//R_DrawWorld calls R_RecursiveWorldNode
-			//e8 7e fb ff ff
-			byte *code = (byte*)((intptr_t)0xcbdd + (intptr_t)ref_gl_data.lpBaseOfDll);
+			byte *code;
+			intptr_t val;
 
-			intptr_t val = 0;
-			memcpy( &val, &code[1], 4 );
-			if ( code[0] == 0xe8 && val == 0xfffffb7e )
+			if ( D3DGlobal_ReadGameConfPtr( "patch_h2_rwn" ) )
 			{
-				val = (intptr_t)h2_intercept_RecursiveWorldNode - (intptr_t)&code[5];
-				//do we need to check something here? can val be larger than 2GB for 32bit?
-				unsigned long restore;
-				if ( hook_unprotect( code, 5, &restore ) )
+				//R_DrawWorld calls R_RecursiveWorldNode
+				//e8 7e fb ff ff
+				code = (byte*)((intptr_t)0xcbdd + (intptr_t)ref_gl_data.lpBaseOfDll);
+				memcpy( &val, &code[1], 4 );
+				if ( code[0] == 0xe8 && val == 0xfffffb7e )
 				{
-					memcpy( &code[1], &val, sizeof( val ) );
-					hook_protect( code, 7, restore );
+					val = (intptr_t)h2_intercept_RecursiveWorldNode - (intptr_t)&code[5];
+					//do we need to check something here? can val be larger than 2GB for 32bit?
+					unsigned long restore;
+					if ( hook_unprotect( code, 5, &restore ) )
+					{
+						memcpy( &code[1], &val, sizeof( val ) );
+						hook_protect( code, 7, restore );
+
+						logPrintf( "h2_refgl_init:R_RecursiveWorldNode was patched\n" );
+					}
 				}
+				else
+					logPrintf( "h2_refgl_init:R_DrawWorld: the CALL instr does not match %x %x\n", code[0], val );
 			}
-			else
-				logPrintf("h2_rsurf_init:R_DrawWorld: the CALL instr does not match %x %x\n", code[0], val);
 
 			//R_DrawAliasModel calls R_CullAliasModel
 			//e8 d0 09 00 00
 			code = PTR_FROM_OFFSET(byte*, 0x214b);
-			val = 0;
 			memcpy( &val, &code[1], 4 );
 			if ( code[0] == 0xe8 && val == 0x000009d0 )
 			{
@@ -591,96 +557,146 @@ void h2_rsurf_init()
 				}
 			}
 			else
-				logPrintf("h2_rsurf_init:R_DrawAliasModel: the CALL instr does not match %x %x\n", code[0], val);
+				logPrintf("h2_refgl_init:R_DrawAliasModel: the CALL instr does not match %x %x\n", code[0], val);
 
-			//GL_DrawFlexFrameLerp draws the vertices
-			//8b 2f 83 c7 this is where the draw loop starts
-			code = PTR_FROM_OFFSET(byte*, 0x28ab);
-			val = 0;
-			memcpy( &val, &code[0], 4 );
-			if ( val == 0xc7832f8b )
+			if ( D3DGlobal_ReadGameConfPtr( "patch_h2_dffl" ) )
 			{
 				unsigned long restore;
-				if ( hook_unprotect( code, 471, &restore ) )
+				//GL_DrawFlexFrameLerp draws the vertices				
+				//8b 2f 83 c7 this is where the draw loop starts
+				code = PTR_FROM_OFFSET( byte*, 0x28ab );
+				memcpy( &val, &code[0], 4 );
+				if ( val == 0xc7832f8b )
 				{
-					//copy our asm bridge code over
-					byte* src = (byte*)h2_bridge_to_MeshFillBuffer;
-					int nopcnt = 0;
-					int i = 0;
-					for ( ; i < 471 && nopcnt < 5; i++ )
+					if ( hook_unprotect( code, 471, &restore ) )
 					{
-						code[i] = src[i];
-						if ( code[i] == 0x90 )
-							nopcnt++;
-					}
+						//copy our asm bridge code over
+						byte* src = (byte*)h2_bridge_to_MeshBuildVertexBuffer;
+						int nopcnt = 0;
+						int i = 0;
+						while (i < 471)
+						{
+							code[i] = src[i];
 
-					if ( nopcnt == 5 )
-					{
-						//now that we reached the nop instructions, make a jmp to end of draw loop
-						byte* endcall = PTR_FROM_OFFSET( byte*, 0x29d6 ); //this is where the loop ends
-						val = endcall - &code[i];
-						code[i-5] = 0xe9;//jmp relative
-						memcpy( &code[i-4], &val, 4 );
-					}
+							if ( code[i] == 0x90 )
+								nopcnt++;
+							else
+								nopcnt = 0;
 
-					hook_protect( code, 471, restore );
+							if ( nopcnt >= 5 )
+								break;
+
+							i++;
+						}
+
+						if ( nopcnt == 5 )
+						{
+							//now that we reached the nop instructions, make a jmp to end of draw loop
+							byte* endcall = PTR_FROM_OFFSET( byte*, 0x29d6 ); //this is where the loop ends
+							val = endcall - &code[i+1];
+							code[i-4] = 0xe9;//jmp relative
+							memcpy( &code[i-3], &val, 4 );
+
+							logPrintf( "h2_refgl_init:GL_DrawFlexFrameLerp was patched\n" );
+						}
+
+						hook_protect( code, 471, restore );
+					}
 				}
+				else
+					logPrintf( "h2_refgl_init:GL_DrawFlexFrameLerp: the dffl instr does not match %x\n", val );
+
+
+				//GL_DrawFlexFrameLerp calculates vertex normals
+				//0f 84 83 00 00 00
+				code = PTR_FROM_OFFSET(byte*, 0x26ee);
+				memcpy( &val, &code[0], 4 );
+				if ( val == 0x0083840f )
+				{
+					if ( hook_unprotect( code, 6, &restore ) )
+					{
+						//nop over jmp
+						memset( code, 0x90, 6 );
+
+						hook_protect( code, 6, restore );
+					}
+				}
+				else
+					logPrintf( "h2_refgl_init:GL_DrawFlexFrameLerp: the nrml instr does not match %x\n", val );
 			}
-			else
-				logPrintf("h2_rsurf_init:GL_DrawFlexFrameLerp: the instr does not match %x\n", val);
 
 			//R_DrawAliasModel checks r_lerpmodels
 			//8b 15 fc fe
 			code = PTR_FROM_OFFSET(byte*, 0x2558);
-			val = 0;
 			memcpy( &val, &code[0], 4 );
 			if ( val == 0xfefc158b )
 			{
 				unsigned long restore;
-				if ( hook_unprotect( code, 21, &restore ) )
+				if ( hook_unprotect( code, 25, &restore ) )
 				{
 					//copy our asm bridge code over
 					byte* src = (byte*)h2_check_crtent_frame_vs_oldframe;
-					int nops = 0;
 					int i = 0;
-					for ( ; i < 20; i++ )
+					for ( ; i < 25; i++ )
 					{
 						code[i] = src[i];
 					}
-					//should stop at jz
-					code[i] = 0x75;//put jnz
+					if ( src[i] != 0x90 )
+					{
+						//too much comparison
+						logPrintf("h2_refgl_init:R_DrawAliasModel: next instris not NOP\n");
+					}
 
-					hook_protect( code, 21, restore );
+					hook_protect( code, 25, restore );
 				}
 			}
 			else
-				logPrintf("h2_rsurf_init:R_DrawAliasModel: the instr does not match %x\n", val);
+				logPrintf("h2_refgl_init:R_DrawAliasModel: the instr does not match %x\n", val);
 		}
 		//else
-		//	logPrintf("h2_rsurf_init: size of ref_gl does not match %d vs %d, patching will most likely result in crash. Aborted.\n", modulesize, ref_gl_data.SizeOfImage);
+		//	logPrintf("h2_refgl_init: size of ref_gl does not match %d vs %d, patching will most likely result in crash. Aborted.\n", modulesize, ref_gl_data.SizeOfImage);
 	}
 	else
 	{
-		logPrintf("h2_rsurf_init: cannot get ref_gl info %s\n", DXGetErrorString(GetLastError()));
+		logPrintf("h2_refgl_init: cannot get ref_gl info %s\n", DXGetErrorString(GetLastError()));
 	}
+
+	h2_generic_fixes();
 }
 
-void h2_rsurf_deinit()
+void h2_refgl_deinit()
 {
 	if ( modulesize == ref_gl_data.SizeOfImage )
 	{
+		unsigned long restore;
+
 		//R_DrawWorld calls R_RecursiveWorldNode
 		//e8 7e fb ff ff
 		byte *code = (byte*)((intptr_t)0xcbdd + (intptr_t)ref_gl_data.lpBaseOfDll);
 
 		intptr_t val = 0xfffffb7e;
-		unsigned long restore;
 		if ( hook_unprotect( code, 5, &restore ) )
 		{
 			code[0] = 0xe8;
 			memcpy( &code[1], &val, sizeof( val ) );
 			hook_protect( code, 5, restore );
 		}
+
+		//R_DrawAliasModel calls R_CullAliasModel
+		//e8 d0 09 00 00
+		code = PTR_FROM_OFFSET(byte*, 0x214b);
+
+		val = 0x000009d0;
+		if ( hook_unprotect( code, 5, &restore ) )
+		{
+			code[0] = 0xe8;
+			memcpy( &code[1], &val, sizeof( val ) );
+			hook_protect( code, 5, restore );
+		}
+
+		//GL_DrawFlexFrameLerp draws the vertices
+		//8b 2f 83 c7 this is where the draw loop starts
+		//we can't restore it unless we save the bytes
 	}
 }
 
@@ -711,7 +727,7 @@ static qboolean h2_intercept_R_CullAliasModel( vec3_t bbox[8], void* e /*entity_
 {
 	HOOK_ONLINE_NOTICE();
 
-	if ( rmx_nocull->value > 1 || r_nocull->value > 1 )
+	if ( r_nocull->value > 1 )
 	{
 		return qfalse;
 	}
@@ -721,19 +737,19 @@ static qboolean h2_intercept_R_CullAliasModel( vec3_t bbox[8], void* e /*entity_
 	}
 }
 
-static void R_MeshFillBuffer( int* order, float alpha );
+static void R_MeshBuildVertexBufferAndDraw( int* order, float *normals_array );
 //not sure if we need a ptr to function to make sure the call is absolute, not relative
 //relative call would mean we have to somehow adjust that, how? search for e8?
-static void (*fp_MeshFillBuffer)(int* order, float alpha) = R_MeshFillBuffer;
+static void (*fp_MeshBuildVertexBuffer)(int* order, float *normals_array) = R_MeshBuildVertexBufferAndDraw;
 
-static __declspec(naked) void h2_bridge_to_MeshFillBuffer()
+static __declspec(naked) void h2_bridge_to_MeshBuildVertexBuffer()
 {
 	__asm {
-		MOV EDX,dword ptr [ESP + 0x24] //alpha
+		lea edx,[ESP + 0x30] //normals_array
 		push edx
 		push edi //order
 
-		call fp_MeshFillBuffer
+		call fp_MeshBuildVertexBuffer
 		add esp,8
 
 		//placeholder for our jmp relative to end of loop
@@ -748,14 +764,16 @@ static __declspec(naked) void h2_bridge_to_MeshFillBuffer()
 static __declspec(naked) void h2_check_crtent_frame_vs_oldframe()
 {
 	__asm {
-		MOV        EAX,dword ptr [ECX + 0x1c]
-		CMP        EAX,dword ptr [ECX + 0x44]
-		nop
-		nop
-		nop
-		nop
-		nop
-		nop
+		//ecx has the address of curententity
+		MOV        EAX,dword ptr [ECX + 0x1c] //frame
+		CMP        EAX,dword ptr [ECX + 0x44] //oldframe
+		JNZ        skip_clear_backlerp
+		//MOV        EAX,dword ptr [ECX + 0xa4] //swapFrame
+		//CMP        EAX,dword ptr [ECX + 0xa8] //oldSwapFrame
+		CMP        dword ptr [ECX + 0xa4],-0x1 //swapFrame != -1
+		jnz        skip_clear_backlerp
+		mov        dword ptr [ecx+48h],edi //backlerp = 0
+	skip_clear_backlerp:
 		nop
 		nop
 		nop
@@ -783,7 +801,7 @@ static void R_RecursiveWorldNodeEx(mnode_t* node)
 		return;
 
 	//R_CullBox checks for r_nocull
-	if (!rmx_nocull->value && R_CullBox(node->minmaxs, node->minmaxs + 3))
+	if (R_CullBox(node->minmaxs, node->minmaxs + 3))
 		return;
 
 	// If a leaf node, draw stuff
@@ -890,7 +908,7 @@ static void R_RecursiveWorldNodeEx(mnode_t* node)
 	// Recurse down the back side
 	R_RecursiveWorldNodeEx( node->children[!side] );
 
-	if ( rmx_nocull->value || r_nocull->value )
+	if ( r_nocull->value )
 	{
 		if (side == 0)
 		{
@@ -949,6 +967,9 @@ static void R_RecursiveWorldNodeEx(mnode_t* node)
 
 #define SKIP_LIGHTMAP 0x7fffu
 
+#define RENDER_TWOTEXTURES 1
+#define RENDER_NORMALS     2
+
 union sort_pack_u
 {
 	unsigned all;
@@ -1005,12 +1026,12 @@ static void R_AddDrawSurf(msurface_t *surf)
 		g_surfList.numSurfs++;
 	}
 	else
-		((ri_Printf)dp_ri[RI_PRINTF_OFF])( PRINT_ALL, "Too many surfs\n" );
+		riPRINTF( PRINT_ALL, "Too many surfs\n" );
 		//ri.Con_Printf( PRINT_ALL, "Too many surfs\n" );
 }
 
-static void R_RenderSurfs( int two_textures );
-static void R_PopulateDrawBuffer( msurface_t* surf, int is_dynamic, int is_flowing, int two_textures );
+static void R_RenderSurfs( int flags );
+static void R_PopulateDrawBuffer( msurface_t* surf, int is_dynamic, int is_flowing, int flags );
 static int qsort_compare( const void* arg1, const void* arg2 );
 
 OPENGL_API void WINAPI glTexSubImage2D( GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid* pixels );
@@ -1024,7 +1045,7 @@ static void R_SortAndDrawSurfaces( drawSurf_t* surfs, int numSurfs )
 	int oldTexnum = -1;
 	//int oldFlowing = -1;
 	int oldLightmap = -1;
-	qboolean two_textures = qfalse;
+	int flags = 0;
 
 	union sort_pack_u sort = { 0 };
 	drawSurf_t* s = surfs;
@@ -1040,7 +1061,7 @@ static void R_SortAndDrawSurfaces( drawSurf_t* surfs, int numSurfs )
 		if ( sort.bits.dynamic || oldTexnum != sort.bits.texnum || oldLightmap != sort.bits.lightmap )
 		{
 			//render what was accumulated so far, with the bound textures
-			R_RenderSurfs(two_textures);
+			R_RenderSurfs(flags);
 		}
 
 		//check if new textures need to be bound
@@ -1082,28 +1103,28 @@ static void R_SortAndDrawSurfaces( drawSurf_t* surfs, int numSurfs )
 
 			GL_MBind( /*GL_TEXTURE0_SGIS*/GL_TEXTURE0, sort.bits.texnum/*image->texnum*/ );
 			GL_MBind( /*GL_TEXTURE1_SGIS*/GL_TEXTURE1, /*gl_state.lightmap_textures*/gl_state_lightmap_textures + lmtex );
-			two_textures = qtrue;
+			flags = RENDER_TWOTEXTURES;
 		}
 		else if( oldTexnum != sort.bits.texnum || oldLightmap != sort.bits.lightmap )
 		{
-			two_textures = qfalse;
+			flags = 0;
 			GL_MBind( /*GL_TEXTURE0_SGIS*/GL_TEXTURE0, sort.bits.texnum/*image->texnum*/ );
 			if ( sort.bits.lightmap != SKIP_LIGHTMAP )
 			{
 				GL_MBind( /*GL_TEXTURE1_SGIS*/GL_TEXTURE1, /*gl_state.lightmap_textures*/gl_state_lightmap_textures + sort.bits.lightmap/*lmtex*/ );
-				two_textures = qtrue;
+				flags = RENDER_TWOTEXTURES;
 			}
 		}
 		oldSort = sort.all;
 		oldTexnum = sort.bits.texnum;
 		oldLightmap = sort.bits.lightmap;
 
-		R_PopulateDrawBuffer( s->surface, sort.bits.dynamic, sort.bits.flowing, two_textures );
+		R_PopulateDrawBuffer( s->surface, sort.bits.dynamic, sort.bits.flowing, flags );
 #endif
 	}
 
 	//one more call for the remaining vertices
-	R_RenderSurfs(two_textures);
+	R_RenderSurfs(flags);
 }
 
 typedef union colorinfo_u
@@ -1117,6 +1138,7 @@ typedef union colorinfo_u
 struct vertexData_s
 {
 	float xyz[3];
+	float normal[3];
 	colorinfo_t clr;
 	float tex0[2];
 	float tex1[2];
@@ -1130,16 +1152,16 @@ struct drawbuff_s
 	unsigned short indexes[MAX_INDEXES];
 } g_drawBuff;
 
-static void R_CheckDrawBufferSpace( int vertexes, int indexes, int two_textures )
+static void R_CheckDrawBufferSpace( int vertexes, int indexes, int flags )
 {
 	if ( g_drawBuff.numVertexes + vertexes > MAX_VERTEXES ||
 		g_drawBuff.numIndexes + indexes > MAX_INDEXES )
 	{
-		R_RenderSurfs(two_textures);
+		R_RenderSurfs(flags);
 	}
 }
 
-static void R_PopulateDrawBuffer( msurface_t* surf, int is_dynamic, int is_flowing, int two_textures )
+static void R_PopulateDrawBuffer( msurface_t* surf, int is_dynamic, int is_flowing, int flags )
 {
 	int i;
 	float *v;
@@ -1158,7 +1180,7 @@ static void R_PopulateDrawBuffer( msurface_t* surf, int is_dynamic, int is_flowi
 	for ( p = surf->polys; p; p = p->chain )
 	{
 		int totalindexes = (3 * p->numverts) - 6;
-		R_CheckDrawBufferSpace( p->numverts, totalindexes, two_textures );
+		R_CheckDrawBufferSpace( p->numverts, totalindexes, flags );
 
 		int index = g_drawBuff.numVertexes;
 		struct vertexData_s* draw = &g_drawBuff.vertexes[g_drawBuff.numVertexes];
@@ -1189,8 +1211,22 @@ static void R_PopulateDrawBuffer( msurface_t* surf, int is_dynamic, int is_flowi
 	}
 }
 
-static void R_MeshFillBuffer(int *order, float alpha)
+OPENGL_API void WINAPI glPolygonMode( GLenum face, GLenum mode );
+OPENGL_API void WINAPI glColor3f( GLfloat red, GLfloat green, GLfloat blue );
+OPENGL_API void WINAPI glVertex3fv( const GLfloat *v );
+OPENGL_API void WINAPI glNormal3fv( const GLfloat *v );
+OPENGL_API void WINAPI glBegin( GLenum mode );
+OPENGL_API void WINAPI glEnd();
+OPENGL_API void WINAPI glEnable( GLenum cap );
+OPENGL_API void WINAPI glDisable( GLenum cap );
+
+static void R_MeshBuildVertexBufferAndDraw(int *order, float *normals_array)
 {
+	HOOK_ONLINE_NOTICE();
+
+	int oldtexture;
+	int render_flags = rmx_normals->value ? RENDER_NORMALS : 0;
+	
 	while ( 1 )
 	{
 		int strategy;
@@ -1212,10 +1248,10 @@ static void R_MeshFillBuffer(int *order, float alpha)
 		int index_xyz;
 		struct vertexData_s* vb;
 		unsigned short* ib;
-		//unsigned clralpha = vecmax( alpha * 255, 255 );
+		unsigned alpha = 255;
 
 		int totalindexes = (3 * count) - 6;
-		R_CheckDrawBufferSpace( count, totalindexes, false );
+		R_CheckDrawBufferSpace( count, totalindexes, render_flags );
 
 		int i;
 		int index = g_drawBuff.numVertexes;
@@ -1223,44 +1259,18 @@ static void R_MeshFillBuffer(int *order, float alpha)
 		vb = &g_drawBuff.vertexes[g_drawBuff.numVertexes];
 		int start = index;
 
-		//if ( currententity->flags & ( RF_SHELL_RED | RF_SHELL_GREEN | RF_SHELL_BLUE ) )
-		//{
-		//	for ( i = 0; i < count; i++ )
-		//	{
-		//		if ( i > 2 )
-		//		{
-		//			switch ( strategy )
-		//			{
-		//			case 0:
-		//				ib[0] = start;
-		//				ib[1] = index - 1;
-		//				ib += 2;
-		//				break;
-		//			case 1: { //triangle strip: switch winding strategy depending on even/uneven index
-		//				int uneven = i & 1;
-		//				ib[!uneven] = index -1;
-		//				ib[uneven] = index -2;
-		//				ib += 2;
-		//				break; }
-		//			}
-		//		}
+		if ( rmx_normals->value > 1 )
+		{
+			oldtexture = currenttexture[currenttmu];
+			if ( r_whiteimage == NULL )
+				r_whiteimage = GL_FindImage( "textures/general/white.m8", it_wall );
+			GL_MBind(GL_TEXTURE0, r_whiteimage->texnum);
+			//glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+			glColor3f( 1, 1, 1 );
 
-		//		index_xyz = order[2];
-		//		order += 3;
+			glBegin( GL_LINES );
+		}
 
-		//		//qglColor4f( shadelight[0], shadelight[1], shadelight[2], alpha);
-		//		//qglVertex3fv (s_lerped[index_xyz]);
-		//		float* vsrc = s_lerped + index_xyz * 3;
-		//		VectorCopy( vsrc, vb->xyz );
-		//		vb->clr.all = 0xffffffff;
-		//		//vec3_t clrval;
-		//		//VectorScale( shadelight, 255, clrval );
-		//		//VectorCopyMax( clrval, vb->clr.b, 255 );
-		//		//vb->clr.b[3] = clralpha;
-
-		//	} //while (--count);
-		//}
-		//else
 		{
 			for ( i = 0; i < count; i++ )
 			{
@@ -1290,21 +1300,51 @@ static void R_MeshFillBuffer(int *order, float alpha)
 				index_xyz = order[2];
 				order += 3;
 
-				// normals and vertexes come from the frame list
-				//float l = shadedots[verts[index_xyz].lightnormalindex];
+				const float no_normals[] = { 1.0f, 0.0f, 0.0f };
+				const float *normals = no_normals;
 
-				//qglColor4f (l* shadelight[0], l*shadelight[1], l*shadelight[2], alpha);
-				//qglVertex3fv (s_lerped[index_xyz]);
+				if ( (currententity[0xc] & 8) != 0 ) //check if FULLBRIGHT
+				{
+					vb->clr.all = 0xffffffff;
+					render_flags = 0;
+				}
+				else
+				{
+					// normals and vertexes come from the frame list
+					//float l = shadedots[verts[index_xyz].lightnormalindex];
+					float l;
+					if ( fmodel[0xc] == 0 ) //fmodel->frames == NULL
+					{
+						l = shadedots[((byte*)fmodel[0x14])[index_xyz]]; //fmodel->lightnormalindex[]
+						normals = bytedirs + ((byte*)fmodel[0x14])[index_xyz] * 3;
+					}
+					else
+					{
+						byte *off = currentskelverts + index_xyz * 4 + 3;
+						l = shadedots[*off];
+						normals = normals_array + index_xyz * 3;
+					}
+					//qglColor4f (l* shadelight[0], l*shadelight[1], l*shadelight[2], alpha);
+					vec3_t colors;
+					float colorscale = l * 255;
+					VectorScale( shadelight, colorscale, colors );
+					VectorCopyClamp( colors, vb->clr.b, 255 );
+					vb->clr.b[3] = alpha;
+				}
 				float* vsrc = s_lerped + index_xyz * 3;
+				//qglVertex3fv (s_lerped[index_xyz]);
 				VectorCopy( vsrc, vb->xyz );
-				vb->clr.all = 0xffffffff;
-				//vec3_t clrval;
-				//float clrscale = l * 255;
-				//VectorScaleP( shadelight, clrscale, clrval );
-				//VectorCopyMax( clrval, vb->clr.b, 255 );
-				//vb->clr.b[3] = clralpha;
+				VectorCopy( normals, vb->normal );
 				vb++;
 				ib++;
+
+				if ( rmx_normals->value > 1 )
+				{
+					vec3_t tmp;
+					glVertex3fv( vsrc );
+					VectorMA( vsrc, 2, normals, tmp);
+					glVertex3fv( tmp );
+				}
 			} //while (--count);
 		}
 
@@ -1312,9 +1352,16 @@ static void R_MeshFillBuffer(int *order, float alpha)
 		g_drawBuff.numIndexes += totalindexes;
 		//qglEnd ();
 
+		if ( rmx_normals->value > 1 )
+		{
+			glEnd();
+			GL_MBind(GL_TEXTURE0, oldtexture);
+
+			//glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
+		}
 	}
 
-	R_RenderSurfs( false );
+	R_RenderSurfs( render_flags );
 }
 
 static int qsort_compare( const void *arg1, const void *arg2 )
@@ -1354,6 +1401,7 @@ OPENGL_API void WINAPI glClear( GLbitfield mask );
 OPENGL_API void WINAPI glClearColor( GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha );
 OPENGL_API void WINAPI glEnableClientState( GLenum cap );
 OPENGL_API void WINAPI glVertexPointer( GLint size, GLenum type, GLsizei stride, const GLvoid* pointer );
+OPENGL_API void WINAPI glNormalPointer( GLenum type, GLsizei stride, const GLvoid *pointer );
 OPENGL_API void WINAPI glClientActiveTexture( GLenum texture );
 OPENGL_API void WINAPI glColorPointer( GLint size, GLenum type, GLsizei stride, const GLvoid* pointer );
 OPENGL_API void WINAPI glTexCoordPointer( GLint size, GLenum type, GLsizei stride, const GLvoid* pointer );
@@ -1361,7 +1409,7 @@ OPENGL_API void WINAPI glDrawArrays( GLenum mode, GLint first, GLsizei count );
 OPENGL_API void WINAPI glDrawElements( GLenum mode, GLsizei count, GLenum type, const GLvoid* indices );
 OPENGL_API void WINAPI glDisableClientState( GLenum cap );
 
-static void R_RenderSurfs( int two_textures )
+static void R_RenderSurfs( int flags )
 {
 	if ( g_drawBuff.numIndexes )
 	{
@@ -1369,12 +1417,17 @@ static void R_RenderSurfs( int two_textures )
 
 		glEnableClientState( GL_VERTEX_ARRAY );
 		glVertexPointer( 3, GL_FLOAT, sizeof( struct vertexData_s ), g_drawBuff.vertexes[0].xyz );
+		if ( flags & RENDER_NORMALS )
+		{
+			glEnableClientState( GL_NORMAL_ARRAY );
+			glNormalPointer( GL_FLOAT, sizeof( struct vertexData_s ), g_drawBuff.vertexes[0].normal );
+		}
 		glEnableClientState( GL_COLOR_ARRAY );
 		glColorPointer( 4, GL_UNSIGNED_BYTE, sizeof( struct vertexData_s ), g_drawBuff.vertexes[0].clr.b );
 		glClientActiveTexture( GL_TEXTURE0_ARB );
 		glEnableClientState( GL_TEXTURE_COORD_ARRAY );
 		glTexCoordPointer( 2, GL_FLOAT, sizeof( struct vertexData_s ), g_drawBuff.vertexes[0].tex0 );
-		if ( two_textures )
+		if ( flags & RENDER_TWOTEXTURES )
 		{
 			glClientActiveTexture( GL_TEXTURE1_ARB );
 			glEnableClientState( GL_TEXTURE_COORD_ARRAY );
@@ -1382,13 +1435,14 @@ static void R_RenderSurfs( int two_textures )
 		}
 		//glDrawArrays( GL_POLYGON, 0, numvert );
 		glDrawElements( GL_TRIANGLES, g_drawBuff.numIndexes, GL_UNSIGNED_SHORT, g_drawBuff.indexes );
-		if ( two_textures )
+		if ( flags & RENDER_TWOTEXTURES )
 		{
 			glDisableClientState( GL_TEXTURE_COORD_ARRAY );
 			glClientActiveTexture( GL_TEXTURE0_ARB );
 		}
 		glDisableClientState( GL_TEXTURE_COORD_ARRAY );
 		glDisableClientState( GL_COLOR_ARRAY );
+		glDisableClientState( GL_NORMAL_ARRAY );
 		glDisableClientState( GL_VERTEX_ARRAY );
 
 		g_drawBuff.numIndexes = 0;
@@ -1396,8 +1450,185 @@ static void R_RenderSurfs( int two_textures )
 	}
 }
 
-void h2_rsurf_frame_ended()
+void h2_refgl_frame_ended()
 {
 	glClearColor( 0, 0, 0, 0 );
 	//glClear( GL_COLOR_BUFFER_BIT );
+}
+
+typedef struct ResMngr_Block_s
+{
+	char *start;
+	unsigned int size;
+	struct ResMngr_Block_s *next;
+} ResMngr_Block_t;
+
+typedef struct ResourceManager_s
+{
+	size_t resSize;
+	unsigned int resPerBlock;
+	unsigned int nodeSize;
+	struct ResMngr_Block_s *blockList;
+	char **free;
+} ResourceManager_t;
+
+static void hk_ResMngr_DeallocateResource( ResourceManager_t *resource, void *toDeallocate, size_t size );// = 0x2650
+static void *fp_ResMngr_DeallocateResource = 0;
+static void* __cdecl hk_malloc( size_t size );
+static void* (__cdecl *fp_malloc)( size_t ) = 0;
+static void __cdecl hk_free(void* block);
+static void (__cdecl *fp_free)(void*) = 0;
+
+void h2_generic_fixes()
+{
+	const char* modulename = "H2Common.dll";
+	MODULEINFO h2common_data, quake2_data;
+
+	modulename = "H2Common.dll";
+	ZeroMemory(&h2common_data, sizeof(h2common_data));
+	HMODULE h2comndll = GetModuleHandle( modulename );
+	if ( !h2comndll || !GetModuleInformation( GetCurrentProcess(), h2comndll, &h2common_data, sizeof( h2common_data ) ) )
+	{
+		logPrintf( "h2_generic_fixes: failed to get %s moduleinfo\n", modulename );
+		return;
+	}
+	//fp_ResMngr_DeallocateResource = (byte*)h2common_data.lpBaseOfDll + 0x2650;
+
+	modulename = "quake2.dll";
+	ZeroMemory(&quake2_data, sizeof(quake2_data));
+	HMODULE quake2dll = GetModuleHandle( modulename );
+	if ( !quake2dll || !GetModuleInformation( GetCurrentProcess(), quake2dll, &quake2_data, sizeof( quake2_data ) ) )
+	{
+		logPrintf( "h2_generic_fixes: failed to get %s moduleinfo\n", modulename );
+		return;
+	}
+
+	//fp_malloc = (void*(*)(size_t))DetourFindFunction( modulename, "malloc" );
+	//fp_free = (void(*)(void*))DetourFindFunction( modulename, "free" );
+	//if ( !fp_malloc || !fp_free )
+	//{
+	//	logPrintf( "h2_generic_fixes: failed to find ptr malloc/free\n" );
+	//}
+
+#define CHECK_ABORT(FN) if ( error != NO_ERROR ) \
+	{ abort=true; logPrintf( "h2_generic_fixes: failed to intercept %s: %d \n", (FN), error ); break; }
+
+	LONG error = NO_ERROR;
+	bool abort = false;
+	do {
+		DetourTransactionBegin();
+		DetourUpdateThread( GetCurrentThread() );
+
+		if ( fp_ResMngr_DeallocateResource )
+		{
+			error = DetourAttach( &(PVOID&)fp_ResMngr_DeallocateResource, hk_ResMngr_DeallocateResource );
+			CHECK_ABORT( "ResMngr_DeallocateResource" );
+		}
+		if ( fp_malloc )
+		{
+			error = DetourAttach( &(PVOID&)fp_malloc, hk_malloc );
+			CHECK_ABORT( "malloc" );
+		}
+		else
+		{
+			fp_malloc = malloc;
+		}
+		if ( fp_free )
+		{
+			error = DetourAttach( &(PVOID&)fp_free, hk_free );
+			CHECK_ABORT( "free" );
+		}
+		else
+		{
+			fp_free = free;
+		}
+	} while ( 0 );
+
+	if ( abort )
+	{
+		error = DetourTransactionAbort();
+		if ( error != NO_ERROR ) logPrintf( "h2_generic_fixes: DetourTransactionAbort failed: %d \n", error );
+	}
+	else
+	{
+		error = DetourTransactionCommit();
+		if ( error != NO_ERROR ) logPrintf( "h2_generic_fixes: DetourTransactionCommit failed: %d \n", error );
+	}
+}
+
+
+static void hk_ResMngr_DeallocateResource( ResourceManager_t *resource, void *toDeallocate, size_t size )
+{
+	HOOK_ONLINE_NOTICE();
+
+	char **toPush = NULL;
+
+	//assert(size == resource->resSize);
+
+	//assert(resource->free);	// see same assert at top of AllocateResource
+
+	if ( toDeallocate )
+	{
+		toPush = (char **)(toDeallocate)-1;
+
+		// set toPop->next to current unallocated front
+		*toPush = (char *)(resource->free);
+
+		// set unallocated to the node removed from allocated
+		resource->free = toPush;
+	}
+	else
+	{
+		__debugbreak();
+		riPRINTF( PRINT_ALERT, "DeallocateResource: null ptr\n" );
+	}
+}
+
+#define ALLOC_EXTRA_BYTES 512
+static uint32_t g_alloc_count = 1;
+struct allocb_s
+{
+	byte pre[ALLOC_EXTRA_BYTES];
+	uint32_t id;
+	uint32_t size;
+};
+
+static void* __cdecl hk_malloc( size_t size )
+{
+	struct allocb_s *p = (struct allocb_s*)fp_malloc(size + sizeof(struct allocb_s) + ALLOC_EXTRA_BYTES);
+
+	memset( p->pre, 0x5a, ALLOC_EXTRA_BYTES );
+	p->id = g_alloc_count++;
+	p->size = size;
+
+	byte *ret = (byte*)p + sizeof( *p );
+	memset( ret, 0, size );
+	memset( ret + size, 0x5a, ALLOC_EXTRA_BYTES );
+
+	return ret;
+}
+
+static void __cdecl hk_free( void* block )
+{
+	struct allocb_s *p = (struct allocb_s *)((byte*)block - sizeof(*p));
+
+	for ( int i = 0; i < ALLOC_EXTRA_BYTES; i++ )
+	{
+		if ( p->pre[i] != 0x5a )
+		{
+			__debugbreak();
+		}
+	}
+
+	byte *post = (byte*)p + sizeof( *p ) + p->size;
+
+	for ( int i = 0; i < ALLOC_EXTRA_BYTES; i++ )
+	{
+		if ( post[i] != 0x5a )
+		{
+			__debugbreak();
+		}
+	}
+
+	fp_free( (byte*)p + sizeof( *p ) );
 }

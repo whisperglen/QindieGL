@@ -8,10 +8,10 @@
 extern "C" {
 #endif
 
-void h2_rsurf_init();
-void h2_rsurf_deinit();
+void h2_refgl_init();
+void h2_refgl_deinit();
 
-void h2_rsurf_frame_ended();
+void h2_refgl_frame_ended();
 
 #ifdef __cplusplus
 }
