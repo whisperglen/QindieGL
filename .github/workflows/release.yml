@@ -43,13 +43,13 @@ jobs:
     runs-on: windows-2022
     strategy:
       matrix:
-        config: [Release, ReleaseNoDetours]
+        config: [Release, ReleaseNoRemixMods]
         platform: [Win32]
         include:
           - config: Release
             zip_name: QindieGL.zip
-          - config: ReleaseNoDetours
-            zip_name: QindieGL_NoDetours.zip
+          - config: ReleaseNoRemixMods
+            zip_name: QindieGL_NoRemixMods.zip
 
     steps:
     - name: Checkout repository

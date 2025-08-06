@@ -9,6 +9,8 @@
 #include "gl_headers/gl.h"
 #include "d3d_wrapper.hpp"
 #include "d3d_global.hpp"
+#include "d3d_utils.hpp"
+#include "rmx_light.h"
 #include <map>
 
 typedef float vec3_t[3];
@@ -390,7 +392,7 @@ float **dp_s_lerped;// = 0x5f9cc
 float *shadelight;// = 0x383b0
 float **dp_shadedots;// = 0x2e8c8
 #define shadedots (*dp_shadedots)
-int **dp_currententity;// = 0x5fe7c
+byte **dp_currententity;// = 0x5fe7c
 #define currententity (*dp_currententity)
 byte **dp_currentskelverts;// = 0x5f984
 #define currentskelverts (*dp_currentskelverts)
@@ -411,6 +413,7 @@ static cvarq2_t* rmx_skiplightmaps;
 static cvarq2_t* rmx_novis;
 static cvarq2_t* rmx_normals;
 static cvarq2_t* rmx_generic;
+static cvarq2_t* rmx_dyn_linger;
 
 static image_t* (*R_TextureAnimation)(const mtexinfo_t* tex);// = 0xae70;
 static void (APIENTRY** fp_qglMultiTexCoord2fARB)(GLenum target, GLfloat s, GLfloat t);// = 0x53428 0x53770
@@ -451,7 +454,7 @@ static surfList_t g_surfList = { 0 };
 
 static void h2_intercept_RecursiveWorldNode( mnode_t* node );
 static qboolean h2_intercept_R_CullAliasModel( vec3_t bbox[8], void* e /*entity_t* e*/ );
-static void h2_bridge_to_MeshBuildVertexBuffer();
+static void h2_bridge_to_Model_BuildVBuff();
 static void h2_check_crtent_frame_vs_oldframe();
 static void R_RecursiveWorldNodeEx( mnode_t* node );
 static void R_SortAndDrawSurfaces( drawSurf_t* surfs, int numSurfs );
@@ -484,7 +487,7 @@ void h2_refgl_init()
 			dp_s_lerped = PTR_FROM_OFFSET( float**, 0x5f9cc );
 			shadelight = PTR_FROM_OFFSET( float*, 0x383b0 );
 			dp_shadedots = PTR_FROM_OFFSET( float**, 0x2e8c8 );
-			dp_currententity = PTR_FROM_OFFSET( int**, 0x5fe7c );
+			dp_currententity = PTR_FROM_OFFSET( byte**, 0x5fe7c );
 			dp_fmodel = PTR_FROM_OFFSET( int**, 0x5f9fc );
 			dp_currentskelverts = PTR_FROM_OFFSET( byte**, 0x5f984 );
 			bytedirs = PTR_FROM_OFFSET( float*, 0x2a130 );
@@ -505,6 +508,13 @@ void h2_refgl_init()
 			R_CullAliasModel = PTR_FROM_OFFSET( qboolean (*)(vec3_t [],void *), 0x2b20 );
 			GL_FindImage = PTR_FROM_OFFSET( image_t *(*)(const char *,const imagetype_t), 0x4090 );
 
+			//sanity check: ideally we'd want to map this to quake2.dll
+			intptr_t fp = dp_ri[RI_CVAR_GET];
+			if ( fp == NULL )
+			{
+				logPrintf( "h2_refgl_init:CvarGet fp is NULL\n" );
+				return;
+			}
 			r_fullbright = riCVAR_GET("r_fullbright", "0", 0);
 			gl_drawflat = riCVAR_GET("gl_drawflat", "0", 0);
 			gl_sortmulti = riCVAR_GET("gl_sortmulti", "0", 1);
@@ -514,6 +524,13 @@ void h2_refgl_init()
 			rmx_novis = riCVAR_GET("rmx_novis", "1", 0);
 			rmx_normals = riCVAR_GET("rmx_normals", "0", 0);
 			rmx_generic = riCVAR_GET("rmx_generic", "-1", 0);
+			rmx_dyn_linger = riCVAR_GET("rmx_dyn_linger", "1", 1);
+
+			qdx_lights_dynamic_linger( rmx_dyn_linger->value );
+
+			//pin ref_gl handle so that it does not get unloaded on FreeLibrary
+			HMODULE hm = 0;
+			GetModuleHandleEx( GET_MODULE_HANDLE_EX_FLAG_PIN, modulename, &hm );
 
 			byte *code;
 			intptr_t val;
@@ -532,7 +549,7 @@ void h2_refgl_init()
 					if ( hook_unprotect( code, 5, &restore ) )
 					{
 						memcpy( &code[1], &val, sizeof( val ) );
-						hook_protect( code, 7, restore );
+						hook_protect( code, 5, restore );
 
 						logPrintf( "h2_refgl_init:R_RecursiveWorldNode was patched\n" );
 					}
@@ -571,7 +588,7 @@ void h2_refgl_init()
 					if ( hook_unprotect( code, 471, &restore ) )
 					{
 						//copy our asm bridge code over
-						byte* src = (byte*)h2_bridge_to_MeshBuildVertexBuffer;
+						byte* src = (byte*)h2_bridge_to_Model_BuildVBuff;
 						int nopcnt = 0;
 						int i = 0;
 						while (i < 471)
@@ -583,19 +600,19 @@ void h2_refgl_init()
 							else
 								nopcnt = 0;
 
+							i++;
+
 							if ( nopcnt >= 5 )
 								break;
-
-							i++;
 						}
 
 						if ( nopcnt == 5 )
 						{
 							//now that we reached the nop instructions, make a jmp to end of draw loop
 							byte* endcall = PTR_FROM_OFFSET( byte*, 0x29d6 ); //this is where the loop ends
-							val = endcall - &code[i+1];
-							code[i-4] = 0xe9;//jmp relative
-							memcpy( &code[i-3], &val, 4 );
+							val = endcall - &code[i];
+							code[i-5] = 0xe9;//jmp relative
+							memcpy( &code[i-4], &val, 4 );
 
 							logPrintf( "h2_refgl_init:GL_DrawFlexFrameLerp was patched\n" );
 						}
@@ -623,6 +640,34 @@ void h2_refgl_init()
 				}
 				else
 					logPrintf( "h2_refgl_init:GL_DrawFlexFrameLerp: the nrml instr does not match %x\n", val );
+
+				//R_DrawInlineBModel check for planeback and view angle
+				//74 0d dc 15
+				code = PTR_FROM_OFFSET(byte*, 0xc2e3);
+				memcpy( &val, &code[0], 4 );
+				if ( val == 0x15dc0d74 )
+				{
+					if ( hook_unprotect( code, 14, &restore ) )
+					{
+						//multiple comparisons here, modding 2 jumps seems to be the least changes
+						code[0] = 0x90;
+						code[1] = 0x90;
+						code[13] = 0xeb;
+
+						hook_protect( code, 14, restore );
+					}
+				}
+				else
+					logPrintf( "h2_refgl_init:R_DrawInlineBModel: the do not draw instr does not match %x\n", val );
+
+				//skip draw brush model
+				//code = PTR_FROM_OFFSET(byte*, 0x7a84);
+				//if ( hook_unprotect( code, 5, &restore ) )
+				//{
+				//	memset( code, 0x90, 5 );
+
+				//	hook_protect( code, 5, restore );
+				//}
 			}
 
 			//R_DrawAliasModel checks r_lerpmodels
@@ -643,8 +688,8 @@ void h2_refgl_init()
 					}
 					if ( src[i] != 0x90 )
 					{
-						//too much comparison
-						logPrintf("h2_refgl_init:R_DrawAliasModel: next instris not NOP\n");
+						//too much function, not enough space
+						logPrintf("h2_refgl_init:R_DrawAliasModel: next instr is not NOP\n");
 					}
 
 					hook_protect( code, 25, restore );
@@ -737,20 +782,30 @@ static qboolean h2_intercept_R_CullAliasModel( vec3_t bbox[8], void* e /*entity_
 	}
 }
 
-static void R_MeshBuildVertexBufferAndDraw( int* order, float *normals_array );
-//not sure if we need a ptr to function to make sure the call is absolute, not relative
-//relative call would mean we have to somehow adjust that, how? search for e8?
-static void (*fp_MeshBuildVertexBuffer)(int* order, float *normals_array) = R_MeshBuildVertexBufferAndDraw;
+static void R_Model_BuildVBuffAndDraw( int* order, float *normals_array );
+//static void (*fp_Model_BuildVBuff)(int* order, float *normals_array) = R_Model_BuildVBuffAndDraw;
 
-static __declspec(naked) void h2_bridge_to_MeshBuildVertexBuffer()
+static __declspec(naked) void h2_bridge_to_Model_BuildVBuff()
 {
 	__asm {
-		lea edx,[ESP + 0x30] //normals_array
+		// save the clobbered registers
+		push eax
+		push ecx
+		push edx
+
+		lea edx,[ESP + 0x30 + 0xc] //normals_array
 		push edx
 		push edi //order
 
-		call fp_MeshBuildVertexBuffer
+		//call fp_Model_BuildVBuff
+		mov eax, R_Model_BuildVBuffAndDraw
+		call eax
 		add esp,8
+
+		//restore clobbered registers, in reverse order
+		pop edx
+		pop ecx
+		pop eax
 
 		//placeholder for our jmp relative to end of loop
 		nop
@@ -810,7 +865,7 @@ static void R_RecursiveWorldNodeEx(mnode_t* node)
 		const mleaf_t* pleaf = (mleaf_t*)node;
 
 		// Check for door connected areas
-		if (/*r_newrefdef.areabits*/r_newrefdef_areabits)
+		if (rmx_novis->value < 2 && /*r_newrefdef.areabits*/r_newrefdef_areabits)
 		{
 			if (! (/*r_newrefdef.areabits*/r_newrefdef_areabits[pleaf->area>>3] & (1<<(pleaf->area&7)) ) )
 				return;		// not visible
@@ -1220,9 +1275,16 @@ OPENGL_API void WINAPI glEnd();
 OPENGL_API void WINAPI glEnable( GLenum cap );
 OPENGL_API void WINAPI glDisable( GLenum cap );
 
-static void R_MeshBuildVertexBufferAndDraw(int *order, float *normals_array)
+static float* g_calcnormals = NULL;
+
+static void R_Model_BuildVBuffAndDraw(int *order, float *normals_array)
 {
 	HOOK_ONLINE_NOTICE();
+
+	//if ( g_calcnormals != normals_array )
+	//{
+	//	__debugbreak();
+	//}
 
 	int oldtexture;
 	int render_flags = rmx_normals->value ? RENDER_NORMALS : 0;
@@ -1303,7 +1365,7 @@ static void R_MeshBuildVertexBufferAndDraw(int *order, float *normals_array)
 				const float no_normals[] = { 1.0f, 0.0f, 0.0f };
 				const float *normals = no_normals;
 
-				if ( (currententity[0xc] & 8) != 0 ) //check if FULLBRIGHT
+				if ( (currententity[0x30] & 8) != 0 ) //check if FULLBRIGHT
 				{
 					vb->clr.all = 0xffffffff;
 					render_flags = 0;
@@ -1452,6 +1514,13 @@ static void R_RenderSurfs( int flags )
 
 void h2_refgl_frame_ended()
 {
+	if ( rmx_dyn_linger->modified )
+	{
+		rmx_dyn_linger->modified = qfalse;
+
+		qdx_lights_dynamic_linger( rmx_dyn_linger->value );
+	}
+
 	glClearColor( 0, 0, 0, 0 );
 	//glClear( GL_COLOR_BUFFER_BIT );
 }
@@ -1472,12 +1541,75 @@ typedef struct ResourceManager_s
 	char **free;
 } ResourceManager_t;
 
+typedef struct SinglyLinkedList_s
+{
+	struct SinglyLinkedListNode_s *rearSentinel;
+	struct SinglyLinkedListNode_s *front;
+	struct SinglyLinkedListNode_s *current;
+} SinglyLinkedList_t;
+
+#define VID_NUM_MODES 20
+
+static resolution_info_t vid_resolutions[VID_NUM_MODES] = { 
+	"320 240  ", 320, 240,
+	"400 300  ", 400, 300,
+	"512 384  ", 512, 384,
+	"640 480  ", 640, 480,
+	"800 600  ", 800, 600,
+	"960 720  ", 960, 720,
+	"1024 768 ", 1024, 768,
+	"1152 864 ", 1152, 864,
+	"1280 960 ", 1280, 960,
+	"1600 1200", 1600, 1200
+};
+static int vid_resolutions_found = 10;
+static int vid_resolutions_initialised = 0;
+static const char* vid_resolutions_struct[VID_NUM_MODES +1] =
+{
+	"320 240  ",
+	"400 300  ",
+	"512 384  ",
+	"640 480  ",
+	"800 600  ",
+	"960 720  ",
+	"1024 768 ",
+	"1152 864 ",
+	"1280 960 ",
+	"1600 1200",
+	0
+};
+
+static void h2_vid_initialise_resolutions();
+
 static void hk_ResMngr_DeallocateResource( ResourceManager_t *resource, void *toDeallocate, size_t size );// = 0x2650
 static void *fp_ResMngr_DeallocateResource = 0;
-static void* __cdecl hk_malloc( size_t size );
-static void* (__cdecl *fp_malloc)( size_t ) = 0;
-static void __cdecl hk_free(void* block);
-static void (__cdecl *fp_free)(void*) = 0;
+static void hk_SLList_Des( SinglyLinkedList_t* this_ptr );// = 0x26d0
+static void *fp_SLList_Des = 0;
+static ResourceManager_t *dp_res_mgr;// = 0x10f20
+static void hk_R_BeginRegistration( const char* model ); // = 0x6fb0
+static void (*fp_R_BeginRegistration) ( const char* model ) = 0;
+static void hk_R_RenderView( int* refdef );// = 0x8910
+static void (*fp_R_RenderView)( int* refdef ) = 0;
+static qboolean hk_VID_GetModeInfo( int* width, int* height, const int mode );// = 0x34bc0
+static qboolean (*fp_VID_GetModeInfo)( int* width, int* height, const int mode ) = 0;
+static void hk_calcnormals( int param_1, float param_2, float param_3, int param_4, int param_5, float* param_6 );
+static void (*fp_calcnormals)( int param_1, float param_2, float param_3, int param_4, int param_5, float* param_6 );// = 0x2a90
+
+#define REFDEF_NUMENTITIES_OFF 24
+#define REFDEF_ENTITIES_OFF 25
+#define REFDEF_NUMAENTITIES_OFF 26
+#define REFDEF_AENTITIES_OFF 27
+#define REFDEF_NUMLIGHTS_OFF 28
+#define REFDEF_LIGHTS_OFF 29
+#define REFDEF_NUMPARTICLES_OFF 30
+#define REFDEF_PARTICLES_OFF 31
+#define REFDEF_NUMAPARTICLES_OFF 32
+#define REFDEF_APARTICLES_OFF 33
+
+static void* hk_malloc( size_t size );
+static void* (*fp_malloc)( size_t ) = 0;
+static void hk_free(void* block);
+static void (*fp_free)(void*) = 0;
 
 void h2_generic_fixes()
 {
@@ -1492,7 +1624,6 @@ void h2_generic_fixes()
 		logPrintf( "h2_generic_fixes: failed to get %s moduleinfo\n", modulename );
 		return;
 	}
-	//fp_ResMngr_DeallocateResource = (byte*)h2common_data.lpBaseOfDll + 0x2650;
 
 	modulename = "quake2.dll";
 	ZeroMemory(&quake2_data, sizeof(quake2_data));
@@ -1503,12 +1634,58 @@ void h2_generic_fixes()
 		return;
 	}
 
+	fp_ResMngr_DeallocateResource = (byte*)h2common_data.lpBaseOfDll + 0x2650;
+	fp_SLList_Des = (byte*)h2common_data.lpBaseOfDll + 0x26d0;
+	dp_res_mgr = (ResourceManager_t *)((byte*)h2common_data.lpBaseOfDll + 0x10f20);
+	fp_R_BeginRegistration = PTR_FROM_OFFSET( void (*)(const char *), 0x6fb0 );
+	fp_R_RenderView = PTR_FROM_OFFSET( void (*)(int *), 0x8910 );
+	fp_VID_GetModeInfo = (qboolean(*)(int*,int*,int))((byte*)quake2_data.lpBaseOfDll + 0x34bc0);
+	//fp_calcnormals = PTR_FROM_OFFSET( void (*)(int,float,float,int,int,float*), 0x2a90 );
+
 	//fp_malloc = (void*(*)(size_t))DetourFindFunction( modulename, "malloc" );
 	//fp_free = (void(*)(void*))DetourFindFunction( modulename, "free" );
 	//if ( !fp_malloc || !fp_free )
 	//{
 	//	logPrintf( "h2_generic_fixes: failed to find ptr malloc/free\n" );
 	//}
+
+	if ( D3DGlobal_ReadGameConfPtr( "patch_h2_gamestart" ) )
+	{
+		byte* code = (byte*)quake2_data.lpBaseOfDll + 0x2da85;
+		if ( code[0] == 0x74 )
+		{
+			unsigned long restore;
+			if ( hook_unprotect( code, 1, &restore ) )
+			{
+				code[0] = 0xeb;
+				hook_protect( code, 1, restore );
+
+				logPrintf( "h2_generic_fixes: game start was patched\n" );
+			}
+		}
+	}
+
+	{
+		//14 07 06 10
+		byte* code = (byte*)quake2_data.lpBaseOfDll + 0x3f9a8; //address of resolutions
+		intptr_t value;
+		memcpy( &value, code, sizeof( value ) );
+		if ( value == 0x10060714 )
+		{
+			unsigned long restore;
+			if ( hook_unprotect( code, sizeof( value ), &restore ) )
+			{
+				value = (intptr_t)vid_resolutions_struct;
+				memcpy( code, &value, sizeof( value ) );
+				hook_protect( code, sizeof( value ), restore );
+
+				logPrintf( "h2_generic_fixes: resolutions was patched\n" );
+			}
+
+		}
+		else
+			logPrintf( "h2_generic_fixes: the resolutions ptr does not match %x\n", value );
+	}
 
 #define CHECK_ABORT(FN) if ( error != NO_ERROR ) \
 	{ abort=true; logPrintf( "h2_generic_fixes: failed to intercept %s: %d \n", (FN), error ); break; }
@@ -1523,6 +1700,31 @@ void h2_generic_fixes()
 		{
 			error = DetourAttach( &(PVOID&)fp_ResMngr_DeallocateResource, hk_ResMngr_DeallocateResource );
 			CHECK_ABORT( "ResMngr_DeallocateResource" );
+		}
+		if ( fp_SLList_Des )
+		{
+			error = DetourAttach( &(PVOID&)fp_SLList_Des, hk_SLList_Des );
+			CHECK_ABORT( "SLList_Des" );
+		}
+		if ( fp_R_BeginRegistration )
+		{
+			error = DetourAttach( &(PVOID&)fp_R_BeginRegistration, hk_R_BeginRegistration );
+			CHECK_ABORT( "R_BeginRegistration" );
+		}
+		if ( fp_R_RenderView )
+		{
+			error = DetourAttach( &(PVOID&)fp_R_RenderView, hk_R_RenderView );
+			CHECK_ABORT( "R_RenderView" );
+		}
+		if ( fp_VID_GetModeInfo )
+		{
+			error = DetourAttach( &(PVOID&)fp_VID_GetModeInfo, hk_VID_GetModeInfo );
+			CHECK_ABORT( "R_RenderView" );
+		}
+		if ( fp_calcnormals )
+		{
+			error = DetourAttach( &(PVOID&)fp_calcnormals, hk_calcnormals );
+			CHECK_ABORT( "calcnormals" );
 		}
 		if ( fp_malloc )
 		{
@@ -1556,6 +1758,142 @@ void h2_generic_fixes()
 	}
 }
 
+static void h2_vid_initialise_resolutions()
+{
+	if ( vid_resolutions_initialised == 0 )
+	{
+		int found = D3DGlobal_GetResolutions( vid_resolutions, VID_NUM_MODES );
+
+		if ( found )
+		{
+			vid_resolutions_initialised = 1;
+
+			int i;
+			for ( i = 0; i < found; i++ )
+			{
+				vid_resolutions_struct[i] = vid_resolutions[i].display_name;
+			}
+			vid_resolutions_struct[i] = 0;
+
+			vid_resolutions_found = found;
+		}
+	}
+}
+
+static qboolean hk_VID_GetModeInfo(int* width, int* height, const int mode)
+{
+	HOOK_ONLINE_NOTICE();
+
+	if ( vid_resolutions_initialised == 0 )
+	{
+		h2_vid_initialise_resolutions();
+	}
+
+	if (mode >= 0 && mode < vid_resolutions_found)
+	{
+		*width =  vid_resolutions[mode].width;
+		*height = vid_resolutions[mode].height;
+
+		return qtrue;
+	}
+
+	return qfalse;
+}
+
+static void hk_R_BeginRegistration( const char* model )
+{
+	HOOK_ONLINE_NOTICE();
+
+	//do some cleaning
+	//qdx_lights_clear(LIGHT_ALL);
+	
+	fp_R_BeginRegistration( model );
+}
+
+typedef struct paletteRGBA_s
+{
+	union
+	{
+		struct
+		{
+			byte r;
+			byte g;
+			byte b;
+			byte a;
+		};
+		uint c;
+		byte c_array[4];
+	};
+} paletteRGBA_t;
+
+typedef struct
+{
+	vec3_t origin;
+	paletteRGBA_t color;
+	float scale;
+} particle_t;
+
+typedef struct entity_s
+{
+	struct model_s** model; // Opaque type outside refresh. // Q2: struct model_s*
+	float angles[3];
+	float origin[3];
+	int frame;
+
+	// Model scale.
+	float scale;
+
+	// Scale of model - but only for client entity models - not server-side models.
+	// Required for scaling mins and maxs that are used to cull models - mins and maxs are scaled on the server side,
+	// but not on the client side when the models are loaded in.
+	float cl_scale;
+
+	// Distance to the camera origin, gets set every frame by AddEffectsToView.
+	float depth;
+
+	paletteRGBA_t color;
+	int flags;
+
+	//a lot of other stuff which we don't need so far, sice we access this struct from a list of pointers
+} entity_t;
+
+static void hk_R_RenderView( int* refdef )
+{
+	HOOK_ONLINE_NOTICE();
+
+	//grab lights
+	int numLights = refdef[REFDEF_NUMLIGHTS_OFF];
+	particle_t* dlights = (particle_t*)refdef[REFDEF_LIGHTS_OFF];
+
+	for ( int i = 0; i < numLights; i++, dlights++ )
+	{
+		paletteRGBA_t clrb = dlights->color;
+		float color[3] = { (float)clrb.r / 255, (float)clrb.g / 255, (float)clrb.b / 255 };
+		qdx_light_add( LIGHT_DYNAMIC, i, dlights->origin, NULL, color, dlights->scale );
+	}
+
+	int numEntities = refdef[REFDEF_NUMENTITIES_OFF];
+	entity_t** entities = (entity_t**)refdef[REFDEF_ENTITIES_OFF];
+
+	int numAlphaEntities = refdef[REFDEF_NUMAENTITIES_OFF];
+	entity_t** alpha_entities = (entity_t**)refdef[REFDEF_AENTITIES_OFF];
+
+#define HALO_STR "sprites/lens/halo"
+#define FLARE_STR "sprites/lens/flare"
+
+	for ( int i = 0; i < numAlphaEntities; i++, alpha_entities++ )
+	{
+		model_t** model = (*alpha_entities)->model;
+		if ( 0 == strncmp( HALO_STR, (*model)->name, sizeof( HALO_STR ) -1 ) )
+		{
+			paletteRGBA_t clrb = (*alpha_entities)->color;
+			float color[3] = { (float)clrb.r / 255, (float)clrb.g / 255, (float)clrb.b / 255 };
+			qdx_light_add( LIGHT_CORONA, i, (*alpha_entities)->origin, NULL, color, (*alpha_entities)->scale );
+		}
+	}
+
+	fp_R_RenderView( refdef );
+}
 
 static void hk_ResMngr_DeallocateResource( ResourceManager_t *resource, void *toDeallocate, size_t size )
 {
@@ -1563,24 +1901,70 @@ static void hk_ResMngr_DeallocateResource( ResourceManager_t *resource, void *to
 
 	char **toPush = NULL;
 
-	//assert(size == resource->resSize);
-
-	//assert(resource->free);	// see same assert at top of AllocateResource
-
 	if ( toDeallocate )
 	{
 		toPush = (char **)(toDeallocate)-1;
 
-		// set toPop->next to current unallocated front
 		*toPush = (char *)(resource->free);
 
-		// set unallocated to the node removed from allocated
 		resource->free = toPush;
 	}
 	else
 	{
-		__debugbreak();
-		riPRINTF( PRINT_ALERT, "DeallocateResource: null ptr\n" );
+		//__debugbreak();
+		DO_ONCE()
+		{
+			riPRINTF( PRINT_ALL, "DeallocateResource: null ptr\n" );
+		}
+	}
+}
+
+static void hk_calcnormals( int param_1, float param_2, float param_3, int param_4, int param_5, float* param_6 )
+{
+	HOOK_ONLINE_NOTICE();
+
+	g_calcnormals = param_6;
+	fp_calcnormals( param_1, param_2, param_3, param_4, param_5, param_6 );
+}
+
+typedef union GenericUnion4_u
+{
+	byte t_byte;
+	short t_short;
+	int t_int;
+	unsigned int t_uint;
+	float t_float;
+	float *t_float_p;
+	struct edict_s *t_edict_p;
+	void *t_void_p;
+	paletteRGBA_t t_RGBA;
+} GenericUnion4_t;
+
+typedef struct SinglyLinkedListNode_s
+{
+	union GenericUnion4_u data;
+	struct SinglyLinkedListNode_s* next;
+} SinglyLinkedListNode_t;
+
+#define ResMngr_DeallocateResource hk_ResMngr_DeallocateResource
+#define SLL_NODE_SIZE sizeof(SinglyLinkedListNode_t)
+
+static void hk_SLList_Des(SinglyLinkedList_t* this_ptr)
+{
+	HOOK_ONLINE_NOTICE();
+
+	if ( this_ptr )
+	{
+		SinglyLinkedListNode_t* node = this_ptr->front;
+		while ( node && node != this_ptr->rearSentinel )
+		{
+			SinglyLinkedListNode_t* next = node->next;
+			ResMngr_DeallocateResource( /*&res_mgr*/dp_res_mgr, node, SLL_NODE_SIZE );
+			node = next;
+		}
+
+		ResMngr_DeallocateResource( /*&res_mgr*/dp_res_mgr, this_ptr->rearSentinel, SLL_NODE_SIZE );
+		this_ptr->front = this_ptr->current = this_ptr->rearSentinel = NULL;
 	}
 }
 
@@ -1616,7 +2000,7 @@ static void __cdecl hk_free( void* block )
 	{
 		if ( p->pre[i] != 0x5a )
 		{
-			__debugbreak();
+			//__debugbreak();
 		}
 	}
 
@@ -1626,7 +2010,7 @@ static void __cdecl hk_free( void* block )
 	{
 		if ( post[i] != 0x5a )
 		{
-			__debugbreak();
+			//__debugbreak();
 		}
 	}
 

@@ -5,8 +5,8 @@
       <Configuration>Debug</Configuration>
       <Platform>Win32</Platform>
     </ProjectConfiguration>
-    <ProjectConfiguration Include="ReleaseNoDetours|Win32">
-      <Configuration>ReleaseNoDetours</Configuration>
+    <ProjectConfiguration Include="ReleaseNoRemixMods|Win32">
+      <Configuration>ReleaseNoRemixMods</Configuration>
       <Platform>Win32</Platform>
     </ProjectConfiguration>
     <ProjectConfiguration Include="Release|Win32">
@@ -34,7 +34,7 @@
     <CharacterSet>MultiByte</CharacterSet>
     <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoDetours|Win32'" Label="Configuration">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoRemixMods|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -50,7 +50,7 @@
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
-  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoDetours|Win32'" Label="PropertySheets">
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoRemixMods|Win32'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
@@ -66,7 +66,7 @@
     <IncludePath>$(IncludePath);D:\DirectX9_SDK\Include</IncludePath>
     <LibraryPath>$(LibraryPath);D:\DirectX9_SDK\Lib</LibraryPath>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoDetours|Win32'">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoRemixMods|Win32'">
     <LinkIncremental>false</LinkIncremental>
     <TargetName>opengl32</TargetName>
     <IncludePath>$(IncludePath);D:\DirectX9_SDK\Include</IncludePath>
@@ -80,7 +80,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;QINDIEGLSRC_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\extern\dx9sdk\include;$(ProjectDir)..\extern\dxut;$(ProjectDir)..\idtech3_mixup;$(ProjectDir)..\extern\mINI;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\extern\dx9sdk\include;$(ProjectDir)..\extern\dxut;$(ProjectDir)..\extern\remix;$(ProjectDir)..\extern\fnvhash;$(ProjectDir)..\extern;$(ProjectDir)..\idtech3_mixup;$(ProjectDir)..\extern\mINI;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
@@ -115,7 +115,7 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration)\$(Proje
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\extern\dx9sdk\include;$(ProjectDir)..\extern\dxut;$(ProjectDir)..\idtech3_mixup;$(ProjectDir)..\extern\mINI%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\extern\dx9sdk\include;$(ProjectDir)..\extern\dxut;$(ProjectDir)..\extern\remix;$(ProjectDir)..\extern\fnvhash;$(ProjectDir)..\extern;$(ProjectDir)..\idtech3_mixup;$(ProjectDir)..\extern\mINI%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
@@ -140,7 +140,7 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration)\$(Proje
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
   </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoDetours|Win32'">
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoRemixMods|Win32'">
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
       <PrecompiledHeader>
@@ -152,7 +152,7 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration)\$(Proje
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\extern\dx9sdk\include;$(ProjectDir)..\extern\dxut;$(ProjectDir)..\idtech3_mixup;$(ProjectDir)..\extern\mINI%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\extern\dx9sdk\include;$(ProjectDir)..\extern\dxut;$(ProjectDir)..\extern\remix;$(ProjectDir)..\extern\fnvhash;$(ProjectDir)..\extern;$(ProjectDir)..\idtech3_mixup;$(ProjectDir)..\extern\mINI%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
@@ -214,8 +214,10 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration)\$(Proje
     <ClCompile Include="..\code\d3d_texgen.cpp" />
     <ClCompile Include="..\code\d3d_texture.cpp" />
     <ClCompile Include="..\code\d3d_wrapper.cpp" />
+    <ClCompile Include="..\code\rmx_light.cpp" />
     <ClCompile Include="..\extern\dxut\dxerr_a.cpp" />
     <ClCompile Include="..\extern\dxut\dxerr_w.cpp" />
+    <ClCompile Include="..\extern\fnvhash\hash_32a.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\code\d3d_array.hpp" />
@@ -232,6 +234,8 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration)\$(Proje
     <ClInclude Include="..\code\d3d_texture.hpp" />
     <ClInclude Include="..\code\d3d_utils.hpp" />
     <ClInclude Include="..\code\d3d_wrapper.hpp" />
+    <ClInclude Include="..\code\rmx_gen.h" />
+    <ClInclude Include="..\code\rmx_light.h" />
     <ClInclude Include="..\extern\dxut\dxerr.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

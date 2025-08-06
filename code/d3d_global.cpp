@@ -31,6 +31,8 @@
 #include "d3d_matrix_detection.hpp"
 #include "d3d_helpers.hpp"
 #include "hooking.h"
+#include "rmx_gen.h"
+#include "rmx_light.h"
 
 #include <tchar.h>
 #include <string.h>
@@ -47,6 +49,8 @@ static std::string g_gamename;
 static mINI::INIFile g_inifile(WRAPPER_GL_SHORT_NAME_STRING ".ini");
 static mINI::INIStructure g_iniconf;
 static bool g_iniavailable = false;
+
+static BOOL D3DGlobal_InitializeDirect3D( void );
 
 void D3DGlobal_Init( bool clearGlobals )
 {
@@ -677,6 +681,71 @@ static D3DFORMAT D3DGlobal_GetAdapterModeFormat( int width, int height, int bpp 
 	return D3DFMT_UNKNOWN;
 }
 
+extern int D3DGlobal_GetResolutions(resolution_info_t *resolutions, int count)
+{
+	D3DADAPTER_IDENTIFIER9 adapter_info;
+	D3DCAPS9 caps;
+	D3DDISPLAYMODE desktop;
+	D3DDISPLAYMODE* modes;
+	int modes_count = 0;
+	int j = 0;
+
+	const int minwidth = 800;
+	const int minheight = 600;
+
+	if (!D3DGlobal.pD3D) {
+		if ( ! D3DGlobal_InitializeDirect3D() )
+			return 0;
+	}
+
+	//UINT adapter_count = D3DGlobal.pD3D->GetAdapterCount();
+	UINT adapter_num = D3DADAPTER_DEFAULT;
+	D3DGlobal.pD3D->GetAdapterIdentifier( adapter_num, 0, &adapter_info );
+	D3DGlobal.pD3D->GetDeviceCaps( adapter_num, D3DDEVTYPE_HAL, &caps );
+	D3DGlobal.pD3D->GetAdapterDisplayMode( adapter_num, &desktop );
+
+	int nummodes = D3DGlobal.pD3D->GetAdapterModeCount( adapter_num, desktop.Format );
+	modes = (D3DDISPLAYMODE*)malloc( sizeof( D3DDISPLAYMODE ) * (1 + nummodes) ); //todo: use engine alloc functions
+	if ( modes == NULL )
+	{
+		logPrintf( "...Error: cannot alloc memory to enumerate videomodes\n" );
+		return 0;
+	}
+	ZeroMemory( modes, (sizeof( D3DDISPLAYMODE ) * (1 + nummodes)) );
+	D3DDISPLAYMODE* m = modes;
+	for ( int amode = 0; amode < nummodes; amode++ )
+	{
+		D3DDISPLAYMODE dispMode;
+		D3DGlobal.pD3D->EnumAdapterModes( adapter_num, desktop.Format, amode, &dispMode );
+		if ( dispMode.Width < minwidth || dispMode.Height < minheight || dispMode.RefreshRate != desktop.RefreshRate )
+			continue;
+		memcpy( m, &dispMode, sizeof( dispMode ) );
+		modes_count++;
+		m++;
+	}
+	if ( modes_count )
+	{
+		int steps = modes_count;
+		int i = 0;
+		if ( count < modes_count )
+		{
+			steps = count;
+			i = modes_count - count;
+		}
+		for ( j = 0; i < steps; i++, j++ )
+		{
+			snprintf( resolutions[j].display_name, sizeof( resolutions->display_name ), "%d %d%s", modes[i].Width, modes[i].Height, ((float)modes[i].Width / modes[i].Height > 1.4f ? " (WS)" : "") );
+			resolutions[j].width = modes[i].Width;
+			resolutions[j].height = modes[i].Height;
+		}
+
+	}
+
+	free(modes);
+
+	return j;
+}
+
 /*
 ========================
 D3DGlobal_SetupPresentParams
@@ -766,6 +835,72 @@ static bool D3DGlobal_SetupPresentParams( int width, int height, int bpp, BOOL w
 
 #define D3D_CONTEXT_MAGIC	0xBEEF
 
+static BOOL D3DGlobal_InitializeDirect3D( void )
+{
+	if ( nullptr == (D3DGlobal.hD3DDll = LoadLibrary( _T( "d3d9.dll" ) )) ) {
+		logPrintf( "wglCreateContext: failed to load d3d9.dll\n" );
+		return 0;
+	}
+	pfnDirect3DCreate9 d3dCreateFn = (pfnDirect3DCreate9)GetProcAddress( D3DGlobal.hD3DDll, "Direct3DCreate9" );
+	if ( !d3dCreateFn ) {
+		logPrintf( "wglCreateContext: failed to get address of \"Direct3DCreate9\" from d3d9.dll\n" );
+		return 0;
+	}
+
+	D3DGlobal.dbgBeginEvent = (pfnD3DPERF_BeginEvent)GetProcAddress( D3DGlobal.hD3DDll, "D3DPERF_BeginEvent" );
+	if ( !D3DGlobal.dbgBeginEvent ) {
+		logPrintf( "wglCreateContext: failed to get address of \"D3DPERF_BeginEvent\" from d3d9.dll\n" );
+		return 0;
+	}
+	D3DGlobal.dbgEndEvent = (pfnD3DPERF_EndEvent)GetProcAddress( D3DGlobal.hD3DDll, "D3DPERF_EndEvent" );
+	if ( !D3DGlobal.dbgEndEvent ) {
+		logPrintf( "wglCreateContext: failed to get address of \"D3DPERF_EndEvent\" from d3d9.dll\n" );
+		return 0;
+	}
+
+	if ( nullptr == (D3DGlobal.pD3D = d3dCreateFn( D3D_SDK_VERSION )) ) {
+		logPrintf( "wglCreateContext: failed to initialize Direct3D\n" );
+		return 0;
+	}
+	if ( nullptr == D3DGlobal.pD3D ) {
+		logPrintf( "wglCreateContext: Direct3DCreate9 returned NULL\n" );
+		return 0;
+	}
+
+	if ( D3DGlobal_ReadGameConf( "RemixAPI" ) )
+	{
+		PFN_remixapi_InitializeLibrary remix_init = (PFN_remixapi_InitializeLibrary)GetProcAddress( D3DGlobal.hD3DDll, "remixapi_InitializeLibrary" );
+		if ( remix_init == NULL )
+		{
+			logPrintf( "Warn: Remix API not found\n" );
+		}
+		else
+		{
+			remixapi_InitializeLibraryInfo info;
+			ZeroMemory( &info, sizeof( info ) );
+			{
+				info.sType = REMIXAPI_STRUCT_TYPE_INITIALIZE_LIBRARY_INFO;
+				info.version = REMIXAPI_VERSION_MAKE( REMIXAPI_VERSION_MAJOR,
+					REMIXAPI_VERSION_MINOR,
+					REMIXAPI_VERSION_PATCH );
+			}
+
+			remixapi_ErrorCode status = remix_init( &info, &remixInterface );
+			if ( status != REMIXAPI_ERROR_CODE_SUCCESS ) {
+				logPrintf( "Warn: Remix API init error %d, did you set 'exposeRemixApi = True' in .trex\\bridge.conf ? \n", status );
+			}
+			else
+			{
+				remixOnline = TRUE;
+			}
+		}
+	}
+
+	logPrintf( "Direct3D initialized\n" );
+
+	return 1;
+}
+
 OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 {
 	//logPrintf("wrap_wglCreateContext( %x )\n", hdc);
@@ -785,36 +920,8 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 
 	// initialize direct3d
 	if (!D3DGlobal.pD3D) {
-		if (nullptr == (D3DGlobal.hD3DDll = LoadLibrary(_T("d3d9.dll")))) {
-			logPrintf("wglCreateContext: failed to load d3d9.dll\n");
+		if ( ! D3DGlobal_InitializeDirect3D() )
 			return 0;
-		}
-		pfnDirect3DCreate9 d3dCreateFn = (pfnDirect3DCreate9)GetProcAddress(D3DGlobal.hD3DDll, "Direct3DCreate9");
-		if (!d3dCreateFn) {
-			logPrintf("wglCreateContext: failed to get address of \"Direct3DCreate9\" from d3d9.dll\n");
-			return 0;
-		}
-
-		D3DGlobal.dbgBeginEvent = (pfnD3DPERF_BeginEvent)GetProcAddress(D3DGlobal.hD3DDll, "D3DPERF_BeginEvent");
-		if (!D3DGlobal.dbgBeginEvent) {
-			logPrintf("wglCreateContext: failed to get address of \"D3DPERF_BeginEvent\" from d3d9.dll\n");
-			return 0;
-		}
-		D3DGlobal.dbgEndEvent = (pfnD3DPERF_EndEvent)GetProcAddress(D3DGlobal.hD3DDll, "D3DPERF_EndEvent");
-		if (!D3DGlobal.dbgEndEvent) {
-			logPrintf("wglCreateContext: failed to get address of \"D3DPERF_EndEvent\" from d3d9.dll\n");
-			return 0;
-		}
-
-		if (nullptr == (D3DGlobal.pD3D = d3dCreateFn(D3D_SDK_VERSION)) ) {
-			logPrintf("wglCreateContext: failed to initialize Direct3D\n");
-			return 0;
-		}
-		if (nullptr == D3DGlobal.pD3D) {
-			logPrintf("wglCreateContext: Direct3DCreate9 returned NULL\n");
-			return 0;
-		}
-		logPrintf("Direct3D initialized\n");
 	}
 
 	// if a device was previously set up, return TRUE
@@ -1220,6 +1327,8 @@ OPENGL_API BOOL WINAPI wrap_wglSwapBuffers( HDC )
 
 		D3DGlobal.pDevice->EndScene();
 		D3DGlobal.sceneBegan = false;
+
+		qdx_lights_draw();
 
 		HRESULT hr;
 		

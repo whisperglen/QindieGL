@@ -9,6 +9,8 @@
 #include "surface_sorting.h"
 #include "h2_refgl.h"
 
+static BOOL h2_initialised = FALSE;
+
 void* fp_exit = exit; //ExitProcess;
 
 DECLSPEC_NORETURN VOID WINAPI hk_ExitProcess( UINT code )
@@ -190,6 +192,7 @@ void hook_do_init(const char *exename, const char* dllname, const char *gamename
 
 	if ( D3DGlobal_ReadGameConfPtr( "patch_h2_refgl" ) )
 	{
+		h2_initialised = TRUE;
 		h2_refgl_init();
 	}
 }
@@ -208,7 +211,7 @@ void hook_do_deinit()
 
 	hook_surface_sorting_do_deinit();
 
-	if ( D3DGlobal_ReadGameConfPtr( "patch_h2_refgl" ) )
+	if ( h2_initialised )
 	{
 		h2_refgl_deinit();
 	}
@@ -217,5 +220,6 @@ void hook_do_deinit()
 void hook_frame_ended()
 {
 	hook_surface_sorting_frame_ended();
-	h2_refgl_frame_ended();
+	if ( h2_initialised )
+		h2_refgl_frame_ended();
 }

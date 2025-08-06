@@ -9,6 +9,7 @@ src/extractfuncs/extractfuncs.exe
 ### revert ignore with:        git update-index --no-skip-worktree  <file>
 extern/detours/lib.X86*/
 [Rr]eleaseNoDetours/
+[Rr]eleaseNoRemixMods/
 
 # User-specific files
 *.rsuser

@@ -195,4 +195,13 @@ extern void* D3DGlobal_ReadGameConfPtr( const char* valname );
 extern int D3DGlobal_ReadGameConfStr( const char* valname, char* out, int outsz );
 extern void D3DGlobal_CPU_Detect();
 
+typedef struct resolution_info_s
+{
+	char display_name[16];
+	int width;
+	int height;
+} resolution_info_t;
+
+extern int D3DGlobal_GetResolutions( resolution_info_t* resolutions, int count );
+
 #endif //QINDIEGL_D3D_GLOBAL_H

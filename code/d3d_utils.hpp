@@ -223,7 +223,13 @@ inline int UTIL_GLTextureTargettoInternalIndex( GLenum target )
 #define __PO446(S, LN, ...)  { static bool printed##LN = false; if (!printed##LN) { printed##LN = true; logPrintf((S), __VA_ARGS__); } }
 #define __PO448(S, LN, ...) __PO446(S, LN, __VA_ARGS__)
 
+#define __DO446(LN) static int printed##LN = 0; while (!(printed##LN++))
+#define __DO448(LN) __DO446(LN)
+
 // Logs the passed string only once, the first time the enclosing codeblock is executed
 #define PRINT_ONCE(S, ...) __PO448((S), __LINE__, __VA_ARGS__)
+
+// Executes only once the following block of code; use as DO_ONCE() { something; }
+#define DO_ONCE() __DO448(__LINE__)
 
 #endif //QINDIEGL_D3D_UTILS_H

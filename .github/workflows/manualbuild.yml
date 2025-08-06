@@ -28,7 +28,7 @@ jobs:
     runs-on: windows-2022
     strategy:
       matrix:
-        config: [Release, ReleaseNoDetours]
+        config: [Release, ReleaseNoRemixMods]
         platform: [Win32]
 
     steps:
@@ -57,9 +57,9 @@ jobs:
         name: QindieGL
         path: ./bin/${{matrix.config}}/*
 
-    - name: Upload ReleaseNoDetours Artifacts
-      if: ${{ matrix.config == 'ReleaseNoDetours' }}
+    - name: Upload ReleaseNoRemixMods Artifacts
+      if: ${{ matrix.config == 'ReleaseNoRemixMods' }}
       uses: actions/upload-artifact@v4
       with:
-        name: QindieGL_NoDetours
+        name: QindieGL_NoRemixMods
         path: ./bin/${{matrix.config}}/*
