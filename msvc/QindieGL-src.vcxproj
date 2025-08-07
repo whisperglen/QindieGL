@@ -214,6 +214,7 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration)\$(Proje
     <ClCompile Include="..\code\d3d_texgen.cpp" />
     <ClCompile Include="..\code\d3d_texture.cpp" />
     <ClCompile Include="..\code\d3d_wrapper.cpp" />
+    <ClCompile Include="..\code\rmx_gen.cpp" />
     <ClCompile Include="..\code\rmx_light.cpp" />
     <ClCompile Include="..\extern\dxut\dxerr_a.cpp" />
     <ClCompile Include="..\extern\dxut\dxerr_w.cpp" />

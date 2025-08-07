@@ -10,8 +10,10 @@
 #include "d3d_wrapper.hpp"
 #include "d3d_global.hpp"
 #include "d3d_utils.hpp"
+#include "rmx_gen.h"
 #include "rmx_light.h"
 #include <map>
+#include <string>
 
 typedef float vec3_t[3];
 typedef float matrix3_t[3][3];
@@ -456,7 +458,7 @@ static void h2_intercept_RecursiveWorldNode( mnode_t* node );
 static qboolean h2_intercept_R_CullAliasModel( vec3_t bbox[8], void* e /*entity_t* e*/ );
 static void h2_bridge_to_Model_BuildVBuff();
 static void h2_check_crtent_frame_vs_oldframe();
-static void R_RecursiveWorldNodeEx( mnode_t* node );
+static void R_RecursiveWorldNodeEx( mnode_t* node, BOOL inpvs );
 static void R_SortAndDrawSurfaces( drawSurf_t* surfs, int numSurfs );
 static void R_AddDrawSurf( msurface_t* surf );
 
@@ -756,7 +758,7 @@ static void h2_intercept_RecursiveWorldNode( mnode_t* node )
 
 	glPushDebugGroup(0, 0, -1, "R_RecursiveWorldNodeEx");
 
-	R_RecursiveWorldNodeEx( node );
+	R_RecursiveWorldNodeEx( node, TRUE );
 
 	if ( rmx_skiplightmaps->value )
 	{
@@ -842,7 +844,7 @@ static __declspec(naked) void h2_check_crtent_frame_vs_oldframe()
 	}
 }
 
-static void R_RecursiveWorldNodeEx(mnode_t* node)
+static void R_RecursiveWorldNodeEx(mnode_t* node, BOOL inpvs)
 {
 	msurface_t* surf;
 	int c;
@@ -852,8 +854,13 @@ static void R_RecursiveWorldNodeEx(mnode_t* node)
 	if (node->contents == CONTENTS_SOLID)
 		return;
 	
-	if(!rmx_novis->value && node->visframe != r_visframecount)
-		return;
+	if(node->visframe != r_visframecount)
+	{
+		if( !rmx_novis->value )
+			return;
+
+		inpvs = FALSE;
+	}
 
 	//R_CullBox checks for r_nocull
 	if (R_CullBox(node->minmaxs, node->minmaxs + 3))
@@ -865,10 +872,15 @@ static void R_RecursiveWorldNodeEx(mnode_t* node)
 		const mleaf_t* pleaf = (mleaf_t*)node;
 
 		// Check for door connected areas
-		if (rmx_novis->value < 2 && /*r_newrefdef.areabits*/r_newrefdef_areabits)
+		if (/*r_newrefdef.areabits*/r_newrefdef_areabits)
 		{
 			if (! (/*r_newrefdef.areabits*/r_newrefdef_areabits[pleaf->area>>3] & (1<<(pleaf->area&7)) ) )
-				return;		// not visible
+			{
+				if(rmx_novis->value < 2)
+					return;		// not visible
+
+				inpvs = FALSE;
+			}
 		}
 
 		msurface_t** mark = pleaf->firstmarksurface;
@@ -915,7 +927,7 @@ static void R_RecursiveWorldNodeEx(mnode_t* node)
 	}
 
 	// Recurse down the children, front side first
-	R_RecursiveWorldNodeEx(node->children[side]);
+	R_RecursiveWorldNodeEx(node->children[side], inpvs);
 
 	for (c = node->numsurfaces, surf = r_worldmodel->surfaces + node->firstsurface; c > 0; c--, surf++)
 	{
@@ -930,8 +942,11 @@ static void R_RecursiveWorldNodeEx(mnode_t* node)
 		else if (surf->texinfo->flags & (SURF_TRANS33 | SURF_TRANS66))
 		{
 			// Add to the translucent chain
-			surf->texturechain = r_alpha_surfaces;
-			r_alpha_surfaces = surf;
+			if ( inpvs )
+			{
+				surf->texturechain = r_alpha_surfaces;
+				r_alpha_surfaces = surf;
+			}
 		}
 		else if ( (qglMultiTexCoord2fARB != NULL || qglMTexCoord2fSGIS != NULL)
 					&& !(surf->flags & (SURF_DRAWTURB|SURF_TALL_WALL)))
@@ -954,14 +969,17 @@ static void R_RecursiveWorldNodeEx(mnode_t* node)
 		{
 			// The polygon is visible, so add it to the texture sorted chain
 			// FIXME: this is a hack for animation
-			image_t* image = R_TextureAnimation(surf->texinfo);
-			surf->texturechain = image->texturechain;
-			image->texturechain = surf;
+			if ( inpvs )
+			{
+				image_t* image = R_TextureAnimation(surf->texinfo);
+				surf->texturechain = image->texturechain;
+				image->texturechain = surf;
+			}
 		}
 	}
 
 	// Recurse down the back side
-	R_RecursiveWorldNodeEx( node->children[!side] );
+	R_RecursiveWorldNodeEx( node->children[!side], inpvs );
 
 	if ( r_nocull->value )
 	{
@@ -1012,9 +1030,12 @@ static void R_RecursiveWorldNodeEx(mnode_t* node)
 			{
 				// The polygon is visible, so add it to the texture sorted chain
 				// FIXME: this is a hack for animation
-				image_t* image = R_TextureAnimation(surf->texinfo);
-				surf->texturechain = image->texturechain;
-				image->texturechain = surf;
+				if ( inpvs )
+				{
+					image_t* image = R_TextureAnimation(surf->texinfo);
+					surf->texturechain = image->texturechain;
+					image->texturechain = surf;
+				}
 			}
 		}
 	}
@@ -1804,8 +1825,15 @@ static void hk_R_BeginRegistration( const char* model )
 {
 	HOOK_ONLINE_NOTICE();
 
-	//do some cleaning
-	//qdx_lights_clear(LIGHT_ALL);
+	static std::string mapname("");
+	if ( mapname.compare( model ) != 0 )
+	{
+		//do some cleaning
+		qdx_lights_clear(LIGHT_ALL);
+		qdx_begin_loading_map( model );
+
+		mapname.assign( model );
+	}
 	
 	fp_R_BeginRegistration( model );
 }

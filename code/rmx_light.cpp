@@ -1,5 +1,6 @@
 
 #include "rmx_light.h"
+#include "rmx_gen.h"
 #include <d3d9.h>
 #include "d3dx9.h"
 
@@ -1053,67 +1054,4 @@ vec_t Distance( const vec3_t p1, const vec3_t p2 ) {
 
 	VectorSubtract( p2, p1, v );
 	return VectorLength( v );
-}
-
-void qdx_storemapconfflt( const char* base, const char* valname, float value, bool inGlobal )
-{
-
-}
-
-void qdx_save_iniconf()
-{
-
-}
-
-float qdx_readmapconfflt( const char* base, const char* valname, float default_val )
-{
-	return 0;
-}
-
-const char* qdx_get_active_map()
-{
-	return "";
-}
-
-static std::map<std::string, int> asserted_fns;
-#define ASSERT_MAX_PRINTS 1
-
-void qdx_assert_failed_str(const char* expression, const char* function, unsigned line, const char* file)
-{
-	const char* fn = strrchr(file, '\\');
-	if (!fn) fn = strrchr(file, '/');
-	if (!fn) fn = "fnf";
-
-	bool will_print = false;
-	bool supressed_msg = false;
-
-	std::string mykey = std::string(function);
-	auto searched = asserted_fns.find(mykey);
-	if (asserted_fns.end() != searched)
-	{
-		int nums = searched->second;
-		if (nums <= ASSERT_MAX_PRINTS)
-		{
-			will_print = true;
-			supressed_msg = (nums == ASSERT_MAX_PRINTS);
-		}
-		searched->second = nums + 1;
-	}
-	else
-	{
-		asserted_fns[mykey] = 1;
-		will_print = true;
-	}
-
-	if (will_print)
-	{
-#ifdef NDEBUG
-		if(supressed_msg)
-			logPrintf("Error: assert failed and supressing: %s in %s:%d %s\n", expression, function, line, fn);
-		else
-			logPrintf("Error: assert failed: %s in %s:%d %s\n", expression, function, line, fn);
-#else
-		logPrintf("Error: assert failed: %s in %s:%d %s\n", expression, function, line, fn);
-#endif
-	}
 }

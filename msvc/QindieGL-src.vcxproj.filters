@@ -121,6 +121,9 @@
     <ClCompile Include="..\extern\fnvhash\hash_32a.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\code\rmx_gen.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\code\d3d_array.hpp">
