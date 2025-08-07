@@ -752,8 +752,9 @@ void qdx_lights_draw()
 
 #define DYNAMIC_LIGHTS_USE_DX9 0
 
-void qdx_light_add(int light_type, int ord, const float *position, const float *direction, const float *color, float radius)
+int qdx_light_add(int light_type, int ord, const float *position, const float *direction, const float *color, float radius)
 {
+	int ret = 0;
 	remixapi_ErrorCode rercd;
 	uint64_t hash = 0;
 	uint64_t hashpos = 0;
@@ -784,7 +785,7 @@ void qdx_light_add(int light_type, int ord, const float *position, const float *
 			light_override_t* ovr = qdx_light_find_override( hash );
 			if ( ovr == NULL || ovr->updated == 0 )
 			{
-				return;
+				return 0;
 			}
 			//clear flag and readd flare with updated overrides
 			ovr->updated = 0;
@@ -802,7 +803,7 @@ void qdx_light_add(int light_type, int ord, const float *position, const float *
 
 		if ( !remixOnline || !rmx_flashlight )
 		{
-			return;
+			return 0;
 		}
 
 		hash = FLASHLIGHT_HASH;
@@ -859,11 +860,12 @@ void qdx_light_add(int light_type, int ord, const float *position, const float *
 			if ( rercd != REMIXAPI_ERROR_CODE_SUCCESS )
 			{
 				//ri.Printf( PRINT_ERROR, "RMX failed to create flashlight %d\n", rercd );
-				return;
+				return 0;
 			}
+			ret = 1;
 		}
 
-		return;
+		return ret;
 	}
 
 #if DYNAMIC_LIGHTS_USE_DX9
@@ -983,7 +985,7 @@ void qdx_light_add(int light_type, int ord, const float *position, const float *
 			if ( rercd != REMIXAPI_ERROR_CODE_SUCCESS )
 			{
 				//ri.Printf( PRINT_ERROR, "RMX failed to create light %d\n", rercd );
-				return;
+				return 0;
 			}
 			light_store->hash = hash;
 			light_store->pos[0] = position[0];
@@ -992,6 +994,8 @@ void qdx_light_add(int light_type, int ord, const float *position, const float *
 			light_store->color[0] = color[0];
 			light_store->color[1] = color[1];
 			light_store->color[2] = color[2];
+
+			ret = 1;
 		}
 	}
 	else
@@ -1037,6 +1041,8 @@ void qdx_light_add(int light_type, int ord, const float *position, const float *
 		//qdx.device->SetLight(light_num, &light);
 		//qdx.device->LightEnable(light_num, TRUE);
 	}
+
+	return ret;
 }
 
 #define VectorSubtract( a,b,c )   ( ( c )[0] = ( a )[0] - ( b )[0],( c )[1] = ( a )[1] - ( b )[1],( c )[2] = ( a )[2] - ( b )[2] )

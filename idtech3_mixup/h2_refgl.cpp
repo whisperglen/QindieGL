@@ -14,6 +14,9 @@
 #include "rmx_light.h"
 #include <map>
 #include <string>
+#include <vector>
+#include <list>
+#include "fnvhash/fnv.h"
 
 typedef float vec3_t[3];
 typedef float matrix3_t[3][3];
@@ -414,6 +417,7 @@ static cvarq2_t* gl_dynamic;
 static cvarq2_t* rmx_skiplightmaps;
 static cvarq2_t* rmx_novis;
 static cvarq2_t* rmx_normals;
+static cvarq2_t* rmx_coronas;
 static cvarq2_t* rmx_generic;
 static cvarq2_t* rmx_dyn_linger;
 
@@ -527,6 +531,7 @@ void h2_refgl_init()
 			rmx_normals = riCVAR_GET("rmx_normals", "0", 0);
 			rmx_generic = riCVAR_GET("rmx_generic", "-1", 0);
 			rmx_dyn_linger = riCVAR_GET("rmx_dyn_linger", "1", 1);
+			rmx_coronas = riCVAR_GET("rmx_coronas", "1", 1);
 
 			qdx_lights_dynamic_linger( rmx_dyn_linger->value );
 
@@ -1542,6 +1547,11 @@ void h2_refgl_frame_ended()
 		qdx_lights_dynamic_linger( rmx_dyn_linger->value );
 	}
 
+	if ( rmx_coronas->modified && !rmx_coronas->value )
+	{
+		qdx_lights_clear( LIGHT_CORONA );
+	}
+
 	glClearColor( 0, 0, 0, 0 );
 	//glClear( GL_COLOR_BUFFER_BIT );
 }
@@ -1821,6 +1831,8 @@ static qboolean hk_VID_GetModeInfo(int* width, int* height, const int mode)
 	return qfalse;
 }
 
+std::map<uint32_t, int> g_halosvalidation;
+
 static void hk_R_BeginRegistration( const char* model )
 {
 	HOOK_ONLINE_NOTICE();
@@ -1829,6 +1841,7 @@ static void hk_R_BeginRegistration( const char* model )
 	if ( mapname.compare( model ) != 0 )
 	{
 		//do some cleaning
+		g_halosvalidation.clear();
 		qdx_lights_clear(LIGHT_ALL);
 		qdx_begin_loading_map( model );
 
@@ -1909,14 +1922,55 @@ static void hk_R_RenderView( int* refdef )
 #define HALO_STR "sprites/lens/halo"
 #define FLARE_STR "sprites/lens/flare"
 
-	for ( int i = 0; i < numAlphaEntities; i++, alpha_entities++ )
+	if ( rmx_coronas->value )
 	{
-		model_t** model = (*alpha_entities)->model;
-		if ( 0 == strncmp( HALO_STR, (*model)->name, sizeof( HALO_STR ) -1 ) )
+		for ( int i = 0; i < numAlphaEntities; i++, alpha_entities++ )
 		{
-			paletteRGBA_t clrb = (*alpha_entities)->color;
-			float color[3] = { (float)clrb.r / 255, (float)clrb.g / 255, (float)clrb.b / 255 };
-			qdx_light_add( LIGHT_CORONA, i, (*alpha_entities)->origin, NULL, color, (*alpha_entities)->scale );
+			model_t** model = (*alpha_entities)->model;
+			if ( 0 == strncmp( HALO_STR, (*model)->name, sizeof( HALO_STR ) -1 ) )
+			{
+				paletteRGBA_t clrb = (*alpha_entities)->color;
+				uint32_t hash = fnv_32a_buf( &clrb, sizeof( clrb ), 42 );
+				hash = fnv_32a_buf( (*alpha_entities)->origin, 3*sizeof( float ), hash );
+				auto it = g_halosvalidation.find( hash );
+				if ( it != g_halosvalidation.end() )
+				{
+					if ( it->second >= 3 )
+					{
+						it = g_halosvalidation.erase( it );
+
+						float color[3] = { (float)clrb.r / 255, (float)clrb.g / 255, (float)clrb.b / 255 };
+						int added = qdx_light_add( LIGHT_CORONA, i, (*alpha_entities)->origin, NULL, color, (*alpha_entities)->scale );
+						//if ( added )
+						//{
+						//	riPRINTF( PRINT_ALL, "aded light for %s\n", (*model)->name );
+						//}
+					}
+					else
+					{
+						it->second += 2;
+					}
+				}
+				else
+				{
+					g_halosvalidation[hash] = 1;
+				}
+			}
+		}
+	}
+
+	auto it = g_halosvalidation.begin();
+	while ( it != g_halosvalidation.end() )
+	{
+		if ( it->second <= 0 )
+		{
+			it = g_halosvalidation.erase( it );
+		}
+		else
+		{
+			it->second--;
+
+			it++;
 		}
 	}
 

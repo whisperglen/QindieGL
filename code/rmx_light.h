@@ -42,7 +42,7 @@ typedef struct light_override_s
 
 #define NUM_FLASHLIGHT_HND 3
 
-void qdx_light_add(int light_type_e, int ord, const float *position, const float *direction, const float *color, float radius);
+int  qdx_light_add(int light_type_e, int ord, const float *position, const float *direction, const float *color, float radius);
 void qdx_lights_clear(unsigned int light_types);
 void qdx_lights_draw();
 void qdx_lights_dynamic_linger( int val );
