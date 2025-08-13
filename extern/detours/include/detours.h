@@ -867,7 +867,7 @@ VOID CALLBACK DetourFinishHelperProcess(_In_ HWND,
 
 /////////////////////////////////////////////////// Type-safe overloads for C++
 //
-#if __cplusplus >= 201103L || _MSVC_LANG >= 201103L
+#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L) && defined(DETOURS_CPP_TYPESAFE_OVERLOADS)
 #include <type_traits>
 
 template<typename T>

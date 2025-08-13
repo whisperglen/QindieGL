@@ -10,6 +10,8 @@
 #include "d3d_wrapper.hpp"
 #include "d3d_global.hpp"
 #include "d3d_utils.hpp"
+#include "d3d_state.hpp"
+#include "d3d_helpers.hpp"
 #include "rmx_gen.h"
 #include "rmx_light.h"
 #include <map>
@@ -17,6 +19,7 @@
 #include <vector>
 #include <list>
 #include "fnvhash/fnv.h"
+#include <intrin.h>
 
 typedef float vec3_t[3];
 typedef float matrix3_t[3][3];
@@ -362,6 +365,12 @@ typedef struct cvar_s
 #define VectorSet(v, x, y, z)	(v[0]=(x), v[1]=(y), v[2]=(z))
 #define VectorMA( v, s, b, o )  ( ( o )[0] = ( v )[0] + ( b )[0] * ( s ),( o )[1] = ( v )[1] + ( b )[1] * ( s ),( o )[2] = ( v )[2] + ( b )[2] * ( s ) )
 
+#ifndef M_PI
+#define M_PI		3.14159265358979323846	// matches value in gcc v2 math.h
+#endif
+
+#define Q_ftol( f ) _mm_cvt_ss2si( _mm_set1_ps(f) )
+
 extern "C" {
 typedef void	(*ri_Printf) (int print_level, const char *str, ...);
 typedef void	(*ri_Error) (int code, char *fmt, ...);
@@ -409,6 +418,7 @@ image_t **dp_r_notexture;// = 0x5fbc4
 int *dp_currenttmu;// = 0x5ff78
 #define currenttmu (*dp_currenttmu)
 int *currenttexture;// = 0x5ff70
+float *r_turbsin;// = 0x30684
 static cvarq2_t* r_fullbright;
 static cvarq2_t* gl_drawflat;
 static cvarq2_t* gl_sortmulti;
@@ -466,7 +476,8 @@ static void R_RecursiveWorldNodeEx( mnode_t* node, BOOL inpvs );
 static void R_SortAndDrawSurfaces( drawSurf_t* surfs, int numSurfs );
 static void R_AddDrawSurf( msurface_t* surf );
 
-void h2_generic_fixes();
+static void h2_generic_fixes();
+static void h2_generic_fixes_deinit();
 
 void h2_refgl_init()
 {
@@ -478,18 +489,18 @@ void h2_refgl_init()
 
 		//if ( modulesize == ref_gl_data.SizeOfImage ) //doesn't match, disable this; maybe find another way to match the dll version
 		{
-			dp_r_visframecount = (int*)((intptr_t)0x5fe38 + (intptr_t)ref_gl_data.lpBaseOfDll);
-			dp_r_framecount = (int*)((intptr_t)0x5fd20 + (intptr_t)ref_gl_data.lpBaseOfDll);
-			modelorg = (float*)((intptr_t)0x5fb40 + (intptr_t)ref_gl_data.lpBaseOfDll);
-			dp_r_newrefdef_areabits = (byte**)((intptr_t)0x5fcb8 + (intptr_t)ref_gl_data.lpBaseOfDll);
-			dp_r_worldmodel = (model_t**)((intptr_t)0x5fbd0 + (intptr_t)ref_gl_data.lpBaseOfDll);
-			dp_r_alpha_surfaces = (msurface_t**)((intptr_t)0x5fb4c + (intptr_t)ref_gl_data.lpBaseOfDll);
-			dp_num_sorted_multitextures = (int*)((intptr_t)0x3da08 + (intptr_t)ref_gl_data.lpBaseOfDll);
-			dp_ri = (intptr_t*)((intptr_t)0x5fd60 + (intptr_t)ref_gl_data.lpBaseOfDll);
-			dp_r_newrefdef_time = (float*)((intptr_t)0x5fcb0 + (intptr_t)ref_gl_data.lpBaseOfDll);
-			r_newrefdef_lightstyles = (lightstyle_t*)((intptr_t)0x5fcbc + (intptr_t)ref_gl_data.lpBaseOfDll);
-			dp_gl_state_lightmap_textures = (int*)((intptr_t)0x5ff6c + (intptr_t)ref_gl_data.lpBaseOfDll);
-			dp_c_brush_polys = (int*)((intptr_t)0x5fd40 + (intptr_t)ref_gl_data.lpBaseOfDll);
+			dp_r_visframecount = PTR_FROM_OFFSET(int*, 0x5fe38 );
+			dp_r_framecount = PTR_FROM_OFFSET(int*, 0x5fd20 );
+			modelorg = PTR_FROM_OFFSET(float*, 0x5fb40 );
+			dp_r_newrefdef_areabits = PTR_FROM_OFFSET(byte**, 0x5fcb8 );
+			dp_r_worldmodel = PTR_FROM_OFFSET(model_t**, 0x5fbd0 );
+			dp_r_alpha_surfaces = PTR_FROM_OFFSET(msurface_t**, 0x5fb4c );
+			dp_num_sorted_multitextures = PTR_FROM_OFFSET(int*, 0x3da08 );
+			dp_ri = PTR_FROM_OFFSET(intptr_t*, 0x5fd60 );
+			dp_r_newrefdef_time = PTR_FROM_OFFSET(float*, 0x5fcb0 );
+			r_newrefdef_lightstyles = PTR_FROM_OFFSET(lightstyle_t*, 0x5fcbc );
+			dp_gl_state_lightmap_textures = PTR_FROM_OFFSET(int*, 0x5ff6c );
+			dp_c_brush_polys = PTR_FROM_OFFSET(int*, 0x5fd40 );
 			dp_s_lerped = PTR_FROM_OFFSET( float**, 0x5f9cc );
 			shadelight = PTR_FROM_OFFSET( float*, 0x383b0 );
 			dp_shadedots = PTR_FROM_OFFSET( float**, 0x2e8c8 );
@@ -500,6 +511,7 @@ void h2_refgl_init()
 			dp_r_notexture = PTR_FROM_OFFSET( image_t**, 0x5fbc4 );
 			dp_currenttmu = PTR_FROM_OFFSET( int*, 0x5ff78 );
 			currenttexture = PTR_FROM_OFFSET( int*, 0x5ff70 );
+			r_turbsin = PTR_FROM_OFFSET( float*, 0x30684 );
 
 			R_TextureAnimation = (image_t*(*)(const mtexinfo_t *))((intptr_t)0xae70 + (intptr_t)ref_gl_data.lpBaseOfDll);
 			fp_qglMultiTexCoord2fARB = (void (APIENTRY **)(GLenum,GLfloat,GLfloat))((intptr_t)0x53770 + (intptr_t)ref_gl_data.lpBaseOfDll);
@@ -533,11 +545,14 @@ void h2_refgl_init()
 			rmx_dyn_linger = riCVAR_GET("rmx_dyn_linger", "1", 1);
 			rmx_coronas = riCVAR_GET("rmx_coronas", "1", 1);
 
-			qdx_lights_dynamic_linger( rmx_dyn_linger->value );
+			qdx_lights_dynamic_linger( int(rmx_dyn_linger->value) );
 
-			//pin ref_gl handle so that it does not get unloaded on FreeLibrary
+			//Pin ref_gl handle so that it does not get unloaded on FreeLibrary
+			// This is a hack to help with ref_gl.dll and opengl32.dll being
+			// unloaded when changing videomodes
 			HMODULE hm = 0;
 			GetModuleHandleEx( GET_MODULE_HANDLE_EX_FLAG_PIN, modulename, &hm );
+			GetModuleHandleEx( GET_MODULE_HANDLE_EX_FLAG_PIN, "opengl32.dll", &hm );
 
 			byte *code;
 			intptr_t val;
@@ -718,7 +733,7 @@ void h2_refgl_init()
 
 void h2_refgl_deinit()
 {
-	if ( modulesize == ref_gl_data.SizeOfImage )
+	if ( 0 ) //I don't know how to handle this for the case when dll is releaded (opengl32 and/or ref_gl)
 	{
 		unsigned long restore;
 
@@ -750,6 +765,8 @@ void h2_refgl_deinit()
 		//8b 2f 83 c7 this is where the draw loop starts
 		//we can't restore it unless we save the bytes
 	}
+
+	h2_generic_fixes_deinit();
 }
 
 OPENGL_API void WINAPI glPushDebugGroup( GLenum source, GLuint id, GLsizei length, const char* message );
@@ -789,7 +806,7 @@ static qboolean h2_intercept_R_CullAliasModel( vec3_t bbox[8], void* e /*entity_
 	}
 }
 
-static void R_Model_BuildVBuffAndDraw( int* order, float *normals_array );
+static void R_Model_BuildVBuffAndDraw( int* order, float *normals_array, int *p_alpha );
 //static void (*fp_Model_BuildVBuff)(int* order, float *normals_array) = R_Model_BuildVBuffAndDraw;
 
 static __declspec(naked) void h2_bridge_to_Model_BuildVBuff()
@@ -800,14 +817,16 @@ static __declspec(naked) void h2_bridge_to_Model_BuildVBuff()
 		push ecx
 		push edx
 
+		lea ecx,[ESP + 0x18 + 0xc] //alpha is 0x18 bytes lower than normals_array
 		lea edx,[ESP + 0x30 + 0xc] //normals_array
+		push ecx
 		push edx
 		push edi //order
 
 		//call fp_Model_BuildVBuff
 		mov eax, R_Model_BuildVBuffAndDraw
 		call eax
-		add esp,8
+		add esp,12
 
 		//restore clobbered registers, in reverse order
 		pop edx
@@ -1296,6 +1315,7 @@ OPENGL_API void WINAPI glPolygonMode( GLenum face, GLenum mode );
 OPENGL_API void WINAPI glColor3f( GLfloat red, GLfloat green, GLfloat blue );
 OPENGL_API void WINAPI glVertex3fv( const GLfloat *v );
 OPENGL_API void WINAPI glNormal3fv( const GLfloat *v );
+OPENGL_API void WINAPI glTexCoord2f( GLfloat s, GLfloat t );
 OPENGL_API void WINAPI glBegin( GLenum mode );
 OPENGL_API void WINAPI glEnd();
 OPENGL_API void WINAPI glEnable( GLenum cap );
@@ -1303,11 +1323,16 @@ OPENGL_API void WINAPI glDisable( GLenum cap );
 
 static float* g_calcnormals = NULL;
 
-static void R_Model_BuildVBuffAndDraw(int *order, float *normals_array)
+static void R_Model_BuildVBuffAndDraw(int *order, float *normals_array, int *p_alpha)
 {
 	HOOK_ONLINE_NOTICE();
 
 	//if ( g_calcnormals != normals_array )
+	//{
+	//	__debugbreak();
+	//}
+
+	//if ( *alpha )
 	//{
 	//	__debugbreak();
 	//}
@@ -1336,7 +1361,7 @@ static void R_Model_BuildVBuffAndDraw(int *order, float *normals_array)
 		int index_xyz;
 		struct vertexData_s* vb;
 		unsigned short* ib;
-		unsigned alpha = 255;
+		unsigned char alpha = 255;// (*p_alpha) ? 255 : 127;
 
 		int totalindexes = (3 * count) - 6;
 		R_CheckDrawBufferSpace( count, totalindexes, render_flags );
@@ -1538,13 +1563,100 @@ static void R_RenderSurfs( int flags )
 	}
 }
 
+#define TURBSCALE (float)(256.0f / (2 * M_PI))
+
+static void hk_R_EmitWaterPolys(msurface_t* fa, qboolean undulate)
+{
+	HOOK_ONLINE_NOTICE();
+
+	glpoly_t	*p, *bp;
+	float		rdt = /*r_newrefdef.time*/r_newrefdef_time;
+	float		scroll;
+	int			render_flags = 0;
+	DWORD		color = D3DCOLOR_ARGB( 255, 255, 255, 255 );
+
+	//color is sometimes set via glColor
+	if ( D3DState.CurrentState.isSet.bits.color )
+		color = D3DState.CurrentState.currentColor;
+	
+	if (fa->texinfo->flags & SURF_FLOWING)
+		scroll = -64.0f * ((rdt * 0.5f) - floorf(rdt * 0.5f));
+	else
+		scroll = 0.0f;
+
+	for (bp = fa->polys; bp != NULL; bp = bp->next)
+	{
+		p = bp;
+
+		struct vertexData_s* vb;
+		unsigned short* ib;
+		unsigned alpha = 255;
+
+		int totalindexes = (3 * p->numverts) - 6;
+		R_CheckDrawBufferSpace( p->numverts, totalindexes, render_flags );
+
+		int i;
+		int index = g_drawBuff.numVertexes;
+		ib = &g_drawBuff.indexes[g_drawBuff.numIndexes];
+		vb = &g_drawBuff.vertexes[g_drawBuff.numVertexes];
+		int start = index;
+
+		//glBegin(GL_TRIANGLE_FAN);
+
+		float* v = p->verts[0];
+		for ( i = 0; i < p->numverts; i++, v += VERTEXSIZE )
+		{
+			if ( i > 2 )
+			{
+				ib[0] = start;
+				ib[1] = index - 1;
+				ib += 2;
+			}
+			ib[0] = index++;
+			
+			vb->clr.all = color;
+
+			const float os = v[3];
+			const float ot = v[4];
+
+			float s = os + r_turbsin[Q_ftol( (ot * 0.125f + rdt) * TURBSCALE ) & 255];
+			s += scroll;
+			s *= (1.0/64);
+
+			float t = ot + r_turbsin[Q_ftol( (os * 0.125f + rdt) * TURBSCALE ) & 255];
+			t *= (1.0/64);
+
+			//glTexCoord2f(s, t);
+			vb->tex0[0] = s;
+			vb->tex0[1] = t;
+
+			//glVertex3fv(v);
+			VectorCopy( v, vb->xyz );
+
+			if ( undulate )
+			{
+				vb->xyz[2] += r_turbsin[Q_ftol( ((v[0] * 2.3f + v[1]) * 0.015f + rdt * 3.0f) * TURBSCALE ) & 255] * 0.25f +
+					r_turbsin[Q_ftol( ((v[1] * 2.3f + v[0]) * 0.015f + rdt * 6.0f) * TURBSCALE ) & 255] * 0.125f;
+			}
+
+			vb++;
+			ib++;
+		}
+		//glEnd();
+		g_drawBuff.numVertexes += p->numverts;
+		g_drawBuff.numIndexes += totalindexes;
+	}
+
+	R_RenderSurfs( render_flags );
+}
+
 void h2_refgl_frame_ended()
 {
 	if ( rmx_dyn_linger->modified )
 	{
 		rmx_dyn_linger->modified = qfalse;
 
-		qdx_lights_dynamic_linger( rmx_dyn_linger->value );
+		qdx_lights_dynamic_linger( int(rmx_dyn_linger->value) );
 	}
 
 	if ( rmx_coronas->modified && !rmx_coronas->value )
@@ -1621,6 +1733,8 @@ static void hk_R_BeginRegistration( const char* model ); // = 0x6fb0
 static void (*fp_R_BeginRegistration) ( const char* model ) = 0;
 static void hk_R_RenderView( int* refdef );// = 0x8910
 static void (*fp_R_RenderView)( int* refdef ) = 0;
+static void hk_R_EmitWaterPolys(msurface_t* fa, qboolean undulate);// = 0xeb60
+static void (*fp_R_EmitWaterPolys)(msurface_t* fa, qboolean undulate) = 0;
 static qboolean hk_VID_GetModeInfo( int* width, int* height, const int mode );// = 0x34bc0
 static qboolean (*fp_VID_GetModeInfo)( int* width, int* height, const int mode ) = 0;
 static void hk_calcnormals( int param_1, float param_2, float param_3, int param_4, int param_5, float* param_6 );
@@ -1642,13 +1756,16 @@ static void* (*fp_malloc)( size_t ) = 0;
 static void hk_free(void* block);
 static void (*fp_free)(void*) = 0;
 
-void h2_generic_fixes()
+typedef LONG (WINAPI *DetourAction_FP)(_Inout_ PVOID *ppPointer, _In_ PVOID pDetour);
+static void h2_detour_action( DetourAction_FP );
+
+static void h2_generic_fixes()
 {
 	const char* modulename = "H2Common.dll";
 	MODULEINFO h2common_data, quake2_data;
 
 	modulename = "H2Common.dll";
-	ZeroMemory(&h2common_data, sizeof(h2common_data));
+	ZeroMemory( &h2common_data, sizeof( h2common_data ) );
 	HMODULE h2comndll = GetModuleHandle( modulename );
 	if ( !h2comndll || !GetModuleInformation( GetCurrentProcess(), h2comndll, &h2common_data, sizeof( h2common_data ) ) )
 	{
@@ -1657,7 +1774,7 @@ void h2_generic_fixes()
 	}
 
 	modulename = "quake2.dll";
-	ZeroMemory(&quake2_data, sizeof(quake2_data));
+	ZeroMemory( &quake2_data, sizeof( quake2_data ) );
 	HMODULE quake2dll = GetModuleHandle( modulename );
 	if ( !quake2dll || !GetModuleInformation( GetCurrentProcess(), quake2dll, &quake2_data, sizeof( quake2_data ) ) )
 	{
@@ -1668,9 +1785,10 @@ void h2_generic_fixes()
 	fp_ResMngr_DeallocateResource = (byte*)h2common_data.lpBaseOfDll + 0x2650;
 	fp_SLList_Des = (byte*)h2common_data.lpBaseOfDll + 0x26d0;
 	dp_res_mgr = (ResourceManager_t *)((byte*)h2common_data.lpBaseOfDll + 0x10f20);
-	fp_R_BeginRegistration = PTR_FROM_OFFSET( void (*)(const char *), 0x6fb0 );
-	fp_R_RenderView = PTR_FROM_OFFSET( void (*)(int *), 0x8910 );
-	fp_VID_GetModeInfo = (qboolean(*)(int*,int*,int))((byte*)quake2_data.lpBaseOfDll + 0x34bc0);
+	fp_R_BeginRegistration = PTR_FROM_OFFSET( void( *)(const char *), 0x6fb0 );
+	fp_R_RenderView = PTR_FROM_OFFSET( void( *)(int *), 0x8910 );
+	fp_R_EmitWaterPolys = PTR_FROM_OFFSET( void( *)(msurface_t *, qboolean), 0xeb60 );
+	fp_VID_GetModeInfo = (qboolean( *)(int*, int*, int))((byte*)quake2_data.lpBaseOfDll + 0x34bc0);
 	//fp_calcnormals = PTR_FROM_OFFSET( void (*)(int,float,float,int,int,float*), 0x2a90 );
 
 	//fp_malloc = (void*(*)(size_t))DetourFindFunction( modulename, "malloc" );
@@ -1697,6 +1815,7 @@ void h2_generic_fixes()
 	}
 
 	{
+		// Replace resolution strings
 		//14 07 06 10
 		byte* code = (byte*)quake2_data.lpBaseOfDll + 0x3f9a8; //address of resolutions
 		intptr_t value;
@@ -1718,8 +1837,13 @@ void h2_generic_fixes()
 			logPrintf( "h2_generic_fixes: the resolutions ptr does not match %x\n", value );
 	}
 
+	h2_detour_action( DetourAttach );
+}
+
+static void h2_detour_action(DetourAction_FP DetourAction)
+{
 #define CHECK_ABORT(FN) if ( error != NO_ERROR ) \
-	{ abort=true; logPrintf( "h2_generic_fixes: failed to intercept %s: %d \n", (FN), error ); break; }
+	{ abort=true; logPrintf( "h2_detour_action: %s failed for %s(%d)\n", (DetourAction == DetourAttach ? "Attach" : "Detach"), (FN), error ); break; }
 
 	LONG error = NO_ERROR;
 	bool abort = false;
@@ -1729,37 +1853,42 @@ void h2_generic_fixes()
 
 		if ( fp_ResMngr_DeallocateResource )
 		{
-			error = DetourAttach( &(PVOID&)fp_ResMngr_DeallocateResource, hk_ResMngr_DeallocateResource );
+			error = DetourAction( &(PVOID&)fp_ResMngr_DeallocateResource, hk_ResMngr_DeallocateResource );
 			CHECK_ABORT( "ResMngr_DeallocateResource" );
 		}
 		if ( fp_SLList_Des )
 		{
-			error = DetourAttach( &(PVOID&)fp_SLList_Des, hk_SLList_Des );
+			error = DetourAction( &(PVOID&)fp_SLList_Des, hk_SLList_Des );
 			CHECK_ABORT( "SLList_Des" );
 		}
 		if ( fp_R_BeginRegistration )
 		{
-			error = DetourAttach( &(PVOID&)fp_R_BeginRegistration, hk_R_BeginRegistration );
+			error = DetourAction( &(PVOID&)fp_R_BeginRegistration, hk_R_BeginRegistration );
 			CHECK_ABORT( "R_BeginRegistration" );
 		}
 		if ( fp_R_RenderView )
 		{
-			error = DetourAttach( &(PVOID&)fp_R_RenderView, hk_R_RenderView );
+			error = DetourAction( &(PVOID&)fp_R_RenderView, hk_R_RenderView );
 			CHECK_ABORT( "R_RenderView" );
+		}
+		if ( fp_R_EmitWaterPolys )
+		{
+			error = DetourAction( &(PVOID&)fp_R_EmitWaterPolys, hk_R_EmitWaterPolys );
+			CHECK_ABORT( "R_EmitWaterPolys" );
 		}
 		if ( fp_VID_GetModeInfo )
 		{
-			error = DetourAttach( &(PVOID&)fp_VID_GetModeInfo, hk_VID_GetModeInfo );
-			CHECK_ABORT( "R_RenderView" );
+			error = DetourAction( &(PVOID&)fp_VID_GetModeInfo, hk_VID_GetModeInfo );
+			CHECK_ABORT( "VID_GetModeInfo" );
 		}
 		if ( fp_calcnormals )
 		{
-			error = DetourAttach( &(PVOID&)fp_calcnormals, hk_calcnormals );
+			error = DetourAction( &(PVOID&)fp_calcnormals, hk_calcnormals );
 			CHECK_ABORT( "calcnormals" );
 		}
 		if ( fp_malloc )
 		{
-			error = DetourAttach( &(PVOID&)fp_malloc, hk_malloc );
+			error = DetourAction( &(PVOID&)fp_malloc, hk_malloc );
 			CHECK_ABORT( "malloc" );
 		}
 		else
@@ -1768,7 +1897,7 @@ void h2_generic_fixes()
 		}
 		if ( fp_free )
 		{
-			error = DetourAttach( &(PVOID&)fp_free, hk_free );
+			error = DetourAction( &(PVOID&)fp_free, hk_free );
 			CHECK_ABORT( "free" );
 		}
 		else
@@ -1787,6 +1916,11 @@ void h2_generic_fixes()
 		error = DetourTransactionCommit();
 		if ( error != NO_ERROR ) logPrintf( "h2_generic_fixes: DetourTransactionCommit failed: %d \n", error );
 	}
+}
+
+static void h2_generic_fixes_deinit()
+{
+	h2_detour_action( DetourDetach );
 }
 
 static void h2_vid_initialise_resolutions()

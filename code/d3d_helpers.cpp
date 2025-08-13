@@ -8,8 +8,10 @@
 #include <string.h>
 #include <Windows.h>
 #include <WinUser.h>
+#include <time.h>
 
 #include "d3d_helpers.hpp"
+#include "d3d_wrapper.hpp"
 
 key_inputs_t prevstate = { 0 };
 key_inputs_t prevstate_clr = { 0 };
@@ -174,5 +176,54 @@ void keypress_frame_ended()
 	{
 		prevstate.all = prevstate.all & ~prevstate_clr.all;
 		prevstate_clr.all = 0;
+	}
+}
+
+int ispasswd(int val)
+{
+	return isalnum(val) || ispunct(val);
+}
+
+void random_init()
+{
+	static int initialised = 0;
+	if (initialised == 0)
+	{
+		unsigned int seed = (unsigned int)time(NULL);
+		srand(seed);
+		initialised = 1;
+		logPrintf( "Rand seed: %d\n", seed);
+	}
+}
+
+void random_bytes(byte* out, int size)
+{
+	random_init();
+
+	int i;
+	for (i = 0; i < size; i++)
+	{
+		out[i] = rand() % 0x100;
+	}
+}
+
+void random_text(byte* out, int size)
+{
+	random_init();
+
+	int i;
+	for (i = 0; i < size; )
+	{
+		int val = rand();
+		byte* itr = (byte*)&val;
+		for (int j = 0; j < sizeof(val); j++, itr++)
+		{
+			if (ispasswd(*itr))
+			{
+				out[i] = *itr;
+				i++;
+				break;
+			}
+		}
 	}
 }

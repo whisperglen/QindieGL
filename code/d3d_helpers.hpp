@@ -30,4 +30,7 @@ typedef union key_inputs_u
 key_inputs_t keypress_get(boolean immediate = false);
 void keypress_frame_ended();
 
+void random_bytes( byte* out, int size );
+void random_text( byte* out, int size );
+
 #endif
