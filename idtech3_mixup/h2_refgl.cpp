@@ -424,6 +424,7 @@ static cvarq2_t* gl_drawflat;
 static cvarq2_t* gl_sortmulti;
 static cvarq2_t* r_nocull;
 static cvarq2_t* gl_dynamic;
+static cvarq2_t* quake_amount;
 static cvarq2_t* rmx_skiplightmaps;
 static cvarq2_t* rmx_novis;
 static cvarq2_t* rmx_normals;
@@ -538,6 +539,7 @@ void h2_refgl_init()
 			gl_sortmulti = riCVAR_GET("gl_sortmulti", "0", 1);
 			r_nocull = riCVAR_GET("r_nocull", "0", 0);
 			gl_dynamic = riCVAR_GET("gl_dynamic", "1", 0);
+			quake_amount = riCVAR_GET("quake_amount", "0", 0);
 			rmx_skiplightmaps = riCVAR_GET("rmx_skiplightmaps", "0", 0);
 			rmx_novis = riCVAR_GET("rmx_novis", "1", 0);
 			rmx_normals = riCVAR_GET("rmx_normals", "0", 0);
@@ -1575,8 +1577,8 @@ static void hk_R_EmitWaterPolys(msurface_t* fa, qboolean undulate)
 	int			render_flags = 0;
 	DWORD		color = D3DCOLOR_ARGB( 255, 255, 255, 255 );
 
-	//color is sometimes set via glColor
-	if ( D3DState.CurrentState.isSet.bits.color )
+	//take color from previous calls to glColor
+	//if ( D3DState.CurrentState.isSet.bits.color )
 		color = D3DState.CurrentState.currentColor;
 	
 	if (fa->texinfo->flags & SURF_FLOWING)
@@ -1638,6 +1640,140 @@ static void hk_R_EmitWaterPolys(msurface_t* fa, qboolean undulate)
 				vb->xyz[2] += r_turbsin[Q_ftol( ((v[0] * 2.3f + v[1]) * 0.015f + rdt * 3.0f) * TURBSCALE ) & 255] * 0.25f +
 					r_turbsin[Q_ftol( ((v[1] * 2.3f + v[0]) * 0.015f + rdt * 6.0f) * TURBSCALE ) & 255] * 0.125f;
 			}
+
+			vb++;
+			ib++;
+		}
+		//glEnd();
+		g_drawBuff.numVertexes += p->numverts;
+		g_drawBuff.numIndexes += totalindexes;
+	}
+
+	R_RenderSurfs( render_flags );
+}
+
+static void hk_R_EmitUnderwaterPolys(msurface_t* fa)
+{
+	HOOK_ONLINE_NOTICE();
+
+	glpoly_t	*p, *bp;
+	float		rdt = /*r_newrefdef.time*/r_newrefdef_time;
+	float		scroll;
+	int			render_flags = 0;
+	DWORD		color = D3DCOLOR_ARGB( 255, 255, 255, 255 );
+
+	//take color from previous calls to glColor
+	//if ( D3DState.CurrentState.isSet.bits.color )
+		color = D3DState.CurrentState.currentColor;
+
+	for (bp = fa->polys; bp != NULL; bp = bp->next)
+	{
+		p = bp;
+
+		struct vertexData_s* vb;
+		unsigned short* ib;
+		unsigned alpha = 255;
+
+		int totalindexes = (3 * p->numverts) - 6;
+		R_CheckDrawBufferSpace( p->numverts, totalindexes, render_flags );
+
+		int i;
+		int index = g_drawBuff.numVertexes;
+		ib = &g_drawBuff.indexes[g_drawBuff.numIndexes];
+		vb = &g_drawBuff.vertexes[g_drawBuff.numVertexes];
+		int start = index;
+
+		//glBegin(GL_TRIANGLE_FAN);
+
+		float* v = p->verts[0];
+		for ( i = 0; i < p->numverts; i++, v += VERTEXSIZE )
+		{
+			if ( i > 2 )
+			{
+				ib[0] = start;
+				ib[1] = index - 1;
+				ib += 2;
+			}
+			ib[0] = index++;
+
+			vb->clr.all = color;
+
+			//glTexCoord2f(s, t);
+			vb->tex0[0] = v[3];
+			vb->tex0[1] = v[4];
+
+			//glVertex3fv(v);
+			VectorCopy( v, vb->xyz );
+
+			vb->xyz[2] += r_turbsin[Q_ftol( ((v[0] * 2.3f + v[1]) * 0.015f + rdt * 3.0f) * TURBSCALE ) & 255] * 0.5f +
+					r_turbsin[Q_ftol( ((v[1] * 2.3f + v[0]) * 0.015f + rdt * 6.0f) * TURBSCALE ) & 255] * 0.25f;
+
+			vb++;
+			ib++;
+		}
+		//glEnd();
+		g_drawBuff.numVertexes += p->numverts;
+		g_drawBuff.numIndexes += totalindexes;
+	}
+
+	R_RenderSurfs( render_flags );
+}
+
+static void hk_R_EmitQuakeFloorPolys(msurface_t* fa)
+{
+	HOOK_ONLINE_NOTICE();
+
+	glpoly_t	*p, *bp;
+	float		rdt = /*r_newrefdef.time*/r_newrefdef_time;
+	float		scroll;
+	int			render_flags = 0;
+	DWORD		color = D3DCOLOR_ARGB( 255, 255, 255, 255 );
+
+	//take color from previous calls to glColor
+	//if ( D3DState.CurrentState.isSet.bits.color )
+	color = D3DState.CurrentState.currentColor;
+
+	for (bp = fa->polys; bp != NULL; bp = bp->next)
+	{
+		p = bp;
+
+		struct vertexData_s* vb;
+		unsigned short* ib;
+		unsigned alpha = 255;
+
+		int totalindexes = (3 * p->numverts) - 6;
+		R_CheckDrawBufferSpace( p->numverts, totalindexes, render_flags );
+
+		int i;
+		int index = g_drawBuff.numVertexes;
+		ib = &g_drawBuff.indexes[g_drawBuff.numIndexes];
+		vb = &g_drawBuff.vertexes[g_drawBuff.numVertexes];
+		int start = index;
+
+		//glBegin(GL_TRIANGLE_FAN);
+
+		float* v = p->verts[0];
+		for ( i = 0; i < p->numverts; i++, v += VERTEXSIZE )
+		{
+			if ( i > 2 )
+			{
+				ib[0] = start;
+				ib[1] = index - 1;
+				ib += 2;
+			}
+			ib[0] = index++;
+
+			vb->clr.all = color;
+
+			//glTexCoord2f(s, t);
+			vb->tex0[0] = v[3];
+			vb->tex0[1] = v[4];
+
+			//glVertex3fv(v);
+			VectorCopy( v, vb->xyz );
+
+			vb->xyz[2] += r_turbsin[Q_ftol( ((v[0] * 2.3f + v[1]) * 0.015f + rdt * 3.0f) * TURBSCALE ) & 255] * (quake_amount->value * 0.05f) * 0.5f +
+				r_turbsin[Q_ftol( ((v[1] * 2.3f + v[0]) * 0.015f + rdt * 6.0f) * TURBSCALE ) & 255] * (quake_amount->value * 0.05f) * 0.25f;
 
 			vb++;
 			ib++;
@@ -1735,6 +1871,10 @@ static void hk_R_RenderView( int* refdef );// = 0x8910
 static void (*fp_R_RenderView)( int* refdef ) = 0;
 static void hk_R_EmitWaterPolys(msurface_t* fa, qboolean undulate);// = 0xeb60
 static void (*fp_R_EmitWaterPolys)(msurface_t* fa, qboolean undulate) = 0;
+static void hk_R_EmitUnderwaterPolys(msurface_t* fa);// = 0xed50
+static void (*fp_R_EmitUnderwaterPolys)(msurface_t* fa) = 0;
+static void hk_R_EmitQuakeFloorPolys(msurface_t* fa);// = 0xee70
+static void (*fp_R_EmitQuakeFloorPolys)(msurface_t* fa) = 0;
 static qboolean hk_VID_GetModeInfo( int* width, int* height, const int mode );// = 0x34bc0
 static qboolean (*fp_VID_GetModeInfo)( int* width, int* height, const int mode ) = 0;
 static void hk_calcnormals( int param_1, float param_2, float param_3, int param_4, int param_5, float* param_6 );
@@ -1788,6 +1928,8 @@ static void h2_generic_fixes()
 	fp_R_BeginRegistration = PTR_FROM_OFFSET( void( *)(const char *), 0x6fb0 );
 	fp_R_RenderView = PTR_FROM_OFFSET( void( *)(int *), 0x8910 );
 	fp_R_EmitWaterPolys = PTR_FROM_OFFSET( void( *)(msurface_t *, qboolean), 0xeb60 );
+	fp_R_EmitUnderwaterPolys = PTR_FROM_OFFSET( void( *)(msurface_t *), 0xed50 );
+	fp_R_EmitQuakeFloorPolys = PTR_FROM_OFFSET( void( *)(msurface_t *), 0xee70 );
 	fp_VID_GetModeInfo = (qboolean( *)(int*, int*, int))((byte*)quake2_data.lpBaseOfDll + 0x34bc0);
 	//fp_calcnormals = PTR_FROM_OFFSET( void (*)(int,float,float,int,int,float*), 0x2a90 );
 
@@ -1875,6 +2017,16 @@ static void h2_detour_action(DetourAction_FP DetourAction)
 		{
 			error = DetourAction( &(PVOID&)fp_R_EmitWaterPolys, hk_R_EmitWaterPolys );
 			CHECK_ABORT( "R_EmitWaterPolys" );
+		}
+		if ( fp_R_EmitUnderwaterPolys )
+		{
+			error = DetourAction( &(PVOID&)fp_R_EmitUnderwaterPolys, hk_R_EmitUnderwaterPolys );
+			CHECK_ABORT( "R_EmitUnderwaterPolys" );
+		}
+		if ( fp_R_EmitQuakeFloorPolys )
+		{
+			error = DetourAction( &(PVOID&)fp_R_EmitQuakeFloorPolys, hk_R_EmitQuakeFloorPolys );
+			CHECK_ABORT( "R_EmitQuakeFloorPolys" );
 		}
 		if ( fp_VID_GetModeInfo )
 		{

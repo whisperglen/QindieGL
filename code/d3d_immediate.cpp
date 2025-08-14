@@ -1223,13 +1223,13 @@ OPENGL_API void WINAPI glBegin( GLenum mode )
 	D3DState_AssureBeginScene( );
 	assert( D3DGlobal.pIMBuffer != NULL );
 	D3DGlobal.pIMBuffer->Begin( mode );
-	D3DState.CurrentState.isSet.all = 0;
 }
 
 OPENGL_API void WINAPI glEnd( )
 {
 	assert( D3DGlobal.pIMBuffer != NULL );
 	D3DGlobal.pIMBuffer->End( );
+	D3DState.CurrentState.isSet.all = 0;
 }
 
 //=========================================
