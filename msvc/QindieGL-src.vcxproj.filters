@@ -16,6 +16,12 @@
     <Filter Include="Source Files\DXUT">
       <UniqueIdentifier>{cd84312e-f5b9-49ba-8c0e-e09db4e7edd8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\Remix">
+      <UniqueIdentifier>{31fa1bf7-b483-402a-a56f-0ad330805937}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Remix">
+      <UniqueIdentifier>{67d9729a-8abc-48a1-81b0-7dcac8cb50a5}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="opengl32.def">
@@ -115,14 +121,14 @@
     <ClCompile Include="..\extern\dxut\dxerr_w.cpp">
       <Filter>Source Files\DXUT</Filter>
     </ClCompile>
-    <ClCompile Include="..\code\rmx_light.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\extern\fnvhash\hash_32a.c">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\Remix</Filter>
     </ClCompile>
     <ClCompile Include="..\code\rmx_gen.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\Remix</Filter>
+    </ClCompile>
+    <ClCompile Include="..\code\rmx_light.cpp">
+      <Filter>Source Files\Remix</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -171,11 +177,11 @@
     <ClInclude Include="..\extern\dxut\dxerr.h">
       <Filter>Source Files\DXUT</Filter>
     </ClInclude>
-    <ClInclude Include="..\code\rmx_light.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\code\rmx_gen.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Remix</Filter>
+    </ClInclude>
+    <ClInclude Include="..\code\rmx_light.h">
+      <Filter>Header Files\Remix</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

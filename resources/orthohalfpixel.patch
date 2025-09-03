@@ -1,0 +1,70 @@
+diff --git a/code/d3d_global.cpp b/code/d3d_global.cpp
+index 1bb62be..b58e0fa 100644
+--- a/code/d3d_global.cpp
++++ b/code/d3d_global.cpp
+@@ -936,6 +936,7 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
+ 	D3DGlobal.settings.projectionMaxZFar = D3DGlobal_GetRegistryValue( "ProjectionMaxZFar", "Settings", 0 );
+ 	D3DGlobal.settings.drawcallFastPath = D3DGlobal_GetRegistryValue( "DrawCallFastPath", "Settings", 0 );
+ 	D3DGlobal.settings.texcoordFix = D3DGlobal_GetRegistryValue( "TexCoordFix", "Settings", 0 );
++	D3DGlobal.settings.orthoHalfPixelFix = D3DGlobal_GetRegistryValue( "OrthoHalfPixelFix", "Settings", 0 );
+ 	D3DGlobal.settings.useSSE = D3DGlobal_GetRegistryValue( "UseSSE", "Settings", 0 );
+ 
+ 	D3DGlobal.normalPtrGuessEnabled = 0;
+diff --git a/code/d3d_global.hpp b/code/d3d_global.hpp
+index 49511e7..e329e6b 100644
+--- a/code/d3d_global.hpp
++++ b/code/d3d_global.hpp
+@@ -159,6 +159,7 @@ typedef struct D3DGlobal_s
+ 		DWORD				projectionFix;
+ 		DWORD				projectionMaxZFar;
+ 		DWORD				texcoordFix;
++		DWORD				orthoHalfPixelFix;
+ 		DWORD				drawcallFastPath;
+ 		DWORD				useSSE;
+ 	} settings;
+diff --git a/code/d3d_matrix.cpp b/code/d3d_matrix.cpp
+index e86f64d..03155b8 100644
+--- a/code/d3d_matrix.cpp
++++ b/code/d3d_matrix.cpp
+@@ -326,10 +326,25 @@ OPENGL_API void WINAPI glOrtho( GLdouble left, GLdouble right, GLdouble bottom,
+ {
+ 	if( !D3DState.currentMatrixStack ) return;
+ 	D3DXMATRIX m;
+-	D3DXMatrixOrthoOffCenterRH( &m,(FLOAT)left + D3DState.viewport_offX,
+-		(FLOAT)right + D3DState.viewport_offX,
+-		(FLOAT)bottom - D3DState.viewport_offY,
+-		(FLOAT)top - D3DState.viewport_offY,
++	float pixeloffX = 0;
++	float pixeloffY = 0;
++	if ( D3DGlobal.settings.orthoHalfPixelFix )
++	{
++		if ( right <= 1 && top <= 1 )
++		{
++			pixeloffX = 0.5f / D3DState.viewport.Width;
++			pixeloffY = 0.5f / D3DState.viewport.Height;
++		}
++		else
++		{
++			pixeloffX = 0.5f;
++			pixeloffY = 0.5f;
++		}
++	}
++	D3DXMatrixOrthoOffCenterRH( &m,(FLOAT)left + D3DState.viewport_offX + pixeloffX,
++		(FLOAT)right + D3DState.viewport_offX + pixeloffX,
++		(FLOAT)bottom - D3DState.viewport_offY + pixeloffY,
++		(FLOAT)top - D3DState.viewport_offY + pixeloffY,
+ 		(FLOAT)zNear,(FLOAT)zFar );
+ 	D3DState.currentMatrixStack->multiply( m );
+ 	*D3DState.currentMatrixModified = true;
+diff --git a/msvc/QindieGL.ini b/msvc/QindieGL.ini
+index 6ff9a76..4ebe49f 100644
+--- a/msvc/QindieGL.ini
++++ b/msvc/QindieGL.ini
+@@ -5,6 +5,7 @@ ProjectionFix = 1
+ ProjectionMaxZFar = 10000 ;overrides an infinite proj matrix by setting a fixed zfar
+ DrawCallFastPath = 1
+ TexCoordFix = 0 ;creates artifacts in idtech3 games
++OrthoHalfPixelFix = 0
+ UseSSE = 1
+ TerminateProcess = 0 ;needs Detours, calls TerminateProcess when the loading exe calls exit/ExitProcess
+ 

@@ -869,6 +869,9 @@ static BOOL D3DGlobal_InitializeDirect3D( void )
 
 	if ( D3DGlobal_ReadGameConf( "RemixAPI" ) )
 	{
+#ifdef QINDIEGLSRC_NO_REMIX
+		logPrintf( "Warn: Remix API will not be initialised because this is the NoRemixMods dll version.\n" );
+#else
 		PFN_remixapi_InitializeLibrary remix_init = (PFN_remixapi_InitializeLibrary)GetProcAddress( D3DGlobal.hD3DDll, "remixapi_InitializeLibrary" );
 		if ( remix_init == NULL )
 		{
@@ -894,6 +897,7 @@ static BOOL D3DGlobal_InitializeDirect3D( void )
 				remixOnline = TRUE;
 			}
 		}
+#endif
 	}
 
 	logPrintf( "Direct3D initialized\n" );

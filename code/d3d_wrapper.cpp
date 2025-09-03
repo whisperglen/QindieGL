@@ -110,8 +110,8 @@ void logPrintf( const char *fmt, ... )
 static TCHAR exename[PATH_SZ] = { 0 };
 static TCHAR dllname[PATH_SZ] = { 0 };
 
-//#define QINDIEGLSRC_NO_DETOURS
-#ifdef QINDIEGLSRC_NO_DETOURS
+//#define QINDIEGLSRC_NO_REMIX
+#ifdef QINDIEGLSRC_NO_REMIX
 int hook_dll_on_load_check() { return false; }
 void hook_on_process_attach() { }
 void hook_do_init(const char*, const char*, const char*) { }

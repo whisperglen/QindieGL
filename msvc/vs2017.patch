@@ -38,7 +38,7 @@ index 1cf2ca1..ddc396a 100644
      <CharacterSet>MultiByte</CharacterSet>
    </PropertyGroup>
 diff --git a/msvc/QindieGL-src.vcxproj b/msvc/QindieGL-src.vcxproj
-index e72d488..fee5249 100644
+index a055d20..06a5b67 100644
 --- a/msvc/QindieGL-src.vcxproj
 +++ b/msvc/QindieGL-src.vcxproj
 @@ -19,27 +19,28 @@
@@ -63,7 +63,7 @@ index e72d488..fee5249 100644
 -    <PlatformToolset>v142</PlatformToolset>
 +    <PlatformToolset>v141</PlatformToolset>
    </PropertyGroup>
-   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoDetours|Win32'" Label="Configuration">
+   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoRemixMods|Win32'" Label="Configuration">
      <ConfigurationType>DynamicLibrary</ConfigurationType>
      <UseDebugLibraries>false</UseDebugLibraries>
      <WholeProgramOptimization>true</WholeProgramOptimization>
