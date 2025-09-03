@@ -968,7 +968,7 @@ static void R_RecursiveWorldNodeEx(mnode_t* node, BOOL inpvs)
 		else if (surf->texinfo->flags & (SURF_TRANS33 | SURF_TRANS66))
 		{
 			// Add to the translucent chain
-			if ( inpvs )
+			//if ( inpvs )
 			{
 				surf->texturechain = r_alpha_surfaces;
 				r_alpha_surfaces = surf;
@@ -1032,8 +1032,11 @@ static void R_RecursiveWorldNodeEx(mnode_t* node, BOOL inpvs)
 			{
 				//these just tank the fps, and since they are not visible let's just not render for now
 				// Add to the translucent chain
-				//surf->texturechain = r_alpha_surfaces;
-				//r_alpha_surfaces = surf;
+				//if ( inpvs )
+				{
+					surf->texturechain = r_alpha_surfaces;
+					r_alpha_surfaces = surf;
+				}
 			}
 			else if ( (qglMultiTexCoord2fARB != NULL || qglMTexCoord2fSGIS != NULL)
 				&& !(surf->flags & (SURF_DRAWTURB|SURF_TALL_WALL)))

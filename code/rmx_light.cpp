@@ -20,8 +20,8 @@
 typedef float vec_t;
 typedef float vec3_t[3];
 
-#define LIGHTS_DYNAMIC_SZ 15
-#define MAX_LIGHTS_DX9 8
+#define LIGHTS_DYNAMIC_SZ 64
+typedef uint64_t iterdl_t;
 
 typedef struct light_data
 {
@@ -74,7 +74,7 @@ int rmx_flashlight = 0;
 D3DXMATRIX camera;
 
 static light_data_t g_lights_dynamic[LIGHTS_DYNAMIC_SZ] = { 0 };
-static uint32_t g_lights_dynamic_bitmap = 0;
+static iterdl_t g_lights_dynamic_bitmap = 0;
 static std::map<uint64_t, light_data_t> g_lights_flares;
 static remixapi_LightHandle g_flashlight_handle[NUM_FLASHLIGHT_HND] = { 0 };
 #define FLASHLIGHT_HASH 0xF1A581168700ULL
@@ -157,9 +157,9 @@ light_override_t* qdx_4imgui_light_get_override( uint64_t hash, light_type_e typ
 		local.color[2] = 1.0f;
 		if ( type == LIGHT_DYNAMIC )
 		{
-			uint32_t keep_searching = g_lights_dynamic_bitmap;
+			iterdl_t keep_searching = g_lights_dynamic_bitmap;
 			light_data_t* l = &g_lights_dynamic[0];
-			uint32_t bit = 1;
+			iterdl_t bit = 1;
 			for ( int i = 0; keep_searching && i < LIGHTS_DYNAMIC_SZ; i++, l++, bit <<= 1 )
 			{
 				if ( g_lights_dynamic_bitmap & bit )
@@ -229,9 +229,9 @@ void qdx_light_scan_closest_lights(light_type_e type)
 
 	if ( type == LIGHT_DYNAMIC )
 	{
-		uint32_t keep_searching = g_lights_dynamic_bitmap;
+		iterdl_t keep_searching = g_lights_dynamic_bitmap;
 		light_data_t* l = &g_lights_dynamic[0];
-		uint32_t bit = 1;
+		iterdl_t bit = 1;
 		for ( i = 0; keep_searching && i < LIGHTS_DYNAMIC_SZ; i++, l++, bit <<= 1 )
 		{
 			if ( g_lights_dynamic_bitmap & bit )
@@ -596,11 +596,11 @@ void qdx_lights_dynamic_linger( int val )
 
 light_data_t* qdx_dynamiclight_get_slot( uint64_t hash )
 {
-	uint32_t keep_searching = g_lights_dynamic_bitmap;
+	iterdl_t keep_searching = g_lights_dynamic_bitmap;
 	light_data_t* l = &g_lights_dynamic[0];
 	light_data_t* sto = NULL;
-	uint32_t sto_bit = 0;
-	uint32_t bit = 1;
+	iterdl_t sto_bit = 0;
+	iterdl_t bit = 1;
 	for ( int i = 0; (keep_searching || sto == NULL) && i < LIGHTS_DYNAMIC_SZ; i++, l++, bit <<= 1 )
 	{
 		if ( g_lights_dynamic_bitmap & bit )
@@ -643,8 +643,8 @@ void qdx_lights_clear(unsigned int light_types)
 		if (light_types & LIGHT_DYNAMIC)
 		{
 			light_data_t* l = &g_lights_dynamic[0];
-			uint32_t keep_searching = g_lights_dynamic_bitmap;
-			uint32_t bit = 1;
+			iterdl_t keep_searching = g_lights_dynamic_bitmap;
+			iterdl_t bit = 1;
 			for (int i = 0; keep_searching && i < LIGHTS_DYNAMIC_SZ; i++, l++, bit <<= 1)
 			{
 				if ( g_lights_dynamic_bitmap & bit )
@@ -697,8 +697,8 @@ void qdx_lights_draw()
 {	
 	//draw dynamic lights, handle both DX9 case or remix
 	light_data_t* l = &g_lights_dynamic[0];
-	uint32_t keep_searching = g_lights_dynamic_bitmap;
-	uint32_t bit = 1;
+	iterdl_t keep_searching = g_lights_dynamic_bitmap;
+	iterdl_t bit = 1;
 	for (int i = 0; keep_searching && i < LIGHTS_DYNAMIC_SZ; i++, l++, bit <<= 1)
 	{
 		if ( g_lights_dynamic_bitmap & bit )
