@@ -15,8 +15,9 @@ enum light_type_e
 	LIGHT_DYNAMIC = 1,
 	LIGHT_CORONA = 2,
 	LIGHT_FLASHLIGHT = 4,
+	LIGHT_NEW = 8,
 
-	LIGHT_ALL = (LIGHT_DYNAMIC|LIGHT_CORONA|LIGHT_FLASHLIGHT)
+	LIGHT_ALL = (LIGHT_DYNAMIC|LIGHT_CORONA|LIGHT_FLASHLIGHT|LIGHT_NEW)
 };
 
 typedef union uint64_comp_u
@@ -46,6 +47,12 @@ int  qdx_light_add(int light_type_e, int ord, const float *position, const float
 void qdx_lights_clear(unsigned int light_types);
 void qdx_lights_draw();
 void qdx_lights_dynamic_linger( int val );
+
+void qdx_lights_load( void *ini, const char *mapname );
+void qdx_flashlight_save();
+void qdx_radiance_save( bool inGlobal );
+void qdx_light_override_save( light_override_t* ovr, bool writeOut = true );
+void qdx_light_override_save_all();
 
 #ifdef __cplusplus
 } //extern "C"

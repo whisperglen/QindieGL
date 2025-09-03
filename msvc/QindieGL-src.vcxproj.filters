@@ -22,6 +22,9 @@
     <Filter Include="Header Files\Remix">
       <UniqueIdentifier>{67d9729a-8abc-48a1-81b0-7dcac8cb50a5}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\imgui">
+      <UniqueIdentifier>{30b688a5-7031-4ce4-8ca4-c11d639516e8}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="opengl32.def">
@@ -130,6 +133,27 @@
     <ClCompile Include="..\code\rmx_light.cpp">
       <Filter>Source Files\Remix</Filter>
     </ClCompile>
+    <ClCompile Include="..\extern\imgui\imgui.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\extern\imgui\imgui_draw.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\extern\imgui\imgui_tables.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\extern\imgui\imgui_widgets.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\extern\imgui\backends\imgui_impl_dx9.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\extern\imgui\backends\imgui_impl_win32.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\code\win_imgui.cpp">
+      <Filter>Source Files\Remix</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\code\d3d_array.hpp">
@@ -182,6 +206,30 @@
     </ClInclude>
     <ClInclude Include="..\code\rmx_light.h">
       <Filter>Header Files\Remix</Filter>
+    </ClInclude>
+    <ClInclude Include="..\extern\imgui\imconfig.h">
+      <Filter>Source Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\extern\imgui\imgui.h">
+      <Filter>Source Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\extern\imgui\imgui_internal.h">
+      <Filter>Source Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\extern\imgui\imstb_rectpack.h">
+      <Filter>Source Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\extern\imgui\imstb_textedit.h">
+      <Filter>Source Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\extern\imgui\imstb_truetype.h">
+      <Filter>Source Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\extern\imgui\backends\imgui_impl_dx9.h">
+      <Filter>Source Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\extern\imgui\backends\imgui_impl_win32.h">
+      <Filter>Source Files\imgui</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -26,6 +26,7 @@ NOTE: RTSS interferes with proper Remix functionality; add NvRemixBridge.exe to 
 - mINI library [https://github.com/metayeti/mINI] (MIT license)
 - Detours library [https://github.com/microsoft/Detours] (MIT license)
 - FNV hash [http://isthe.com/chongo/tech/comp/fnv/] (CC0 1.0 Public Domain license)
+- Dear ImGui [https://github.com/ocornut/imgui] (MIT license)
 
 ## Introduction
 

@@ -94,6 +94,8 @@
 #include <sys/stat.h>
 #include <cctype>
 
+#define MINI_CASE_SENSITIVE
+
 namespace mINI
 {
 	namespace INIStringUtil
@@ -336,15 +338,15 @@ namespace mINI
 			const std::size_t fileSize = static_cast<std::size_t>(fileReadStream.tellg());
 			fileReadStream.seekg(0, std::ios::beg);
 			if (fileSize >= 3) {
-				const char header[3] = {
-					static_cast<char>(fileReadStream.get()),
-					static_cast<char>(fileReadStream.get()),
-					static_cast<char>(fileReadStream.get())
+				const uint8_t header[3] = {
+					static_cast<uint8_t>(fileReadStream.get()),
+					static_cast<uint8_t>(fileReadStream.get()),
+					static_cast<uint8_t>(fileReadStream.get())
 				};
 				isBOM = (
-					header[0] == static_cast<char>(0xEF) &&
-					header[1] == static_cast<char>(0xBB) &&
-					header[2] == static_cast<char>(0xBF)
+					header[0] == static_cast<uint8_t>(0xEF) &&
+					header[1] == static_cast<uint8_t>(0xBB) &&
+					header[2] == static_cast<uint8_t>(0xBF)
 				);
 			}
 			else {
@@ -704,12 +706,12 @@ namespace mINI
 			if (fileWriteStream.is_open())
 			{
 				if (fileIsBOM) {
-					const char utf8_BOM[3] = {
-						static_cast<char>(0xEF),
-						static_cast<char>(0xBB),
-						static_cast<char>(0xBF)
+					const uint8_t utf8_BOM[3] = {
+						static_cast<uint8_t>(0xEF),
+						static_cast<uint8_t>(0xBB),
+						static_cast<uint8_t>(0xBF)
 					};
-					fileWriteStream.write(utf8_BOM, 3);
+					fileWriteStream.write((const char*)utf8_BOM, 3);
 				}
 				if (output.size())
 				{

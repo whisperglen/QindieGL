@@ -340,17 +340,23 @@ typedef struct cvar_s
 #define PRINT_DEVELOPER		1		// Only print when "developer 1".
 #define PRINT_ALERT			2
 
+#define	EXEC_NOW	0		// don't return until completed
+#define	EXEC_INSERT	1		// insert at current position, but don't run yet
+#define	EXEC_APPEND	2		// add to end of the command buffer
+
 #define GL_LIGHTMAP_FORMAT GL_RGBA
 
 #define RI_PRINTF_OFF 4
 #define RI_ERROR_OFF 3
 #define RI_CVAR_GET 5
 #define RI_CVAR_SET 7
+#define RI_EXECTXT 0xd
 
 #define riPRINTF(LVL,...) ((ri_Printf)dp_ri[RI_PRINTF_OFF])( LVL, __VA_ARGS__ )
 #define riERROR(CODE,...) ((ri_Error)dp_ri[RI_ERROR_OFF])( CODE, __VA_ARGS__ )
 #define riCVAR_GET(NAME,VAL,FLAGS) ((ri_Cvar_Get)dp_ri[RI_CVAR_GET] )(NAME,VAL,FLAGS)
 #define riCVAR_SET(NAME,VAL) ((ri_Cvar_Set)dp_ri[RI_CVAR_SET] )(NAME,VAL)
+#define riEXEC_TEXT(WHEN,TEXT) ((ri_Cbuf_ExecuteText)dp_ri[RI_EXECTXT])(WHEN,TEXT)
 
 #define vecmax(a,m)             ((a) > m ? m : (a))
 
@@ -376,6 +382,7 @@ typedef void	(*ri_Printf) (int print_level, const char *str, ...);
 typedef void	(*ri_Error) (int code, char *fmt, ...);
 typedef cvarq2_t* (*ri_Cvar_Get) (const char *name, const char *value, int flags);
 typedef cvarq2_t* (*ri_Cvar_Set)( const char *name, const char *value );
+typedef void (*ri_Cbuf_ExecuteText)( int exec_when, const char *text );
 
 static intptr_t* dp_ri;// = 0x5fd60
 
@@ -1882,6 +1889,7 @@ static qboolean hk_VID_GetModeInfo( int* width, int* height, const int mode );//
 static qboolean (*fp_VID_GetModeInfo)( int* width, int* height, const int mode ) = 0;
 static void hk_calcnormals( int param_1, float param_2, float param_3, int param_4, int param_5, float* param_6 );
 static void (*fp_calcnormals)( int param_1, float param_2, float param_3, int param_4, int param_5, float* param_6 );// = 0x2a90
+static void (*fp_IN_DeactivateMouse)();// = 0x1d240
 
 #define REFDEF_NUMENTITIES_OFF 24
 #define REFDEF_ENTITIES_OFF 25
@@ -1901,6 +1909,7 @@ static void (*fp_free)(void*) = 0;
 
 typedef LONG (WINAPI *DetourAction_FP)(_Inout_ PVOID *ppPointer, _In_ PVOID pDetour);
 static void h2_detour_action( DetourAction_FP );
+static gameparam_t __cdecl h2_implement_api( gameops_t op, gameparam_t p0, gameparam_t p1, gameparam_t p2 );
 
 static void h2_generic_fixes()
 {
@@ -1935,6 +1944,7 @@ static void h2_generic_fixes()
 	fp_R_EmitQuakeFloorPolys = PTR_FROM_OFFSET( void( *)(msurface_t *), 0xee70 );
 	fp_VID_GetModeInfo = (qboolean( *)(int*, int*, int))((byte*)quake2_data.lpBaseOfDll + 0x34bc0);
 	//fp_calcnormals = PTR_FROM_OFFSET( void (*)(int,float,float,int,int,float*), 0x2a90 );
+	fp_IN_DeactivateMouse = (void(*)())((byte*)quake2_data.lpBaseOfDll + 0x1d240);
 
 	//fp_malloc = (void*(*)(size_t))DetourFindFunction( modulename, "malloc" );
 	//fp_free = (void(*)(void*))DetourFindFunction( modulename, "free" );
@@ -1983,6 +1993,8 @@ static void h2_generic_fixes()
 	}
 
 	h2_detour_action( DetourAttach );
+
+	rmx_set_game_api(h2_implement_api);
 }
 
 static void h2_detour_action(DetourAction_FP DetourAction)
@@ -2076,6 +2088,7 @@ static void h2_detour_action(DetourAction_FP DetourAction)
 static void h2_generic_fixes_deinit()
 {
 	h2_detour_action( DetourDetach );
+	rmx_set_game_api( NULL );
 }
 
 static void h2_vid_initialise_resolutions()
@@ -2131,7 +2144,6 @@ static void hk_R_BeginRegistration( const char* model )
 	{
 		//do some cleaning
 		g_halosvalidation.clear();
-		qdx_lights_clear(LIGHT_ALL);
 		qdx_begin_loading_map( model );
 
 		mapname.assign( model );
@@ -2266,6 +2278,44 @@ static void hk_R_RenderView( int* refdef )
 	fp_R_RenderView( refdef );
 }
 
+static void hk_calcnormals( int param_1, float param_2, float param_3, int param_4, int param_5, float* param_6 )
+{
+	HOOK_ONLINE_NOTICE();
+
+	g_calcnormals = param_6;
+	fp_calcnormals( param_1, param_2, param_3, param_4, param_5, param_6 );
+}
+
+static gameparam_t __cdecl h2_implement_api( gameops_t op, gameparam_t p0, gameparam_t p1, gameparam_t p2 )
+{
+	gameparam_t ret = { 0 };
+
+	switch ( op )
+	{
+	case OP_GETVAR: {
+		cvarq2_t* cv = riCVAR_GET(p0.strval, "0", 0 );
+		ret = int(cv->value);
+		break; }
+	case OP_SETVAR:
+		riCVAR_SET( p0.strval, p1.strval );
+		break;
+	case OP_EXECMD:
+		riEXEC_TEXT( EXEC_APPEND, p0.strval );
+		break;
+	case OP_CONPRINT: {
+		riPRINTF( PRINT_ALL, "%s", p1.strval );
+		break; }
+	case OP_DEACTMOUSE:
+		fp_IN_DeactivateMouse();
+		break;
+	default:
+		riPRINTF(PRINT_WARNING, "Unsupported OP:%d\n", op );
+		break;
+	}
+
+	return ret;
+}
+
 static void hk_ResMngr_DeallocateResource( ResourceManager_t *resource, void *toDeallocate, size_t size )
 {
 	HOOK_ONLINE_NOTICE();
@@ -2288,14 +2338,6 @@ static void hk_ResMngr_DeallocateResource( ResourceManager_t *resource, void *to
 			riPRINTF( PRINT_ALL, "DeallocateResource: null ptr\n" );
 		}
 	}
-}
-
-static void hk_calcnormals( int param_1, float param_2, float param_3, int param_4, int param_5, float* param_6 )
-{
-	HOOK_ONLINE_NOTICE();
-
-	g_calcnormals = param_6;
-	fp_calcnormals( param_1, param_2, param_3, param_4, param_5, param_6 );
 }
 
 typedef union GenericUnion4_u

@@ -80,14 +80,14 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;QINDIEGLSRC_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\extern\dx9sdk\include;$(ProjectDir)..\extern\dxut;$(ProjectDir)..\extern\remix;$(ProjectDir)..\extern\fnvhash;$(ProjectDir)..\extern;$(ProjectDir)..\idtech3_mixup;$(ProjectDir)..\extern\mINI;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\extern\dx9sdk\include;$(ProjectDir)..\extern\dxut;$(ProjectDir)..\extern\remix;$(ProjectDir)..\extern\fnvhash;$(ProjectDir)..\extern\imgui;$(ProjectDir)..\extern;$(ProjectDir)..\idtech3_mixup;$(ProjectDir)..\extern\mINI;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <ModuleDefinitionFile>$(ProjectDir)\opengl32.def</ModuleDefinitionFile>
-      <AdditionalDependencies>d3dx9.lib;legacy_stdio_definitions.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3dx9.lib;legacy_stdio_definitions.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(ProjectDir)..\extern\dx9sdk\lib\$(PlatformTarget)\;$(ProjectDir)..\idtech3_mixup\lib.$(PlatformTarget)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
     </Link>
@@ -115,7 +115,7 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration)\$(Proje
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\extern\dx9sdk\include;$(ProjectDir)..\extern\dxut;$(ProjectDir)..\extern\remix;$(ProjectDir)..\extern\fnvhash;$(ProjectDir)..\extern;$(ProjectDir)..\idtech3_mixup;$(ProjectDir)..\extern\mINI%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\extern\dx9sdk\include;$(ProjectDir)..\extern\dxut;$(ProjectDir)..\extern\remix;$(ProjectDir)..\extern\fnvhash;$(ProjectDir)..\extern\imgui;$(ProjectDir)..\extern;$(ProjectDir)..\idtech3_mixup;$(ProjectDir)..\extern\mINI%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
@@ -124,7 +124,7 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration)\$(Proje
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <ModuleDefinitionFile>$(ProjectDir)\opengl32.def</ModuleDefinitionFile>
-      <AdditionalDependencies>d3dx9.lib;legacy_stdio_definitions.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3dx9.lib;legacy_stdio_definitions.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(ProjectDir)..\extern\dx9sdk\lib\$(PlatformTarget)\;$(ProjectDir)..\idtech3_mixup\lib.$(PlatformTarget)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
     </Link>
@@ -152,7 +152,7 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration)\$(Proje
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\extern\dx9sdk\include;$(ProjectDir)..\extern\dxut;$(ProjectDir)..\extern\remix;$(ProjectDir)..\extern\fnvhash;$(ProjectDir)..\extern;$(ProjectDir)..\idtech3_mixup;$(ProjectDir)..\extern\mINI%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\extern\dx9sdk\include;$(ProjectDir)..\extern\dxut;$(ProjectDir)..\extern\remix;$(ProjectDir)..\extern\fnvhash;$(ProjectDir)..\extern\imgui;$(ProjectDir)..\extern;$(ProjectDir)..\idtech3_mixup;$(ProjectDir)..\extern\mINI%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
@@ -161,7 +161,7 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration)\$(Proje
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <ModuleDefinitionFile>$(ProjectDir)\opengl32.def</ModuleDefinitionFile>
-      <AdditionalDependencies>d3dx9.lib;legacy_stdio_definitions.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3dx9.lib;legacy_stdio_definitions.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(ProjectDir)..\extern\dx9sdk\lib\x86\;$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
     </Link>
@@ -216,9 +216,16 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration)\$(Proje
     <ClCompile Include="..\code\d3d_wrapper.cpp" />
     <ClCompile Include="..\code\rmx_gen.cpp" />
     <ClCompile Include="..\code\rmx_light.cpp" />
+    <ClCompile Include="..\code\win_imgui.cpp" />
     <ClCompile Include="..\extern\dxut\dxerr_a.cpp" />
     <ClCompile Include="..\extern\dxut\dxerr_w.cpp" />
     <ClCompile Include="..\extern\fnvhash\hash_32a.c" />
+    <ClCompile Include="..\extern\imgui\backends\imgui_impl_dx9.cpp" />
+    <ClCompile Include="..\extern\imgui\backends\imgui_impl_win32.cpp" />
+    <ClCompile Include="..\extern\imgui\imgui.cpp" />
+    <ClCompile Include="..\extern\imgui\imgui_draw.cpp" />
+    <ClCompile Include="..\extern\imgui\imgui_tables.cpp" />
+    <ClCompile Include="..\extern\imgui\imgui_widgets.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\code\d3d_array.hpp" />
@@ -238,6 +245,14 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration)\$(Proje
     <ClInclude Include="..\code\rmx_gen.h" />
     <ClInclude Include="..\code\rmx_light.h" />
     <ClInclude Include="..\extern\dxut\dxerr.h" />
+    <ClInclude Include="..\extern\imgui\backends\imgui_impl_dx9.h" />
+    <ClInclude Include="..\extern\imgui\backends\imgui_impl_win32.h" />
+    <ClInclude Include="..\extern\imgui\imconfig.h" />
+    <ClInclude Include="..\extern\imgui\imgui.h" />
+    <ClInclude Include="..\extern\imgui\imgui_internal.h" />
+    <ClInclude Include="..\extern\imgui\imstb_rectpack.h" />
+    <ClInclude Include="..\extern\imgui\imstb_textedit.h" />
+    <ClInclude Include="..\extern\imgui\imstb_truetype.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -125,6 +125,10 @@ void D3DGlobal_Cleanup( bool cleanupAll )
 {
 	logPrintf("--- Cleanup( %s ) ---\n", cleanupAll ? "all" : "partial" );
 
+#ifndef QINDIEGLSRC_NO_REMIX
+	rmx_deinit_device();
+#endif
+
 	UTIL_FreeString(D3DGlobal.szWExtensions);
 	D3DGlobal.szWExtensions = nullptr;
 	UTIL_FreeString(D3DGlobal.szExtensions);
@@ -1166,6 +1170,10 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 	D3DGlobal.deviceLost = false;
 	D3DGlobal.sceneBegan = false;
 
+#ifndef QINDIEGLSRC_NO_REMIX
+	rmx_init_device( D3DGlobal.hWnd, D3DGlobal.pDevice );
+#endif
+
 	return D3DGlobal.hGLRC;
 }
 
@@ -1329,10 +1337,16 @@ OPENGL_API BOOL WINAPI wrap_wglSwapBuffers( HDC )
 			}
 		}
 
+#ifndef QINDIEGLSRC_NO_REMIX
+		qdx_imgui_draw();
+#endif
+
 		D3DGlobal.pDevice->EndScene();
 		D3DGlobal.sceneBegan = false;
 
+#ifndef QINDIEGLSRC_NO_REMIX
 		qdx_lights_draw();
+#endif
 
 		HRESULT hr;
 		
@@ -1353,7 +1367,9 @@ OPENGL_API BOOL WINAPI wrap_wglSwapBuffers( HDC )
 		}
 
 		matrix_detect_frame_ended();
+#ifndef QINDIEGLSRC_NO_REMIX
 		hook_frame_ended();
+#endif
 		//call this last, as it clears they key pressed/released flag
 		keypress_frame_ended();
 	}

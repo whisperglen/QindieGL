@@ -116,7 +116,6 @@ int hook_dll_on_load_check() { return false; }
 void hook_on_process_attach() { }
 void hook_do_init(const char*, const char*, const char*) { }
 void hook_do_deinit() { }
-void hook_frame_ended() { }
 #else
 #pragma comment(lib, "idtech3_mixup.lib")
 #endif
