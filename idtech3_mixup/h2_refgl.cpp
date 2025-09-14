@@ -438,6 +438,7 @@ static cvarq2_t* rmx_normals;
 static cvarq2_t* rmx_coronas;
 static cvarq2_t* rmx_generic;
 static cvarq2_t* rmx_dyn_linger;
+static cvarq2_t* rmx_alphacull;
 
 static image_t* (*R_TextureAnimation)(const mtexinfo_t* tex);// = 0xae70;
 static void (APIENTRY** fp_qglMultiTexCoord2fARB)(GLenum target, GLfloat s, GLfloat t);// = 0x53428 0x53770
@@ -553,6 +554,7 @@ void h2_refgl_init()
 			rmx_generic = riCVAR_GET("rmx_generic", "-1", 0);
 			rmx_dyn_linger = riCVAR_GET("rmx_dyn_linger", "1", 1);
 			rmx_coronas = riCVAR_GET("rmx_coronas", "1", 1);
+			rmx_alphacull = riCVAR_GET("rmx_alphacull", "0", 1);
 
 			qdx_lights_dynamic_linger( int(rmx_dyn_linger->value) );
 
@@ -962,6 +964,9 @@ static void R_RecursiveWorldNodeEx(mnode_t* node, BOOL inpvs)
 	// Recurse down the children, front side first
 	R_RecursiveWorldNodeEx(node->children[side], inpvs);
 
+	//alphacull 1 and 2 hides frontface alpha surfs not in pvs
+	bool show_ff_alpha = inpvs || (rmx_alphacull->value < 1);
+
 	for (c = node->numsurfaces, surf = r_worldmodel->surfaces + node->firstsurface; c > 0; c--, surf++)
 	{
 		if (surf->visframe != r_framecount || (surf->flags & SURF_PLANEBACK) != sidebit)
@@ -975,7 +980,7 @@ static void R_RecursiveWorldNodeEx(mnode_t* node, BOOL inpvs)
 		else if (surf->texinfo->flags & (SURF_TRANS33 | SURF_TRANS66))
 		{
 			// Add to the translucent chain
-			//if ( inpvs )
+			if ( show_ff_alpha )
 			{
 				surf->texturechain = r_alpha_surfaces;
 				r_alpha_surfaces = surf;
@@ -1014,6 +1019,9 @@ static void R_RecursiveWorldNodeEx(mnode_t* node, BOOL inpvs)
 	// Recurse down the back side
 	R_RecursiveWorldNodeEx( node->children[!side], inpvs );
 
+	//alphacull 2 hides backface alpha surfs, in addition to alphacull 1 hiding surfs not in pvs
+	bool show_bf_alpha = 0;// show_ff_alpha && (rmx_alphacull->value < 2);
+
 	if ( r_nocull->value )
 	{
 		if (side == 0)
@@ -1039,7 +1047,7 @@ static void R_RecursiveWorldNodeEx(mnode_t* node, BOOL inpvs)
 			{
 				//these just tank the fps, and since they are not visible let's just not render for now
 				// Add to the translucent chain
-				//if ( inpvs )
+				if ( show_bf_alpha )
 				{
 					surf->texturechain = r_alpha_surfaces;
 					r_alpha_surfaces = surf;
@@ -1079,8 +1087,9 @@ static void R_RecursiveWorldNodeEx(mnode_t* node, BOOL inpvs)
 
 #define SKIP_LIGHTMAP 0x7fffu
 
-#define RENDER_TWOTEXTURES 1
-#define RENDER_NORMALS     2
+#define RENDER_TWOTEXTURES 1u
+#define RENDER_NORMALS     2u
+#define MERGE_DUP_VERTEXES 4u
 
 union sort_pack_u
 {
@@ -1143,7 +1152,7 @@ static void R_AddDrawSurf(msurface_t *surf)
 }
 
 static void R_RenderSurfs( int flags );
-static void R_PopulateDrawBuffer( msurface_t* surf, int is_dynamic, int is_flowing, int flags );
+static void R_PopulateDrawBuffer( msurface_t* surf, int is_dynamic, int is_flowing, uint32_t flags );
 static int qsort_compare( const void* arg1, const void* arg2 );
 
 OPENGL_API void WINAPI glTexSubImage2D( GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid* pixels );
@@ -1157,7 +1166,7 @@ static void R_SortAndDrawSurfaces( drawSurf_t* surfs, int numSurfs )
 	int oldTexnum = -1;
 	//int oldFlowing = -1;
 	int oldLightmap = -1;
-	int flags = 0;
+	uint32_t flags = 0;
 
 	union sort_pack_u sort = { 0 };
 	drawSurf_t* s = surfs;
@@ -1264,7 +1273,7 @@ struct drawbuff_s
 	unsigned short indexes[MAX_INDEXES];
 } g_drawBuff;
 
-static void R_CheckDrawBufferSpace( int vertexes, int indexes, int flags )
+static void R_CheckDrawBufferSpace( int vertexes, int indexes, uint32_t flags )
 {
 	if ( g_drawBuff.numVertexes + vertexes > MAX_VERTEXES ||
 		g_drawBuff.numIndexes + indexes > MAX_INDEXES )
@@ -1273,7 +1282,7 @@ static void R_CheckDrawBufferSpace( int vertexes, int indexes, int flags )
 	}
 }
 
-static void R_PopulateDrawBuffer( msurface_t* surf, int is_dynamic, int is_flowing, int flags )
+static void R_PopulateDrawBuffer( msurface_t* surf, int is_dynamic, int is_flowing, uint32_t flags )
 {
 	int i;
 	float *v;
@@ -1350,7 +1359,9 @@ static void R_Model_BuildVBuffAndDraw(int *order, float *normals_array, int *p_a
 	//}
 
 	int oldtexture;
-	int render_flags = rmx_normals->value ? RENDER_NORMALS : 0;
+	uint32_t render_flags = MERGE_DUP_VERTEXES;
+	if(rmx_normals->value)
+		render_flags |= RENDER_NORMALS;
 	
 	while ( 1 )
 	{
@@ -1431,7 +1442,7 @@ static void R_Model_BuildVBuffAndDraw(int *order, float *normals_array, int *p_a
 				if ( (currententity[0x30] & 8) != 0 ) //check if FULLBRIGHT
 				{
 					vb->clr.all = 0xffffffff;
-					render_flags = 0;
+					render_flags &= ~RENDER_NORMALS;
 				}
 				else
 				{
@@ -1522,6 +1533,72 @@ static int qsort_compare( const void *arg1, const void *arg2 )
 	return ret;
 }
 
+static inline int h2_vertexes_compare2( const struct vertexData_s* a, const struct vertexData_s* b )
+{
+	const float epsilon = 1e-9f;
+
+	const float dx = a->xyz[0] - b->xyz[0];
+	if ( abs( dx ) < epsilon )
+	{
+		const float dy = a->xyz[1] - b->xyz[1];
+		if ( abs( dy ) < epsilon )
+		{
+			const float dz = a->xyz[2] - b->xyz[2];
+			if ( abs( dz ) < epsilon )
+			{
+				return 0;
+			}
+			else return (signbit( dz ) ? -1 : 1);
+		}
+		else return (signbit(dy) ? -1 : 1);
+	}
+	else return (signbit( dx ) ? -1 : 1);
+}
+
+static int h2_vertexes_compare( void const* x0, void const* x1 )
+{
+	const struct vertexData_s * a = &g_drawBuff.vertexes[*((uint16_t*)x0)];
+	const struct vertexData_s * b = &g_drawBuff.vertexes[*((uint16_t*)x1)];
+	int res = h2_vertexes_compare2( a, b );
+
+	if ( res == 0 )
+	{
+		if ( a < b )
+			return -1;
+		return 1;
+	}
+	return res;
+}
+
+static void h2_merge_dup_vertexes()
+{
+	static uint16_t idxsort[MAX_INDEXES*2];
+
+	for ( int i = 0; i < g_drawBuff.numIndexes; i++ )
+	{
+		idxsort[2*i] = g_drawBuff.indexes[i];
+		idxsort[2*i+1] = i;
+	}
+
+	qsort( idxsort, g_drawBuff.numIndexes, 2 * sizeof( uint16_t ), h2_vertexes_compare );
+
+	int backi = idxsort[0];
+	const struct vertexData_s* backv = &g_drawBuff.vertexes[backi];
+	for ( int i = 2; i < 2 * g_drawBuff.numIndexes; i+=2 )
+	{
+		const struct vertexData_s* frontv = &g_drawBuff.vertexes[idxsort[i]];
+		if ( 0 == h2_vertexes_compare2( backv, frontv ) && backv->tex0[0] == frontv->tex0[0] && backv->tex0[1] == frontv->tex0[1] )
+		{
+			g_drawBuff.indexes[idxsort[i+1]] = backi;
+		}
+		else
+		{
+			backv = frontv;
+			backi = idxsort[i];
+		}
+	}
+}
+
 OPENGL_API void WINAPI glClear( GLbitfield mask );
 OPENGL_API void WINAPI glClearColor( GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha );
 OPENGL_API void WINAPI glEnableClientState( GLenum cap );
@@ -1539,6 +1616,11 @@ static void R_RenderSurfs( int flags )
 	if ( g_drawBuff.numIndexes )
 	{
 		c_brush_polys++;
+
+		if ( flags & MERGE_DUP_VERTEXES )
+		{
+			//h2_merge_dup_vertexes();
+		}
 
 		glEnableClientState( GL_VERTEX_ARRAY );
 		glVertexPointer( 3, GL_FLOAT, sizeof( struct vertexData_s ), g_drawBuff.vertexes[0].xyz );
@@ -1584,7 +1666,7 @@ static void hk_R_EmitWaterPolys(msurface_t* fa, qboolean undulate)
 	glpoly_t	*p, *bp;
 	float		rdt = /*r_newrefdef.time*/r_newrefdef_time;
 	float		scroll;
-	int			render_flags = 0;
+	uint32_t	render_flags = 0;
 	DWORD		color = D3DCOLOR_ARGB( 255, 255, 255, 255 );
 
 	//take color from previous calls to glColor
@@ -1668,8 +1750,8 @@ static void hk_R_EmitUnderwaterPolys(msurface_t* fa)
 
 	glpoly_t	*p, *bp;
 	float		rdt = /*r_newrefdef.time*/r_newrefdef_time;
-	float		scroll;
-	int			render_flags = 0;
+	//float		scroll;
+	uint32_t	render_flags = 0;
 	DWORD		color = D3DCOLOR_ARGB( 255, 255, 255, 255 );
 
 	//take color from previous calls to glColor
@@ -1735,8 +1817,8 @@ static void hk_R_EmitQuakeFloorPolys(msurface_t* fa)
 
 	glpoly_t	*p, *bp;
 	float		rdt = /*r_newrefdef.time*/r_newrefdef_time;
-	float		scroll;
-	int			render_flags = 0;
+	//float		scroll;
+	uint32_t	render_flags = 0;
 	DWORD		color = D3DCOLOR_ARGB( 255, 255, 255, 255 );
 
 	//take color from previous calls to glColor
