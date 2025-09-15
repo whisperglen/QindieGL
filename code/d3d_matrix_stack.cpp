@@ -51,6 +51,11 @@ BOOL D3DStateMatrix::is_identity()
 	return m_identity;
 }
 
+BOOL D3DStateMatrix::is_ortho()
+{
+	return m_matrix._34 >= 0;
+}
+
 void D3DStateMatrix :: check_inverse()
 {
 	if (m_inverse_dirty) {

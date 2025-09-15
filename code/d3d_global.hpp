@@ -161,11 +161,21 @@ typedef struct D3DGlobal_s
 		DWORD				texcoordFix;
 		DWORD				drawcallFastPath;
 		DWORD				useSSE;
+		struct {
+			DWORD               remixapi;
+			DWORD               orthovertexshader;
+			DWORD               orthoskipuntextureddraws;
+		} game;
 	} settings;
 	struct {
 		void *vertexPtr;
 		void *normalPtr;
 	} normalPtrGuess[5];
+	struct {
+		LPDIRECT3DVERTEXSHADER9 vs;
+		LPDIRECT3DPIXELSHADER9 ps;
+		LPD3DXCONSTANTTABLE constants;
+	} orthoShaders;
 	DWORD normalPtrGuessEnabled;
 	struct {
 		GLfloat*			compiledVertexData;
@@ -194,6 +204,7 @@ extern int D3DGlobal_ReadGameConf( const char* valname );
 extern void* D3DGlobal_ReadGameConfPtr( const char* valname );
 extern int D3DGlobal_ReadGameConfStr( const char* valname, char* out, int outsz );
 extern void D3DGlobal_CPU_Detect();
+extern bool D3DGlobal_IsOrthoProjection();
 
 typedef struct resolution_info_s
 {

@@ -245,6 +245,24 @@ static void D3DState_SetTransform()
 			D3DGlobal.lastError = hr;
 			return;
 		}
+
+		if ( D3DGlobal.settings.game.orthovertexshader)
+		{
+			if ( D3DGlobal_IsOrthoProjection() )
+			{
+				D3DGlobal.pDevice->SetVertexShader( D3DGlobal.orthoShaders.vs );
+				//D3DGlobal.pDevice->SetPixelShader( D3DGlobal.orthoShaders.ps );
+
+				D3DGlobal.orthoShaders.constants->SetMatrix(D3DGlobal.pDevice, "projectionMatrix", D3DGlobal.projectionMatrixStack->top());
+				D3DGlobal.orthoShaders.constants->SetMatrix(D3DGlobal.pDevice, "worldMatrix", D3DGlobal.modelMatrixStack->top());
+				D3DGlobal.orthoShaders.constants->SetMatrix(D3DGlobal.pDevice, "viewMatrix", D3DGlobal.viewMatrixStack->top());
+			}
+			else
+			{
+				D3DGlobal.pDevice->SetVertexShader( NULL );
+				//D3DGlobal.pDevice->SetPixelShader( NULL );
+			}
+		}
 	}
 
 	if (D3DState.TransformState.clippingModified) {

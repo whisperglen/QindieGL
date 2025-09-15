@@ -1248,6 +1248,11 @@ static void internal_DrawArrays( GLenum mode, GLint first, GLsizei count )
 		}
 		D3DGlobal.pIMBuffer->End();
 	} else {
+		//skip drawcall if untextured ortho
+		if ( D3DGlobal.settings.game.orthoskipuntextureddraws && !D3DState.TextureState.currentSamplerCount )
+		{
+			if ( D3DGlobal_IsOrthoProjection() ) return;
+		}
 		//use vertex array mode
 		assert( D3DGlobal.pVABuffer != nullptr );
 		D3DGlobal.pVABuffer->SetIndices<GLushort>( mode, first, first + count - 1, count, nullptr );
@@ -1328,6 +1333,11 @@ static void internal_DrawElements( GLenum mode, GLuint start, GLuint end, GLsize
 
 		D3DGlobal.pIMBuffer->End();
 	} else {
+		//skip drawcall if untextured ortho
+		if ( D3DGlobal.settings.game.orthoskipuntextureddraws && !D3DState.TextureState.currentSamplerCount )
+		{
+			if ( D3DGlobal_IsOrthoProjection() ) return;
+		}
 		//use vertex array mode
 		assert( D3DGlobal.pVABuffer != nullptr );
 		
