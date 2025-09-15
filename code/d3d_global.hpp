@@ -159,6 +159,7 @@ typedef struct D3DGlobal_s
 		DWORD				projectionFix;
 		DWORD				projectionMaxZFar;
 		DWORD				texcoordFix;
+		DWORD               orthoShaderFix;
 		DWORD				drawcallFastPath;
 		DWORD				useSSE;
 	} settings;
@@ -166,6 +167,11 @@ typedef struct D3DGlobal_s
 		void *vertexPtr;
 		void *normalPtr;
 	} normalPtrGuess[5];
+	struct {
+		LPDIRECT3DVERTEXSHADER9 vs;
+		LPDIRECT3DPIXELSHADER9 ps;
+		LPD3DXCONSTANTTABLE constants;
+	} orthoShaders;
 	DWORD normalPtrGuessEnabled;
 	struct {
 		GLfloat*			compiledVertexData;

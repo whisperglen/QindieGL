@@ -32,6 +32,7 @@ public:
 	void set_dirty();
 	void set_identity();
 	BOOL is_identity();
+	BOOL is_ortho();
 
 	operator D3DXMATRIX *()				{ return &m_matrix; }
 	operator const D3DXMATRIX *() const	{ return &m_matrix; }

@@ -33,6 +33,7 @@
 #include "hooking.h"
 #include "rmx_gen.h"
 #include "rmx_light.h"
+#include "resource.h"
 
 #include <tchar.h>
 #include <string.h>
@@ -128,6 +129,25 @@ void D3DGlobal_Cleanup( bool cleanupAll )
 #ifndef QINDIEGLSRC_NO_REMIX
 	rmx_deinit_device();
 #endif
+
+	if ( D3DGlobal.settings.orthoShaderFix )
+	{
+		if ( D3DGlobal.orthoShaders.vs )
+		{
+			D3DGlobal.orthoShaders.vs->Release();
+			D3DGlobal.orthoShaders.vs = 0;
+		}
+		if ( D3DGlobal.orthoShaders.ps )
+		{
+			D3DGlobal.orthoShaders.ps->Release();
+			D3DGlobal.orthoShaders.ps = 0;
+		}
+		if ( D3DGlobal.orthoShaders.constants )
+		{
+			D3DGlobal.orthoShaders.constants->Release();
+			D3DGlobal.orthoShaders.constants = 0;
+		}
+	}
 
 	UTIL_FreeString(D3DGlobal.szWExtensions);
 	D3DGlobal.szWExtensions = nullptr;
@@ -944,6 +964,7 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 	D3DGlobal.settings.projectionMaxZFar = D3DGlobal_GetRegistryValue( "ProjectionMaxZFar", "Settings", 0 );
 	D3DGlobal.settings.drawcallFastPath = D3DGlobal_GetRegistryValue( "DrawCallFastPath", "Settings", 0 );
 	D3DGlobal.settings.texcoordFix = D3DGlobal_GetRegistryValue( "TexCoordFix", "Settings", 0 );
+	D3DGlobal.settings.orthoShaderFix = D3DGlobal_GetRegistryValue( "OrthoShaderFix", "Settings", 0 );
 	D3DGlobal.settings.useSSE = D3DGlobal_GetRegistryValue( "UseSSE", "Settings", 0 );
 
 	D3DGlobal.normalPtrGuessEnabled = 0;
@@ -1173,6 +1194,71 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 #ifndef QINDIEGLSRC_NO_REMIX
 	rmx_init_device( D3DGlobal.hWnd, D3DGlobal.pDevice );
 #endif
+
+	if ( D3DGlobal.settings.orthoShaderFix == 1 )
+	{
+		LPVOID data;
+		UINT size;
+		HRESULT res = 0;
+		bool shaderInitOK = false;
+		do {
+			if ( resource_load_shader( RES_ID_ORTHO_VS, &data, &size, D3DGlobal.hModule ) )
+			{
+				ID3DXBuffer* vertexShaderBuffer;
+
+				res = D3DXCompileShader( (LPCSTR)data, size, NULL, NULL, "main", "vs_1_1", 0, &vertexShaderBuffer, 0, &D3DGlobal.orthoShaders.constants );
+				if ( FAILED( res ) ) break;
+
+				res = D3DGlobal.pDevice->CreateVertexShader( (DWORD*)vertexShaderBuffer->GetBufferPointer(), &D3DGlobal.orthoShaders.vs );
+
+				vertexShaderBuffer->Release();
+				if ( FAILED( res ) ) break;
+			}
+			else break;
+
+			if ( resource_load_shader( RES_ID_ORTHO_PS, &data, &size, D3DGlobal.hModule ) )
+			{
+				ID3DXBuffer* pixelShaderBuffer;
+
+				res = D3DXCompileShader( (LPCSTR)data, size, NULL, NULL, "main", "ps_2_0", 0, &pixelShaderBuffer, 0, 0 );
+				if ( FAILED( res ) ) break;
+
+				res = D3DGlobal.pDevice->CreatePixelShader( (DWORD*)pixelShaderBuffer->GetBufferPointer(), &D3DGlobal.orthoShaders.ps );
+
+				pixelShaderBuffer->Release();
+				if ( FAILED( res ) ) break;
+			}
+			else break;
+
+			shaderInitOK = true;
+		} while ( 0 );
+
+		if ( !shaderInitOK )
+		{
+			D3DGlobal.settings.orthoShaderFix = 0;
+			logPrintf( "Error: OrthoShaderFix disabled due to an error at shader init (%x)\n", res );
+
+			if ( D3DGlobal.orthoShaders.vs )
+			{
+				D3DGlobal.orthoShaders.vs->Release();
+				D3DGlobal.orthoShaders.vs = 0;
+			}
+			if ( D3DGlobal.orthoShaders.ps )
+			{
+				D3DGlobal.orthoShaders.ps->Release();
+				D3DGlobal.orthoShaders.ps = 0;
+			}
+			if ( D3DGlobal.orthoShaders.constants )
+			{
+				D3DGlobal.orthoShaders.constants->Release();
+				D3DGlobal.orthoShaders.constants = 0;
+			}
+		}
+		else
+		{
+			logPrintf( "OrthoShaderFix was initialized\n" );
+		}
+	}
 
 	return D3DGlobal.hGLRC;
 }

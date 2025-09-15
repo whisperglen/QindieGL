@@ -1,5 +1,11 @@
-#define VER_VERSION             1,1,7,3
-#define VER_VERSION_STR         "1.1.7.3\0"
+// Microsoft Visual C++ generated resource script.
+//
+#include "..\\code\\resource.h"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Version
+//
 
 1 VERSIONINFO
  FILEVERSION VER_VERSION
@@ -33,3 +39,62 @@ BEGIN
         VALUE "Translation", 0x409, 1252
     END
 END
+
+
+/////////////////////////////////////////////////////////////////////////////
+// English (United States) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+#include <winres.h>
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+#pragma code_page(1252)
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE 
+BEGIN
+    "\0"
+END
+
+3 TEXTINCLUDE 
+BEGIN
+    "\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// 260
+//
+
+RES_ID_ORTHO_VS         RES_TYPE_SHADER_FILE                     "..\\code\\shaders\\ortho_vs.hlsl"
+
+RES_ID_ORTHO_PS         RES_TYPE_SHADER_FILE                     "..\\code\\shaders\\ortho_ps.hlsl"
+
+#endif    // English (United States) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+
