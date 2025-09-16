@@ -1329,7 +1329,7 @@ OPENGL_API void WINAPI glCopyPixels( GLint, GLint, GLsizei, GLsizei, GLenum )
 	logPrintf("WARNING: glCopyPixels is not supported\n");
 }
 
-OPENGL_API void glDrawPixels( GLsizei, GLsizei, GLenum, GLenum, const GLvoid* )
+OPENGL_API void WINAPI glDrawPixels( GLsizei, GLsizei, GLenum, GLenum, const GLvoid* )
 {
 	logPrintf("WARNING: glDrawPixels is not supported\n");
 }
