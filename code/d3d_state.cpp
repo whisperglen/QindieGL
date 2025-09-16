@@ -26,6 +26,7 @@
 #include "d3d_matrix_stack.hpp"
 #include "d3d_combiners.hpp"
 #include "d3d_matrix_detection.hpp"
+#include <map>
 
 D3DState_t D3DState;
 static D3DState_t D3DStateCopy;
@@ -1293,10 +1294,16 @@ static void D3DState_EnableDisableState( GLenum cap, DWORD value )
 		//ignore, since we're tricking the game to pass NormalPointer
 		break;
 
-	default:
-		logPrintf("WARNING: glEnable/glDisable( 0x%x ) unimplemented\n", cap);
+	default: {
+		static std::map<uint32_t, boolean> warn_shown;
+		auto it = warn_shown.find( cap );
+		if ( it == warn_shown.end() )
+		{
+			warn_shown[cap] = true;
+			logPrintf( "WARNING: glEnable/glDisable( 0x%x ) unimplemented\n", cap );
+		}
 		D3DGlobal.lastError = E_INVALID_ENUM;
-		break;
+		break; }
 	}
 }
 
