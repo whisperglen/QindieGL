@@ -156,7 +156,7 @@ void D3DIMBuffer :: End( )
 	int sizeFVF = 0;
 	if ( m_bXYZW )
 	{
-		PRINT_ONCE("ERROR: Homogenous coordinates strike again!\n");
+		PRINT_ONCE("WARNING: Homogenous coordinates are used in immediate mode\n");
 		iFVF |= D3DFVF_XYZW;
 		sizeFVF += 4 * sizeof( float );
 	}

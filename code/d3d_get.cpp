@@ -25,6 +25,7 @@
 #include "d3d_matrix_stack.hpp"
 #include "d3d_texture.hpp"
 #include "d3d_matrix_detection.hpp"
+#include <map>
 
 //==================================================================================
 // Get* functions
@@ -524,10 +525,28 @@ template<typename T> static void glGet( GLenum pname, T *params )
 		params[0] = 7;
 		break;
 
-	default:
-		logPrintf("WARNING: glGet(0x%x) is not supported\n", pname);
+	case GL_COLOR_CLEAR_VALUE: {
+		const DWORD color = D3DState.ColorBufferState.clearColor;
+		const float r = float( (color >> 16) & 0xFF ) / 255;
+		const float g = float( (color >> 8) & 0xFF ) / 255;
+		const float b = float( (color) & 0xFF ) / 255;
+		const float a = float( (color >> 24) & 0xFF ) / 255;
+		params[0] = T(r);
+		params[1] = T(g);
+		params[2] = T(b);
+		params[3] = T(a);
+		break; }
+
+	default: {
+		static std::map<uint32_t, boolean> warn_shown;
+		auto it = warn_shown.find( pname );
+		if ( it == warn_shown.end() )
+		{
+			warn_shown[pname] = true;
+			logPrintf( "WARNING: glGet(0x%x) is not supported\n", pname );
+		}
 		params[0] = (T)0;
-		break;
+		break; }
 	}
 }
 
