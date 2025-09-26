@@ -303,6 +303,8 @@ OPENGL_API void WINAPI glDebugEntry( DWORD, DWORD )
 }
 OPENGL_API void WINAPI glPushDebugGroup( GLenum source, GLuint id, GLsizei length, const char* message )
 {
+	_CRT_UNUSED( source ); _CRT_UNUSED( length );
+
 	static WCHAR wmessage[2048];
 	if ( D3DGlobal.dbgBeginEvent )
 	{

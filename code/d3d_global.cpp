@@ -965,6 +965,7 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 	D3DGlobal.settings.drawcallFastPath = D3DGlobal_GetRegistryValue( "DrawCallFastPath", "Settings", 0 );
 	D3DGlobal.settings.texcoordFix = D3DGlobal_GetRegistryValue( "TexCoordFix", "Settings", 0 );
 	D3DGlobal.settings.orthoShaderFix = D3DGlobal_GetRegistryValue( "OrthoShaderFix", "Settings", 0 );
+	D3DGlobal.settings.orthoSkipUntexturedDraw = D3DGlobal_GetRegistryValue( "OrthoSkipUntexturedDraw", "Settings", 0 );
 	D3DGlobal.settings.useSSE = D3DGlobal_GetRegistryValue( "UseSSE", "Settings", 0 );
 
 	D3DGlobal.normalPtrGuessEnabled = 0;
@@ -1206,7 +1207,7 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 			{
 				ID3DXBuffer* vertexShaderBuffer;
 
-				res = D3DXCompileShader( (LPCSTR)data, size, NULL, NULL, "main", "vs_1_1", 0, &vertexShaderBuffer, 0, &D3DGlobal.orthoShaders.constants );
+				res = D3DXCompileShader( (LPCSTR)data, size, NULL, NULL, "main", "vs_2_0", 0, &vertexShaderBuffer, 0, &D3DGlobal.orthoShaders.constants );
 				if ( FAILED( res ) ) break;
 
 				res = D3DGlobal.pDevice->CreateVertexShader( (DWORD*)vertexShaderBuffer->GetBufferPointer(), &D3DGlobal.orthoShaders.vs );
@@ -1261,6 +1262,11 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 	}
 
 	return D3DGlobal.hGLRC;
+}
+
+bool D3DGlobal_IsOrthoProjection()
+{
+	return D3DGlobal.projectionMatrixStack->top().is_ortho();
 }
 
 OPENGL_API BOOL WINAPI wrap_wglDeleteContext( HGLRC hglrc )

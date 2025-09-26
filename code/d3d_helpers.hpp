@@ -38,5 +38,6 @@ void random_bytes( byte* out, int size );
 void random_text( byte* out, int size );
 
 bool resource_load_shader( uint32_t id, LPVOID* pData, UINT* pBytes, HMODULE module );
+bool resource_load_pic( uint32_t id, LPVOID* pData, UINT* pSize, UINT* pWidth, UINT* pHeight, HMODULE module );
 
 #endif

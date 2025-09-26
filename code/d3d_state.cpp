@@ -248,7 +248,7 @@ static void D3DState_SetTransform()
 
 		if ( D3DGlobal.settings.orthoShaderFix)
 		{
-			if ( D3DGlobal.projectionMatrixStack->top().is_ortho() )
+			if ( D3DGlobal_IsOrthoProjection() )
 			{
 				D3DGlobal.pDevice->SetVertexShader( D3DGlobal.orthoShaders.vs );
 				//D3DGlobal.pDevice->SetPixelShader( D3DGlobal.orthoShaders.ps );

@@ -160,6 +160,7 @@ typedef struct D3DGlobal_s
 		DWORD				projectionMaxZFar;
 		DWORD				texcoordFix;
 		DWORD               orthoShaderFix;
+		DWORD               orthoSkipUntexturedDraw;
 		DWORD				drawcallFastPath;
 		DWORD				useSSE;
 	} settings;
@@ -200,6 +201,7 @@ extern int D3DGlobal_ReadGameConf( const char* valname );
 extern void* D3DGlobal_ReadGameConfPtr( const char* valname );
 extern int D3DGlobal_ReadGameConfStr( const char* valname, char* out, int outsz );
 extern void D3DGlobal_CPU_Detect();
+extern bool D3DGlobal_IsOrthoProjection();
 
 typedef struct resolution_info_s
 {

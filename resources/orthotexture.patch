@@ -1,0 +1,91 @@
+diff --git a/code/d3d_global.cpp b/code/d3d_global.cpp
+index 2514085..a1123b3 100644
+--- a/code/d3d_global.cpp
++++ b/code/d3d_global.cpp
+@@ -147,6 +147,11 @@ void D3DGlobal_Cleanup( bool cleanupAll )
+ 			D3DGlobal.orthoShaders.constants->Release();
+ 			D3DGlobal.orthoShaders.constants = 0;
+ 		}
++		if ( D3DGlobal.orthoShaders.texture )
++		{
++			D3DGlobal.orthoShaders.texture->Release();
++			D3DGlobal.orthoShaders.texture = 0;
++		}
+ 	}
+ 
+ 	UTIL_FreeString(D3DGlobal.szWExtensions);
+@@ -1199,7 +1204,7 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
+ 	if ( D3DGlobal.settings.orthoShaderFix == 1 )
+ 	{
+ 		LPVOID data;
+-		UINT size;
++		UINT size, width, height;
+ 		HRESULT res = 0;
+ 		bool shaderInitOK = false;
+ 		do {
+@@ -1231,6 +1236,20 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
+ 			}
+ 			else break;
+ 
++			if ( resource_load_pic( RES_ID_PLACEHOLDER_PIC, &data, &size, &width, &height, D3DGlobal.hModule ) )
++			{
++				res = D3DGlobal.pDevice->CreateTexture( width, height, 0, 0, D3DFMT_DXT1, D3DPOOL_MANAGED, &D3DGlobal.orthoShaders.texture, NULL);
++				if ( FAILED( res ) ) break;
++
++				D3DLOCKED_RECT lr;
++				res = D3DGlobal.orthoShaders.texture->LockRect(0, &lr, NULL, 0);
++				if ( FAILED( res ) ) break;
++
++				memcpy( lr.pBits, data, size );
++
++				D3DGlobal.orthoShaders.texture->UnlockRect( 0 );
++			}
++
+ 			shaderInitOK = true;
+ 		} while ( 0 );
+ 
+@@ -1254,6 +1273,11 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
+ 				D3DGlobal.orthoShaders.constants->Release();
+ 				D3DGlobal.orthoShaders.constants = 0;
+ 			}
++			if ( D3DGlobal.orthoShaders.texture )
++			{
++				D3DGlobal.orthoShaders.texture->Release();
++				D3DGlobal.orthoShaders.texture = 0;
++			}
+ 		}
+ 		else
+ 		{
+diff --git a/code/d3d_global.hpp b/code/d3d_global.hpp
+index 59c4a9a..b68cdce 100644
+--- a/code/d3d_global.hpp
++++ b/code/d3d_global.hpp
+@@ -172,6 +172,7 @@ typedef struct D3DGlobal_s
+ 		LPDIRECT3DVERTEXSHADER9 vs;
+ 		LPDIRECT3DPIXELSHADER9 ps;
+ 		LPD3DXCONSTANTTABLE constants;
++		LPDIRECT3DTEXTURE9 texture;
+ 	} orthoShaders;
+ 	DWORD normalPtrGuessEnabled;
+ 	struct {
+diff --git a/msvc/QindieGL.rc b/msvc/QindieGL.rc
+index 7eebbb6..da4ab90 100644
+--- a/msvc/QindieGL.rc
++++ b/msvc/QindieGL.rc
+@@ -76,13 +76,15 @@ END
+ 
+ /////////////////////////////////////////////////////////////////////////////
+ //
+-// 260
++// resources
+ //
+ 
+ RES_ID_ORTHO_VS         RES_TYPE_SHADER_FILE                     "..\\code\\shaders\\ortho_vs.hlsl"
+ 
+ RES_ID_ORTHO_PS         RES_TYPE_SHADER_FILE                     "..\\code\\shaders\\ortho_ps.hlsl"
+ 
++RES_ID_PLACEHOLDER_PIC  RES_TYPE_PIC_DDS                         "..\\resources\\placeholder.dds"
++
+ #endif    // English (United States) resources
+ /////////////////////////////////////////////////////////////////////////////
+ 

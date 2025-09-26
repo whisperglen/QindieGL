@@ -202,3 +202,40 @@ bool resource_load_shader(uint32_t id, LPVOID* pData, UINT* pBytes, HMODULE modu
 	}
 	return res;
 }
+
+typedef struct {
+	DWORD           dwDDSID;
+	DWORD           dwSize;
+	DWORD           dwFlags;
+	DWORD           dwHeight;
+	DWORD           dwWidth;
+	DWORD           dwPitchOrLinearSize;
+	DWORD           dwDepth;
+	DWORD           dwMipMapCount;
+} dds_header_short_t;
+const uint32_t DDS_OFFSET = 0x7C + 4;
+
+bool resource_load_pic( uint32_t id, LPVOID* pData, UINT* pSize, UINT* pWidth, UINT* pHeight, HMODULE module )
+{
+	bool res = false;
+	HRSRC hrs = FindResourceA(module, MAKEINTRESOURCEA(id), MAKEINTRESOURCEA(RES_TYPE_PIC_DDS));
+	if (hrs != NULL)
+	{
+		HGLOBAL hg = LoadResource(module, hrs);
+		if (hg != NULL)
+		{
+			LPVOID data = LockResource(hg);
+			DWORD sz = SizeofResource(module, hrs);
+			if (data != NULL && sz > DDS_OFFSET)
+			{
+				dds_header_short_t* ddsh = (dds_header_short_t*)data;
+				*pData = (uint8_t*)data + DDS_OFFSET;
+				*pSize = UINT(sz) - DDS_OFFSET;
+				*pWidth = ddsh->dwWidth;
+				*pHeight = ddsh->dwHeight;
+				res = true;
+			}
+		}
+	}
+	return res;
+}

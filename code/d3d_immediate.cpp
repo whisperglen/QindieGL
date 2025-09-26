@@ -143,6 +143,15 @@ void D3DIMBuffer :: End( )
 	if ( !m_vertexCount || !m_bBegan ) 
 		return;
 
+	if ( D3DGlobal.settings.orthoSkipUntexturedDraw && !D3DState.TextureState.currentSamplerCount )
+	{
+		if ( D3DGlobal_IsOrthoProjection() )
+		{
+			m_bBegan = false;
+			return;
+		}
+	}
+
 	if ( m_primitiveType == GL_LINE_LOOP ) {
 		//close line
 		EnsureBufferSize( 1 );
