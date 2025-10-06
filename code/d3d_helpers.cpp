@@ -34,7 +34,7 @@ static bool new_frame = true;
 		keystate.var = 0; \
 	}
 
-key_inputs_t keypress_get(boolean immediate)
+key_inputs_t keypress_get(bool immediate)
 {
 	//check once every frame, and return that value for all calls
 	if ( new_frame )

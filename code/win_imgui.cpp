@@ -259,6 +259,29 @@ static void do_draw()
 		}
 	}
 
+	if (ImGui::CollapsingHeader("Fallback Light"))
+	{
+		static float rgb[3] = { 1, 1, 1 };
+		static float cnv[3] = { 1, 1, 1 };
+		static float scale = 1;
+		static bool enabled = true;
+		bool updated = false;
+		if (ImGui::Checkbox("Enabled", &enabled)) updated = true;
+		if (ImGui::ColorEdit3("Color##20", rgb, ImGuiColorEditFlags_Float)) updated = true;
+		if (ImGui::DragFloat("Intensity", &scale, 0.02, 0, 5)) updated = true;
+		if (updated)
+		{
+			float multv = max(max(rgb[0], rgb[1]), rgb[2]);
+			if(multv != 0)
+				multv = scale / multv;
+			cnv[0] = rgb[0] * multv;
+			cnv[1] = rgb[1] * multv;
+			cnv[2] = rgb[2] * multv;
+			rmx_distant_light_radiance(cnv[0], cnv[1], cnv[2], enabled);
+		}
+		ImGui::Text("Final %.3f %.3f %.3f", cnv[0], cnv[1], cnv[2]);
+	}
+
 #ifdef SURFACE_SEPARATION
 	if ( ImGui::CollapsingHeader( "Surface Separation" ) )
 	{
@@ -459,6 +482,11 @@ static void do_draw()
 	}
 #endif
 	
+	ImGui::NewLine(); ImVec2 toggle_sz( 150, 0 );
+	if ( ImGui::Button( "Toggle Flashlight", toggle_sz ) )
+	{
+		rmx_flashlight_enable();
+	}
 #ifdef DEBUG_HELPERS
 	/*==========================
 	* Togglers

@@ -21,6 +21,7 @@
 #include "fnvhash/fnv.h"
 #include <intrin.h>
 
+typedef float vec_t;
 typedef float vec3_t[3];
 typedef float matrix3_t[3][3];
 
@@ -350,6 +351,7 @@ typedef struct cvar_s
 #define RI_ERROR_OFF 3
 #define RI_CVAR_GET 5
 #define RI_CVAR_SET 7
+#define RI_ADDCMD 9
 #define RI_EXECTXT 0xd
 
 #define riPRINTF(LVL,...) ((ri_Printf)dp_ri[RI_PRINTF_OFF])( LVL, __VA_ARGS__ )
@@ -357,6 +359,7 @@ typedef struct cvar_s
 #define riCVAR_GET(NAME,VAL,FLAGS) ((ri_Cvar_Get)dp_ri[RI_CVAR_GET] )(NAME,VAL,FLAGS)
 #define riCVAR_SET(NAME,VAL) ((ri_Cvar_Set)dp_ri[RI_CVAR_SET] )(NAME,VAL)
 #define riEXEC_TEXT(WHEN,TEXT) ((ri_Cbuf_ExecuteText)dp_ri[RI_EXECTXT])(WHEN,TEXT)
+#define riADD_CMD(NAME,FN) ((ri_AddCommand)dp_ri[RI_ADDCMD])(NAME,FN)
 
 #define vecmax(a,m)             ((a) > m ? m : (a))
 
@@ -371,6 +374,31 @@ typedef struct cvar_s
 #define VectorSet(v, x, y, z)	(v[0]=(x), v[1]=(y), v[2]=(z))
 #define VectorMA( v, s, b, o )  ( ( o )[0] = ( v )[0] + ( b )[0] * ( s ),( o )[1] = ( v )[1] + ( b )[1] * ( s ),( o )[2] = ( v )[2] + ( b )[2] * ( s ) )
 
+inline void CrossProduct( const vec3_t v1, const vec3_t v2, vec3_t cross ) {
+	cross[0] = v1[1] * v2[2] - v1[2] * v2[1];
+	cross[1] = v1[2] * v2[0] - v1[0] * v2[2];
+	cross[2] = v1[0] * v2[1] - v1[1] * v2[0];
+}
+
+void VectorNormalize( vec3_t v )
+{
+	float length, ilength;
+
+	length = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+
+	if (length)
+	{
+#if 1
+		_mm_store_ss(&ilength, _mm_rsqrt_ss(_mm_set_ss(length)));
+#else
+		ilength = 1 / sqrtf(length);
+#endif
+		v[0] *= ilength;
+		v[1] *= ilength;
+		v[2] *= ilength;
+	}
+}
+
 #ifndef M_PI
 #define M_PI		3.14159265358979323846	// matches value in gcc v2 math.h
 #endif
@@ -383,6 +411,7 @@ typedef void	(*ri_Error) (int code, char *fmt, ...);
 typedef cvarq2_t* (*ri_Cvar_Get) (const char *name, const char *value, int flags);
 typedef cvarq2_t* (*ri_Cvar_Set)( const char *name, const char *value );
 typedef void (*ri_Cbuf_ExecuteText)( int exec_when, const char *text );
+typedef void (*ri_AddCommand)(const char* name, void (*cmd)(void));
 
 static intptr_t* dp_ri;// = 0x5fd60
 
@@ -429,6 +458,8 @@ float *r_turbsin;// = 0x30684
 static cvarq2_t* r_fullbright;
 static cvarq2_t* gl_drawflat;
 static cvarq2_t* gl_sortmulti;
+static cvarq2_t* gl_showtris;
+static cvarq2_t* gl_shownormals;
 static cvarq2_t* r_nocull;
 static cvarq2_t* gl_dynamic;
 static cvarq2_t* quake_amount;
@@ -487,6 +518,7 @@ static void R_AddDrawSurf( msurface_t* surf );
 
 static void h2_generic_fixes();
 static void h2_generic_fixes_deinit();
+static void h2_flashlight_toggle();
 
 void h2_refgl_init()
 {
@@ -545,6 +577,8 @@ void h2_refgl_init()
 			r_fullbright = riCVAR_GET("r_fullbright", "0", 0);
 			gl_drawflat = riCVAR_GET("gl_drawflat", "0", 0);
 			gl_sortmulti = riCVAR_GET("gl_sortmulti", "0", 1);
+			gl_showtris = riCVAR_GET("gl_showtris", "0", 0);
+			gl_shownormals = riCVAR_GET("gl_shownormals", "0", 0);
 			r_nocull = riCVAR_GET("r_nocull", "0", 0);
 			gl_dynamic = riCVAR_GET("gl_dynamic", "1", 0);
 			quake_amount = riCVAR_GET("quake_amount", "0", 0);
@@ -555,6 +589,8 @@ void h2_refgl_init()
 			rmx_dyn_linger = riCVAR_GET("rmx_dyn_linger", "1", 1);
 			rmx_coronas = riCVAR_GET("rmx_coronas", "1", 1);
 			rmx_alphacull = riCVAR_GET("rmx_alphacull", "0", 1);
+
+			riADD_CMD( "rmx_flashlight_toggle", h2_flashlight_toggle );
 
 			qdx_lights_dynamic_linger( int(rmx_dyn_linger->value) );
 
@@ -778,6 +814,11 @@ void h2_refgl_deinit()
 	}
 
 	h2_generic_fixes_deinit();
+}
+
+static void h2_flashlight_toggle()
+{
+	rmx_flashlight_enable();
 }
 
 OPENGL_API void WINAPI glPushDebugGroup( GLenum source, GLuint id, GLsizei length, const char* message );
@@ -1089,7 +1130,7 @@ static void R_RecursiveWorldNodeEx(mnode_t* node, BOOL inpvs)
 
 #define RENDER_TWOTEXTURES 1u
 #define RENDER_NORMALS     2u
-#define MERGE_DUP_VERTEXES 4u
+#define RECALC_NORMALS     4u
 
 union sort_pack_u
 {
@@ -1153,13 +1194,13 @@ static void R_AddDrawSurf(msurface_t *surf)
 
 static void R_RenderSurfs( int flags );
 static void R_PopulateDrawBuffer( msurface_t* surf, int is_dynamic, int is_flowing, uint32_t flags );
-static int qsort_compare( const void* arg1, const void* arg2 );
+static int h2_surfaces_compare( const void* arg1, const void* arg2 );
 
 OPENGL_API void WINAPI glTexSubImage2D( GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid* pixels );
 
 static void R_SortAndDrawSurfaces( drawSurf_t* surfs, int numSurfs )
 {
-	qsort( surfs, numSurfs, sizeof( drawSurf_t ), qsort_compare );
+	qsort( surfs, numSurfs, sizeof( drawSurf_t ), h2_surfaces_compare );
 
 	unsigned oldSort = ~0u;
 	//int oldDynamic = -1;
@@ -1358,8 +1399,7 @@ static void R_Model_BuildVBuffAndDraw(int *order, float *normals_array, int *p_a
 	//	__debugbreak();
 	//}
 
-	int oldtexture;
-	uint32_t render_flags = MERGE_DUP_VERTEXES;
+	uint32_t render_flags = 0;
 	if(rmx_normals->value)
 		render_flags |= RENDER_NORMALS;
 	
@@ -1395,17 +1435,6 @@ static void R_Model_BuildVBuffAndDraw(int *order, float *normals_array, int *p_a
 		vb = &g_drawBuff.vertexes[g_drawBuff.numVertexes];
 		int start = index;
 
-		if ( rmx_normals->value > 1 )
-		{
-			oldtexture = currenttexture[currenttmu];
-			if ( r_whiteimage == NULL )
-				r_whiteimage = GL_FindImage( "textures/general/white.m8", it_wall );
-			GL_MBind(GL_TEXTURE0, r_whiteimage->texnum);
-			//glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
-			glColor3f( 1, 1, 1 );
-
-			glBegin( GL_LINES );
-		}
 
 		{
 			for ( i = 0; i < count; i++ )
@@ -1474,13 +1503,6 @@ static void R_Model_BuildVBuffAndDraw(int *order, float *normals_array, int *p_a
 				vb++;
 				ib++;
 
-				if ( rmx_normals->value > 1 )
-				{
-					vec3_t tmp;
-					glVertex3fv( vsrc );
-					VectorMA( vsrc, 2, normals, tmp);
-					glVertex3fv( tmp );
-				}
 			} //while (--count);
 		}
 
@@ -1488,19 +1510,12 @@ static void R_Model_BuildVBuffAndDraw(int *order, float *normals_array, int *p_a
 		g_drawBuff.numIndexes += totalindexes;
 		//qglEnd ();
 
-		if ( rmx_normals->value > 1 )
-		{
-			glEnd();
-			GL_MBind(GL_TEXTURE0, oldtexture);
-
-			//glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
-		}
 	}
 
 	R_RenderSurfs( render_flags );
 }
 
-static int qsort_compare( const void *arg1, const void *arg2 )
+static int h2_surfaces_compare( const void *arg1, const void *arg2 )
 {
 	int ret = 0;
 
@@ -1570,33 +1585,206 @@ static int h2_vertexes_compare( void const* x0, void const* x1 )
 	return res;
 }
 
-static void h2_merge_dup_vertexes()
+inline int IsVectorZero( const vec3_t v )
 {
-	static uint16_t idxsort[MAX_INDEXES*2];
+	return (v[0] == 0.f) && (v[1] == 0.f) && (v[2] == 0.f);
+}
 
-	for ( int i = 0; i < g_drawBuff.numIndexes; i++ )
+inline void MergeNormal( const vec3_t normal, uint index, const uint16_t* remapvpos )
+{
+	float* ndst, dot;
+	int vzero;
+	if (remapvpos)
+		index = remapvpos[index];
+	ndst = g_drawBuff.vertexes[index].normal;
+
+	VectorAdd( normal, ndst, ndst );
+	VectorNormalize( ndst );
+}
+
+static void h2_recalculate_normals()
+{
+	static uint16_t sortvpos[MAX_VERTEXES];
+	static uint16_t remapvpos[MAX_VERTEXES];
+	static uint16_t dupvpos[2*MAX_VERTEXES];
+
+	for ( int i = 0; i < g_drawBuff.numVertexes; i++ )
 	{
-		idxsort[2*i] = g_drawBuff.indexes[i];
-		idxsort[2*i+1] = i;
+		sortvpos[i] = i;
+		remapvpos[i] = i;
 	}
 
-	qsort( idxsort, g_drawBuff.numIndexes, 2 * sizeof( uint16_t ), h2_vertexes_compare );
-
-	int backi = idxsort[0];
-	const struct vertexData_s* backv = &g_drawBuff.vertexes[backi];
-	for ( int i = 2; i < 2 * g_drawBuff.numIndexes; i+=2 )
+	if ( 1 )
 	{
-		const struct vertexData_s* frontv = &g_drawBuff.vertexes[idxsort[i]];
-		if ( 0 == h2_vertexes_compare2( backv, frontv ) && backv->tex0[0] == frontv->tex0[0] && backv->tex0[1] == frontv->tex0[1] )
+		qsort( sortvpos, g_drawBuff.numVertexes, sizeof( uint16_t ), h2_vertexes_compare );
+
+		uint16_t* it = dupvpos;
+		int count = 0;
+		int backi = sortvpos[0];
+		const struct vertexData_s* backv = &g_drawBuff.vertexes[backi];
+		for ( int i = 1; i < g_drawBuff.numVertexes; i++ )
 		{
-			g_drawBuff.indexes[idxsort[i+1]] = backi;
+			int fronti = sortvpos[i];
+			const struct vertexData_s* frontv = &g_drawBuff.vertexes[fronti];
+			if ( 0 == h2_vertexes_compare2( backv, frontv ) )
+			{
+				remapvpos[fronti] = backi;
+				if ( count == 0 )
+				{
+					count++;
+					it[count] = backi;
+				}
+				count++;
+				it[count] = fronti;
+			}
+			else
+			{
+				backv = frontv;
+				backi = fronti;
+				if ( count )
+				{
+					it[0] = count;
+					it += count +1;
+					count = 0;
+				}
+			}
 		}
-		else
-		{
-			backv = frontv;
-			backi = idxsort[i];
-		}
+		it[0] = count;
+		it[count+1] = 0;
 	}
+
+	struct vertexData_s* v = g_drawBuff.vertexes;
+	for ( int i = 0; i < g_drawBuff.numVertexes; i++, v++ )
+	{
+		VectorClear( v->normal );
+	}
+
+	for ( int i = 0; i < g_drawBuff.numIndexes; i += 3 )
+	{
+		uint i0 = g_drawBuff.indexes[i];
+		uint i1 = g_drawBuff.indexes[i+1];
+		uint i2 = g_drawBuff.indexes[i+2];
+
+		const float *v0 = g_drawBuff.vertexes[i0].xyz;
+		const float *v1 = g_drawBuff.vertexes[i1].xyz;
+		const float *v2 = g_drawBuff.vertexes[i2].xyz;
+
+		vec3_t e1, e2, normal;
+		VectorSubtract( v0, v1, e1 );
+		VectorSubtract( v2, v1, e2 );
+		CrossProduct( e1, e2, normal );
+		VectorNormalize( normal );
+		
+		const uint16_t* param = 1 ? NULL : remapvpos;
+
+		MergeNormal( normal, i0, param);
+		MergeNormal( normal, i1, param);
+		MergeNormal( normal, i2, param);
+	}
+
+	uint16_t* it = dupvpos;
+	while ( it[0] )
+	{
+		int count = it[0];
+		it++;
+
+		uint32_t visited = 0;
+		uint32_t visitend = (1 << count) - 1;
+		for ( int i = 0; i < count && visited != visitend; i++ )
+		{
+			vec3_t sum;
+			uint32_t visitnow = 0;
+			int indexi = it[i];
+			visited |= 1 << i;
+			float* ni = g_drawBuff.vertexes[indexi].normal;
+			VectorCopy(ni, sum);
+			for ( int j = i + 1; j < count; j++ )
+			{
+				uint32_t visitid = 1 << j;
+				if (visitid & visited)
+					continue;
+
+				int indexj = it[j];
+				float* nj = g_drawBuff.vertexes[indexj].normal;
+				float dot = DotProduct( nj, ni );
+				if ( dot > 0.01f )
+				{
+					VectorAdd(nj, sum, sum);
+					remapvpos[indexj] = indexi;
+					visitnow |= visitid;
+				}
+				else if (remapvpos[indexj] == indexi)
+				{
+					remapvpos[indexj] = indexj;
+				}
+			}
+
+			VectorNormalize(sum);
+			VectorCopy(sum, ni);
+			for (int j = i + 1; j < count; j++)
+			{
+				uint32_t visitid = 1 << j;
+				if (visitid & visitnow)
+				{
+					int indexj = it[j];
+					float* nj = g_drawBuff.vertexes[indexj].normal;
+					VectorCopy(sum, nj);
+				}
+			}
+
+			visited |= visitnow;
+		}
+
+		//for (int i = 0; i < count; i++)
+		//{
+		//	int index = it[i];
+		//	if (remapvpos[index] != index)
+		//	{
+		//		float* ni = g_drawBuff.vertexes[index].normal;
+		//		MergeNormal(ni, remapvpos[index], NULL);
+		//	}
+		//}
+
+		//for (int i = 0; i < count; i++)
+		//{
+		//	int index = it[i];
+		//	if (remapvpos[index] != index)
+		//	{
+		//		float* ni = g_drawBuff.vertexes[index].normal;
+		//		float* nr = g_drawBuff.vertexes[remapvpos[index]].normal;
+		//		VectorCopy(nr, ni);
+		//	}
+		//}
+
+		it += count;
+	}
+}
+
+static void h2_draw_normals()
+{
+	int oldtexture = currenttexture[currenttmu];
+	if ( r_whiteimage == NULL )
+		r_whiteimage = GL_FindImage( "textures/general/white.m8", it_wall );
+	GL_MBind(GL_TEXTURE0, r_whiteimage->texnum);
+	//glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+	glColor3f( 1, 1, 1 );
+
+	glBegin( GL_LINES );
+
+	for ( int i = 0; i < g_drawBuff.numVertexes; i++ )
+	{
+		const float* vsrc = g_drawBuff.vertexes[i].xyz;
+		const float* normals = g_drawBuff.vertexes[i].normal;
+		vec3_t tmp;
+		glVertex3fv( vsrc );
+		VectorMA( vsrc, 3, normals, tmp);
+		glVertex3fv( tmp );
+	}
+
+	glEnd();
+	GL_MBind(GL_TEXTURE0, oldtexture);
+
+	//glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
 }
 
 OPENGL_API void WINAPI glClear( GLbitfield mask );
@@ -1611,15 +1799,36 @@ OPENGL_API void WINAPI glDrawArrays( GLenum mode, GLint first, GLsizei count );
 OPENGL_API void WINAPI glDrawElements( GLenum mode, GLsizei count, GLenum type, const GLvoid* indices );
 OPENGL_API void WINAPI glDisableClientState( GLenum cap );
 
+static void h2_draw_triangles()
+{
+	int oldtexture = currenttexture[currenttmu];
+	if ( r_whiteimage == NULL )
+		r_whiteimage = GL_FindImage( "textures/general/white.m8", it_wall );
+	GL_MBind(GL_TEXTURE0, r_whiteimage->texnum);
+	glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+	glColor3f( 1, 1, 1 );
+
+	glEnableClientState( GL_VERTEX_ARRAY );
+	glVertexPointer( 3, GL_FLOAT, sizeof( struct vertexData_s ), g_drawBuff.vertexes[0].xyz );
+	glDrawElements( GL_TRIANGLES, g_drawBuff.numIndexes, GL_UNSIGNED_SHORT, g_drawBuff.indexes );
+	glDisableClientState( GL_VERTEX_ARRAY );
+
+	GL_MBind(GL_TEXTURE0, oldtexture);
+
+	glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
+}
+
 static void R_RenderSurfs( int flags )
 {
 	if ( g_drawBuff.numIndexes )
 	{
 		c_brush_polys++;
 
-		if ( flags & MERGE_DUP_VERTEXES )
+		if ( flags & RECALC_NORMALS || rmx_normals->value >= 2 )
 		{
-			//h2_merge_dup_vertexes();
+			h2_recalculate_normals();
+			if ( rmx_normals->value >= 3 )
+				flags |= RENDER_NORMALS;
 		}
 
 		glEnableClientState( GL_VERTEX_ARRAY );
@@ -1651,6 +1860,16 @@ static void R_RenderSurfs( int flags )
 		glDisableClientState( GL_COLOR_ARRAY );
 		glDisableClientState( GL_NORMAL_ARRAY );
 		glDisableClientState( GL_VERTEX_ARRAY );
+
+		if ( gl_shownormals->value && (flags & RENDER_NORMALS) )
+		{
+			h2_draw_normals();
+		}
+
+		if ( gl_showtris->value )
+		{
+			h2_draw_triangles();
+		}
 
 		g_drawBuff.numIndexes = 0;
 		g_drawBuff.numVertexes = 0;
@@ -1972,7 +2191,12 @@ static qboolean (*fp_VID_GetModeInfo)( int* width, int* height, const int mode )
 static void hk_calcnormals( int param_1, float param_2, float param_3, int param_4, int param_5, float* param_6 );
 static void (*fp_calcnormals)( int param_1, float param_2, float param_3, int param_4, int param_5, float* param_6 );// = 0x2a90
 static void (*fp_IN_DeactivateMouse)();// = 0x1d240
+static byte** dp_sv_client;// = 0x7becc
+#define sv_client *(dp_sv_client)
 
+#define REFDEF_VIEWORG_OFF 7
+#define REFDEF_CLIENTVIEWORG_OFF 10
+#define REFDEF_VIEWANGLES_OFF 13
 #define REFDEF_NUMENTITIES_OFF 24
 #define REFDEF_ENTITIES_OFF 25
 #define REFDEF_NUMAENTITIES_OFF 26
@@ -2016,6 +2240,7 @@ static void h2_generic_fixes()
 		return;
 	}
 
+	//The following 2 should already be fixed in H2Common.dll if that one is installed
 	fp_ResMngr_DeallocateResource = (byte*)h2common_data.lpBaseOfDll + 0x2650;
 	fp_SLList_Des = (byte*)h2common_data.lpBaseOfDll + 0x26d0;
 	dp_res_mgr = (ResourceManager_t *)((byte*)h2common_data.lpBaseOfDll + 0x10f20);
@@ -2027,6 +2252,7 @@ static void h2_generic_fixes()
 	fp_VID_GetModeInfo = (qboolean( *)(int*, int*, int))((byte*)quake2_data.lpBaseOfDll + 0x34bc0);
 	//fp_calcnormals = PTR_FROM_OFFSET( void (*)(int,float,float,int,int,float*), 0x2a90 );
 	fp_IN_DeactivateMouse = (void(*)())((byte*)quake2_data.lpBaseOfDll + 0x1d240);
+	dp_sv_client = (byte**)((byte*)quake2_data.lpBaseOfDll + 0x7becc);
 
 	//fp_malloc = (void*(*)(size_t))DetourFindFunction( modulename, "malloc" );
 	//fp_free = (void(*)(void*))DetourFindFunction( modulename, "free" );
@@ -2047,6 +2273,25 @@ static void h2_generic_fixes()
 				hook_protect( code, 1, restore );
 
 				logPrintf( "h2_generic_fixes: game start was patched\n" );
+			}
+		}
+	}
+
+	//sometimes quake2.dll calls into CLientEffects when that dll is unloaded, usually at NewGame
+	//let's prevent ClientEffects from being unloaded
+	if ( D3DGlobal_ReadGameConfPtr( "patch_h2_unloadclientdll" ) )
+	{
+		//CLFX_LoadDll calls Sys_UnloadGameDll
+		byte* code = (byte*)quake2_data.lpBaseOfDll + 0x33f4c;
+		if ( code[0] == 0xe8 )
+		{
+			unsigned long restore;
+			if ( hook_unprotect( code, 5, &restore ) )
+			{
+				memset( code, 0x90, 5 );
+				hook_protect( code, 5, restore );
+
+				logPrintf( "h2_generic_fixes: CLFX_LoadDll was patched\n" );
 			}
 		}
 	}
@@ -2142,7 +2387,7 @@ static void h2_detour_action(DetourAction_FP DetourAction)
 		}
 		else
 		{
-			fp_malloc = malloc;
+			//fp_malloc = malloc;
 		}
 		if ( fp_free )
 		{
@@ -2151,7 +2396,7 @@ static void h2_detour_action(DetourAction_FP DetourAction)
 		}
 		else
 		{
-			fp_free = free;
+			//fp_free = free;
 		}
 	} while ( 0 );
 
@@ -2281,80 +2526,119 @@ typedef struct entity_s
 	//a lot of other stuff which we don't need so far, sice we access this struct from a list of pointers
 } entity_t;
 
+// angle indexes
+#define PITCH               0       // up / down
+#define YAW                 1       // left / right
+#define ROLL                2       // fall over
+
+void AngleVectors( const vec3_t angles, vec3_t forward )
+{
+	float angle;
+	float sr, sp, sy, cr, cp, cy;
+
+	angle = angles[YAW] * float(M_PI * 2 / 360);
+	sy = sin( angle );
+	cy = cos( angle );
+	angle = angles[PITCH] * float(M_PI * 2 / 360);
+	sp = sin( angle );
+	cp = cos( angle );
+
+	if ( forward ) {
+		forward[0] = cp * cy;
+		forward[1] = cp * sy;
+		forward[2] = -sp;
+	}
+}
+
 static void hk_R_RenderView( int* refdef )
 {
 	HOOK_ONLINE_NOTICE();
 
-	//grab lights
-	int numLights = refdef[REFDEF_NUMLIGHTS_OFF];
-	particle_t* dlights = (particle_t*)refdef[REFDEF_LIGHTS_OFF];
-
-	for ( int i = 0; i < numLights; i++, dlights++ )
+	if ( r_worldmodel != NULL )
 	{
-		paletteRGBA_t clrb = dlights->color;
-		float color[3] = { (float)clrb.r / 255, (float)clrb.g / 255, (float)clrb.b / 255 };
-		qdx_light_add( LIGHT_DYNAMIC, i, dlights->origin, NULL, color, dlights->scale );
-	}
+		//grab lights
+		int numLights = refdef[REFDEF_NUMLIGHTS_OFF];
+		particle_t* dlights = (particle_t*)refdef[REFDEF_LIGHTS_OFF];
 
-	int numEntities = refdef[REFDEF_NUMENTITIES_OFF];
-	entity_t** entities = (entity_t**)refdef[REFDEF_ENTITIES_OFF];
+		for ( int i = 0; i < numLights; i++, dlights++ )
+		{
+			paletteRGBA_t clrb = dlights->color;
+			float color[3] = { (float)clrb.r / 255, (float)clrb.g / 255, (float)clrb.b / 255 };
+			qdx_light_add( LIGHT_DYNAMIC, i, dlights->origin, NULL, color, dlights->scale );
+		}
 
-	int numAlphaEntities = refdef[REFDEF_NUMAENTITIES_OFF];
-	entity_t** alpha_entities = (entity_t**)refdef[REFDEF_AENTITIES_OFF];
+		int numEntities = refdef[REFDEF_NUMENTITIES_OFF];
+		entity_t** entities = (entity_t**)refdef[REFDEF_ENTITIES_OFF];
+
+		int numAlphaEntities = refdef[REFDEF_NUMAENTITIES_OFF];
+		entity_t** alpha_entities = (entity_t**)refdef[REFDEF_AENTITIES_OFF];
 
 #define HALO_STR "sprites/lens/halo"
 #define FLARE_STR "sprites/lens/flare"
 
-	if ( rmx_coronas->value )
-	{
-		for ( int i = 0; i < numAlphaEntities; i++, alpha_entities++ )
+		if ( rmx_coronas->value )
 		{
-			model_t** model = (*alpha_entities)->model;
-			if ( 0 == strncmp( HALO_STR, (*model)->name, sizeof( HALO_STR ) -1 ) )
+			for ( int i = 0; i < numAlphaEntities; i++, alpha_entities++ )
 			{
-				paletteRGBA_t clrb = (*alpha_entities)->color;
-				uint32_t hash = fnv_32a_buf( &clrb, sizeof( clrb ), 42 );
-				hash = fnv_32a_buf( (*alpha_entities)->origin, 3*sizeof( float ), hash );
-				auto it = g_halosvalidation.find( hash );
-				if ( it != g_halosvalidation.end() )
+				model_t** model = (*alpha_entities)->model;
+				if ( 0 == strncmp( HALO_STR, (*model)->name, sizeof( HALO_STR ) -1 ) )
 				{
-					if ( it->second >= 3 )
+					paletteRGBA_t clrb = (*alpha_entities)->color;
+					uint32_t hash = fnv_32a_buf( &clrb, sizeof( clrb ), 42 );
+					hash = fnv_32a_buf( (*alpha_entities)->origin, 3*sizeof( float ), hash );
+					auto it = g_halosvalidation.find( hash );
+					if ( it != g_halosvalidation.end() )
 					{
-						it = g_halosvalidation.erase( it );
+						if ( it->second >= 3 )
+						{
+							it = g_halosvalidation.erase( it );
 
-						float color[3] = { (float)clrb.r / 255, (float)clrb.g / 255, (float)clrb.b / 255 };
-						int added = qdx_light_add( LIGHT_CORONA, i, (*alpha_entities)->origin, NULL, color, (*alpha_entities)->scale );
-						//if ( added )
-						//{
-						//	riPRINTF( PRINT_ALL, "aded light for %s\n", (*model)->name );
-						//}
+							float color[3] = { (float)clrb.r / 255, (float)clrb.g / 255, (float)clrb.b / 255 };
+							int added = qdx_light_add( LIGHT_CORONA, i, (*alpha_entities)->origin, NULL, color, (*alpha_entities)->scale );
+							//if ( added )
+							//{
+							//	riPRINTF( PRINT_ALL, "aded light for %s\n", (*model)->name );
+							//}
+						}
+						else
+						{
+							it->second += 2;
+						}
 					}
 					else
 					{
-						it->second += 2;
+						g_halosvalidation[hash] = 1;
 					}
-				}
-				else
-				{
-					g_halosvalidation[hash] = 1;
 				}
 			}
 		}
-	}
 
-	auto it = g_halosvalidation.begin();
-	while ( it != g_halosvalidation.end() )
-	{
-		if ( it->second <= 0 )
+		auto it = g_halosvalidation.begin();
+		while ( it != g_halosvalidation.end() )
 		{
-			it = g_halosvalidation.erase( it );
-		}
-		else
-		{
-			it->second--;
+			if ( it->second <= 0 )
+			{
+				it = g_halosvalidation.erase( it );
+			}
+			else
+			{
+				it->second--;
 
-			it++;
+				it++;
+			}
 		}
+
+		//this one gets bad pointers when loading game
+		//player origin
+		//float* origin = (float*)(sv_client + 4);
+		//byte** client = (byte**)(sv_client + 0x1ac);
+		//float* aimangles = (float*)(*client + 0x1834 + 3*sizeof( float ));
+		//float forward[3];
+		//AngleVectors( aimangles, forward );
+		//rmx_setplayerpos( origin, forward );
+		float forward[3];
+		AngleVectors( (float*)&refdef[REFDEF_VIEWANGLES_OFF], forward );
+		rmx_setplayerpos( (float*)&refdef[REFDEF_CLIENTVIEWORG_OFF], forward );
 	}
 
 	fp_R_RenderView( refdef );

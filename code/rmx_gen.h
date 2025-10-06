@@ -16,6 +16,7 @@ const char* qdx_get_active_map();
 void qdx_save_iniconf();
 void qdx_storemapconfflt( const char* base, const char* valname, float value, bool inGlobal = false );
 float qdx_readmapconfflt( const char* base, const char* valname, float default_val );
+void rmx_setplayerpos( const float* origin, const float* direction );
 
 /*****************
 ** game interop **
@@ -51,6 +52,8 @@ typedef union gameparam_u
 } gameparam_t;
 typedef gameparam_t (__cdecl* game_api)(gameops_t op, gameparam_t p0, gameparam_t p1, gameparam_t p2);
 void rmx_set_game_api( game_api fn );
+void rmx_flashlight_enable( int val = -1 );
+void rmx_distant_light_radiance(float r, float g, float b, bool enabled);
 
 /**************************
 ** api for imgui interop **
@@ -85,6 +88,7 @@ void qdx_4imgui_light_clear_override( uint64_t hash );
 int* qdx_4imgui_surface_aabb_selection( int *total );
 const char *qdx_4imgui_shader_info( int *value );
 void qdx_4imgui_surface_aabb_saveselection(const char *hint);
+
 
 /***************
 ** Other utils *

@@ -15,6 +15,7 @@
 #include "mINI/ini.h"
 
 #include "d3d_wrapper.hpp"
+#include "d3d_global.hpp"
 
 typedef float vec_t;
 typedef float vec3_t[3];
@@ -52,8 +53,7 @@ static vec_t Distance( const vec3_t p1, const vec3_t p2 );
 /**
  * Globals
  */
-int rmx_flashlight = 0;
-D3DXMATRIX camera;
+static int rmx_flashlight = 0;
 
 static light_data_t g_lights_dynamic[LIGHTS_DYNAMIC_SZ] = { 0 };
 static iterdl_t g_lights_dynamic_bitmap = 0;
@@ -84,7 +84,7 @@ static float FLASHLIGHT_CONE_SOFTNESS[NUM_FLASHLIGHT_HND] = { 0.05f, 0.02f, 0.02
 static float FLASHLIGHT_VOLUMETRIC[NUM_FLASHLIGHT_HND] = { 1.0f, 1.0f, 1.0f };
 static float FLASHLIGHT_POSITION_CACHE[3] = { 0 };
 static float FLASHLIGHT_DIRECTION_CACHE[3] = { 0 };
-static float FLASHLIGHT_POSITION_OFFSET[3] = { -8, 1, -6 };
+static float FLASHLIGHT_POSITION_OFFSET[3] = { -15, 18, 13 };
 static float FLASHLIGHT_DIRECTION_OFFSET[3] = { 0.095f, -0.08f, 0 };
 static uint64_t LIGHT_PICKING_IDS[3] = { 0 };
 static uint32_t LIGHT_PICKING_COUNT = 0;
@@ -242,6 +242,23 @@ static light_override_t* qdx_light_find_override( uint64_t hash )
 	return NULL;
 }
 
+void rmx_setplayerpos( const float* origin, const float* direction )
+{
+	const vec3_t color = { 1.0f, 1.0f, 1.0f };
+	qdx_light_add( LIGHT_FLASHLIGHT, 0, origin, direction, color, 0 );
+}
+
+void rmx_flashlight_enable( int val )
+{
+	if ( val == 0 || val == 1 )
+	{
+		rmx_flashlight = val;
+	}
+	else
+	{
+		rmx_flashlight ^= 1;
+	}
+}
 
 static bool str_starts_with(const std::string& str, const std::string& prefix)
 {
@@ -740,6 +757,9 @@ int qdx_light_add(int light_type, int ord, const float *position, const float *d
 	if ( light_type == LIGHT_FLASHLIGHT )
 	{
 		//stuff for imgui
+		//bool changed = false;
+		//if( memcmp(FLASHLIGHT_POSITION_CACHE, position, 3*sizeof(float)) || memcmp(FLASHLIGHT_DIRECTION_CACHE, direction, 3*sizeof(float)) )
+		//	changed = true;
 		FLASHLIGHT_POSITION_CACHE[0] = position[0];
 		FLASHLIGHT_POSITION_CACHE[1] = position[1];
 		FLASHLIGHT_POSITION_CACHE[2] = position[2];
@@ -766,7 +786,11 @@ int qdx_light_add(int light_type, int ord, const float *position, const float *d
 			ZeroMemory( &light_sphere, sizeof( light_sphere ) );
 
 			D3DXVECTOR3 tpos, tdir;
-			D3DXMATRIX invview, viewrot(camera);
+			D3DXMATRIX invview, viewrot;
+			const D3DXVECTOR3 updir( 0, 0, 1 );
+			const D3DXVECTOR3 zero( 0, 0, 1 );
+			D3DXMatrixLookAtRH( &viewrot, &zero, (D3DXVECTOR3*)FLASHLIGHT_DIRECTION_CACHE, &updir );
+			//D3DGlobal_GetCamera( &viewrot );
 			viewrot._41 = 0.0;
 			viewrot._42 = 0.0;
 			viewrot._43 = 0.0;

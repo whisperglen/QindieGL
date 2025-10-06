@@ -100,6 +100,7 @@ void qdx_begin_loading_map( const char* mapname )
 
 			// Apply RTX.conf options
 			snprintf( section, sizeof( section ), "rtxconf.%.*s", namelen, name );
+			rmx_console_printf(PRINT_ALL, "RTX.conf section %s\n", section);
 			if ( g_iniconf.has( section ) )
 			{
 				map_opts = &g_iniconf[ section ];
@@ -114,6 +115,7 @@ void qdx_begin_loading_map( const char* mapname )
 				{
 					value = map_opts->operator[](key).c_str();
 				}
+				rmx_console_printf(PRINT_ALL, "Setting option %s = %s\n", key, value);
 				remixapi_ErrorCode rercd = remixInterface.SetConfigVariable( key, value );
 				if ( REMIXAPI_ERROR_CODE_SUCCESS != rercd )
 				{
@@ -125,6 +127,23 @@ void qdx_begin_loading_map( const char* mapname )
 		// Load Light settings
 		qdx_lights_load( &g_iniconf, active_map.c_str() );
 		//qdx_surface_replacements_load( g_iniconf, active_map.c_str() );
+	}
+}
+
+void rmx_distant_light_radiance(float r, float g, float b, bool enabled)
+{
+	static char radiance[64];
+	if (remixOnline)
+	{
+		remixapi_ErrorCode rercd;
+		rercd = remixInterface.SetConfigVariable("rtx.fallbackLightMode", enabled ? "2" : "0");
+		rercd = remixInterface.SetConfigVariable("rtx.fallbackLightType", "0");
+		snprintf(radiance, sizeof(radiance), "%.3f, %.3f, %.3f", r, g, b);
+		rercd = remixInterface.SetConfigVariable("rtx.fallbackLightRadiance", radiance);
+		if (REMIXAPI_ERROR_CODE_SUCCESS != rercd)
+		{
+			rmx_console_printf(PRINT_ERROR, "RMX failed to set config var %d\n", rercd);
+		}
 	}
 }
 

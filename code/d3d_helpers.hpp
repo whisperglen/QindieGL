@@ -31,7 +31,7 @@ typedef union key_inputs_u
 
 #pragma warning( pop )
 
-key_inputs_t keypress_get(boolean immediate = false);
+key_inputs_t keypress_get(bool immediate = false);
 void keypress_frame_ended();
 
 void random_bytes( byte* out, int size );

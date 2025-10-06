@@ -205,6 +205,7 @@ extern void* D3DGlobal_ReadGameConfPtr( const char* valname );
 extern int D3DGlobal_ReadGameConfStr( const char* valname, char* out, int outsz );
 extern void D3DGlobal_CPU_Detect();
 extern bool D3DGlobal_IsOrthoProjection();
+extern void D3DGlobal_GetCamera( D3DXMATRIX* camera );
 
 typedef struct resolution_info_s
 {

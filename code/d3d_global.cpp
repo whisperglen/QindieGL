@@ -1273,6 +1273,19 @@ bool D3DGlobal_IsOrthoProjection()
 	return D3DGlobal.projectionMatrixStack->top().is_ortho();
 }
 
+void D3DGlobal_GetCamera(D3DXMATRIX *camera)
+{
+	D3DMatrixStack* viewStack = D3DGlobal.viewMatrixStack;
+	if ( viewStack->stack_depth() )
+	{
+		memcpy( camera, *viewStack->top(), sizeof( *camera ) );
+	}
+	else
+	{
+		D3DXMatrixIdentity( camera );
+	}
+}
+
 OPENGL_API BOOL WINAPI wrap_wglDeleteContext( HGLRC hglrc )
 {
 	if (!D3DGlobal.hGLRC && ((HGLRC)D3D_CONTEXT_MAGIC == hglrc)) {

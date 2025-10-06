@@ -538,7 +538,7 @@ template<typename T> static void glGet( GLenum pname, T *params )
 		break; }
 
 	default: {
-		static std::map<uint32_t, boolean> warn_shown;
+		static std::map<uint32_t, bool> warn_shown;
 		auto it = warn_shown.find( pname );
 		if ( it == warn_shown.end() )
 		{

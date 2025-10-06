@@ -1,0 +1,55 @@
+diff --git a/code/d3d_array.cpp b/code/d3d_array.cpp
+index 43059b3..7324b57 100644
+--- a/code/d3d_array.cpp
++++ b/code/d3d_array.cpp
+@@ -362,10 +362,10 @@ void D3DVABuffer :: Lock( GLint first, GLint last )
+ 		return;
+ 	}
+ 
+-#define FAST_PATH_SAMPLERS 3
++#define FAST_PATH_SAMPLERS 4
+ 	int fast_path_abort_reason = 0;
+ 	bool qualify_for_fast_path = false;
+-	int tex[FAST_PATH_SAMPLERS] = { -1, -1, -1 };
++	int tex[FAST_PATH_SAMPLERS] = { -1, -1, -1, -1 };
+ 	const D3DVAInfo* pVAInfo;
+ 	do
+ 	{
+@@ -467,6 +467,7 @@ FAST_PATH_CHECK_ABORT:
+ 		const DWORD color = D3DState.CurrentState.currentColor;
+ 		const float* texp[FAST_PATH_SAMPLERS] = { 0 };
+ 		int tex_inc[FAST_PATH_SAMPLERS];
++		int tex_coords[FAST_PATH_SAMPLERS];
+ 		for ( int j = 0; j < FAST_PATH_SAMPLERS; j++ )
+ 		{
+ 			if ( tex[j] == -1 )
+@@ -475,6 +476,7 @@ FAST_PATH_CHECK_ABORT:
+ 			texp[j] = (const float*)pVAInfo->data;
+ 			tex_inc[j] = pVAInfo->stride ? pVAInfo->stride / sizeof(float) : pVAInfo->elementCount;
+ 			texp[j] += first * tex_inc[j];
++			tex_coords[j] = D3DState.TextureState.transformEnabled ? 4 : pVAInfo->elementCount;
+ 		}
+ 
+ 		for (int i = 0; i < count; ++i)
+@@ -509,9 +511,19 @@ FAST_PATH_CHECK_ABORT:
+ 			{
+ 				if ( texp[j] )
+ 				{
+-					dest[0] = texp[j][0]; dest[1] = texp[j][1];
++					switch (tex_coords[j])
++					{
++					case 4:
++						dest[3] = 1;// texp[j][3];
++					case 3:
++						dest[2] = 0;// texp[j][2];
++					case 2:
++						dest[1] = texp[j][1];
++					case 1:
++						dest[0] = texp[j][0];
++					}
+ 					texp[j] += tex_inc[j];
+-					dest += 2;
++					dest += tex_coords[j];
+ 				}
+ 			}
+ 
