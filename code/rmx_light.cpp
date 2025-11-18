@@ -61,6 +61,9 @@ static std::map<uint64_t, light_data_t> g_lights_flares;
 static remixapi_LightHandle g_flashlight_handle[NUM_FLASHLIGHT_HND] = { 0 };
 #define FLASHLIGHT_HASH 0xF1A581168700ULL
 
+#define DISTANTLIGHT_HASH 0xD157A47000ULL
+static remixapi_LightHandle g_distantlight_handle = 0;
+
 //no idea what to choose here
 #define DEFAULT_LIGHT_RADIANCE_DYNAMIC_BASE 75.0f
 #define DEFAULT_LIGHT_RADIANCE_DYNAMIC_SCALE 0.0f
@@ -84,7 +87,7 @@ static float FLASHLIGHT_CONE_SOFTNESS[NUM_FLASHLIGHT_HND] = { 0.05f, 0.02f, 0.02
 static float FLASHLIGHT_VOLUMETRIC[NUM_FLASHLIGHT_HND] = { 1.0f, 1.0f, 1.0f };
 static float FLASHLIGHT_POSITION_CACHE[3] = { 0 };
 static float FLASHLIGHT_DIRECTION_CACHE[3] = { 0 };
-static float FLASHLIGHT_POSITION_OFFSET[3] = { -15, 18, 13 };
+static float FLASHLIGHT_POSITION_OFFSET[3] = { -9, 18, 13 };
 static float FLASHLIGHT_DIRECTION_OFFSET[3] = { 0.095f, -0.08f, 0 };
 static uint64_t LIGHT_PICKING_IDS[3] = { 0 };
 static uint32_t LIGHT_PICKING_COUNT = 0;
@@ -661,6 +664,14 @@ void qdx_lights_clear(unsigned int light_types)
 				}
 			}
 		}
+		if (light_types & LIGHT_DISTANT)
+		{
+			if (g_distantlight_handle)
+			{
+				remixInterface.DestroyLight(g_distantlight_handle);
+				g_distantlight_handle = 0;
+			}
+		}
 	}
 }
 
@@ -710,6 +721,10 @@ void qdx_lights_draw()
 				remixInterface.DrawLightInstance( g_flashlight_handle[i] );
 			}
 		}
+	}
+	if (g_distantlight_handle)
+	{
+		remixInterface.DrawLightInstance(g_distantlight_handle);
 	}
 }
 
@@ -829,11 +844,57 @@ int qdx_light_add(int light_type, int ord, const float *position, const float *d
 			rercd = remixInterface.CreateLight( &lightinfo, &g_flashlight_handle[i] );
 			if ( rercd != REMIXAPI_ERROR_CODE_SUCCESS )
 			{
-				//ri.Printf( PRINT_ERROR, "RMX failed to create flashlight %d\n", rercd );
+				rmx_console_printf(PRINT_ERROR, "RMX failed to create flashlight %d\n", rercd );
 				return 0;
 			}
 			ret = 1;
 		}
+
+		return ret;
+	}
+	if (light_type == LIGHT_DISTANT)
+	{
+		if (!remixOnline)
+		{
+			return 0;
+		}
+		return 0;
+
+		hash = DISTANTLIGHT_HASH;
+
+		if (0 && g_distantlight_handle) //destroying a light creates artifacts; light props get updated regardless
+		{
+			qdx_lights_clear(LIGHT_DISTANT);
+		}
+
+		remixapi_LightInfoDistantEXT light_distant;
+		ZeroMemory(&light_distant, sizeof(light_distant));
+
+		light_distant.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO_DISTANT_EXT;
+		D3DXVec3Normalize((D3DXVECTOR3*)&light_distant.direction, (D3DXVECTOR3*)direction);
+		//light_distant.direction.x = direction[0];
+		//light_distant.direction.y = direction[1];
+		//light_distant.direction.z = direction[2];
+		light_distant.angularDiameterDegrees = 4.0f;
+		light_distant.volumetricRadianceScale = 1.0f;
+
+		remixapi_LightInfo lightinfo;
+		ZeroMemory(&lightinfo, sizeof(lightinfo));
+
+		lightinfo.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO;
+		lightinfo.pNext = &light_distant;
+		lightinfo.hash = DISTANTLIGHT_HASH;
+		lightinfo.radiance.x = color[0];
+		lightinfo.radiance.y = color[1];
+		lightinfo.radiance.z = color[2];
+
+		rercd = remixInterface.CreateLight(&lightinfo, &g_distantlight_handle);
+		if (rercd != REMIXAPI_ERROR_CODE_SUCCESS || !g_distantlight_handle)
+		{
+			rmx_console_printf(PRINT_ERROR, "RMX failed to create distant light %d\n", rercd );
+			return 0;
+		}
+		ret = 1;
 
 		return ret;
 	}
@@ -901,7 +962,7 @@ int qdx_light_add(int light_type, int ord, const float *position, const float *d
 			rercd = remixInterface.CreateLight( &lightinfo, &light_store->handle );
 			if ( rercd != REMIXAPI_ERROR_CODE_SUCCESS )
 			{
-				//ri.Printf( PRINT_ERROR, "RMX failed to create light %d\n", rercd );
+				rmx_console_printf(PRINT_ERROR, "RMX failed to create light %d\n", rercd );
 				return 0;
 			}
 			light_store->hash = hash;

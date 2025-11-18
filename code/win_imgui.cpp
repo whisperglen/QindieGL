@@ -282,6 +282,29 @@ static void do_draw()
 		ImGui::Text("Final %.3f %.3f %.3f", cnv[0], cnv[1], cnv[2]);
 	}
 
+#ifdef FRUSTUM_IMGUI
+	if (ImGui::CollapsingHeader("Frustum Tests"))
+	{
+		ImGui::Checkbox("Active##FRU", (bool*)qdx_4imgui_frustumoverride());
+		ImGui::SliderInt("Type##FRU", qdx_4imgui_frustumtype(), 0, 2);
+		ImGui::NewLine();
+
+		ImGui::SliderFloat3("Plane 0", qdx_4imgui_frustrumplane(0), -1, 1);
+		ImGui::SliderFloat("Dist 0", qdx_4imgui_frustumdist(0), -3000, 3000);
+
+		ImGui::SliderFloat3("Plane 1", qdx_4imgui_frustrumplane(1), -1, 1);
+		ImGui::SliderFloat("Dist 1", qdx_4imgui_frustumdist(1), -3000, 3000);
+
+		ImGui::NewLine();
+
+		ImGui::SliderFloat3("Plane 2", qdx_4imgui_frustrumplane(2), -1, 1);
+		ImGui::SliderFloat("Dist 2", qdx_4imgui_frustumdist(2), -3000, 3000);
+
+		ImGui::SliderFloat3("Plane 3", qdx_4imgui_frustrumplane(3), -1, 1);
+		ImGui::SliderFloat("Dist 3", qdx_4imgui_frustumdist(3), -3000, 3000);
+	}
+#endif
+
 #ifdef SURFACE_SEPARATION
 	if ( ImGui::CollapsingHeader( "Surface Separation" ) )
 	{
@@ -487,6 +510,14 @@ static void do_draw()
 	{
 		rmx_flashlight_enable();
 	}
+
+	float* normals_thresh = rmx_4imgui_getnormalsthresh();
+	if (normals_thresh)
+	{
+		ImGui::NewLine();
+		ImGui::SliderFloat("Normals DOT Threshold", normals_thresh, -1.5, 1.5);
+	}
+
 #ifdef DEBUG_HELPERS
 	/*==========================
 	* Togglers
@@ -687,14 +718,17 @@ void qdx_imgui_draw()
 
 		do_draw();
 
-		if ( D3DGlobal.sceneBegan )
+		if (!D3DGlobal.sceneBegan)
 		{
-			ImGui::Render();
-			ImGui_ImplDX9_RenderDrawData( ImGui::GetDrawData() );
+			D3DGlobal.pDevice->BeginScene();
 		}
-		else
+
+		ImGui::Render();
+		ImGui_ImplDX9_RenderDrawData( ImGui::GetDrawData() );
+
+		if (!D3DGlobal.sceneBegan)
 		{
-			rmx_console_printf( PRINT_ERROR, "Scene did not begin!\n" );
+			D3DGlobal.pDevice->EndScene();
 		}
 
 		if ( zen_val != FALSE )

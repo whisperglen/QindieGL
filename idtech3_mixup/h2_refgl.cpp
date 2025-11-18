@@ -470,6 +470,8 @@ static cvarq2_t* rmx_coronas;
 static cvarq2_t* rmx_generic;
 static cvarq2_t* rmx_dyn_linger;
 static cvarq2_t* rmx_alphacull;
+static cvarq2_t* rmx_nowateranim;
+static cvarq2_t* rmx_noflooranim;
 
 static image_t* (*R_TextureAnimation)(const mtexinfo_t* tex);// = 0xae70;
 static void (APIENTRY** fp_qglMultiTexCoord2fARB)(GLenum target, GLfloat s, GLfloat t);// = 0x53428 0x53770
@@ -589,6 +591,8 @@ void h2_refgl_init()
 			rmx_dyn_linger = riCVAR_GET("rmx_dyn_linger", "1", 1);
 			rmx_coronas = riCVAR_GET("rmx_coronas", "1", 1);
 			rmx_alphacull = riCVAR_GET("rmx_alphacull", "0", 1);
+			rmx_nowateranim = riCVAR_GET("rmx_nowateranim", "0", 1);
+			rmx_noflooranim = riCVAR_GET("rmx_noflooranim", "0", 1);
 
 			riADD_CMD( "rmx_flashlight_toggle", h2_flashlight_toggle );
 
@@ -1602,6 +1606,8 @@ inline void MergeNormal( const vec3_t normal, uint index, const uint16_t* remapv
 	VectorNormalize( ndst );
 }
 
+static float g_normals_angleval = 0.01f;
+
 static void h2_recalculate_normals()
 {
 	static uint16_t sortvpos[MAX_VERTEXES];
@@ -1697,6 +1703,7 @@ static void h2_recalculate_normals()
 			int indexi = it[i];
 			visited |= 1 << i;
 			float* ni = g_drawBuff.vertexes[indexi].normal;
+			//VectorNormalize(ni);
 			VectorCopy(ni, sum);
 			for ( int j = i + 1; j < count; j++ )
 			{
@@ -1706,16 +1713,17 @@ static void h2_recalculate_normals()
 
 				int indexj = it[j];
 				float* nj = g_drawBuff.vertexes[indexj].normal;
+				//VectorNormalize(nj);
 				float dot = DotProduct( nj, ni );
-				if ( dot > 0.01f )
+				if ( dot > g_normals_angleval )
 				{
 					VectorAdd(nj, sum, sum);
-					remapvpos[indexj] = indexi;
+					//remapvpos[indexj] = indexi;
 					visitnow |= visitid;
 				}
 				else if (remapvpos[indexj] == indexi)
 				{
-					remapvpos[indexj] = indexj;
+					//remapvpos[indexj] = indexj;
 				}
 			}
 
@@ -1897,6 +1905,9 @@ static void hk_R_EmitWaterPolys(msurface_t* fa, qboolean undulate)
 	else
 		scroll = 0.0f;
 
+	if (rmx_nowateranim->value)
+		undulate = qfalse;
+
 	for (bp = fa->polys; bp != NULL; bp = bp->next)
 	{
 		p = bp;
@@ -1972,6 +1983,7 @@ static void hk_R_EmitUnderwaterPolys(msurface_t* fa)
 	//float		scroll;
 	uint32_t	render_flags = 0;
 	DWORD		color = D3DCOLOR_ARGB( 255, 255, 255, 255 );
+	qboolean	undulate = rmx_nowateranim->value ? qfalse : qtrue;
 
 	//take color from previous calls to glColor
 	//if ( D3DState.CurrentState.isSet.bits.color )
@@ -2016,8 +2028,11 @@ static void hk_R_EmitUnderwaterPolys(msurface_t* fa)
 			//glVertex3fv(v);
 			VectorCopy( v, vb->xyz );
 
-			vb->xyz[2] += r_turbsin[Q_ftol( ((v[0] * 2.3f + v[1]) * 0.015f + rdt * 3.0f) * TURBSCALE ) & 255] * 0.5f +
-					r_turbsin[Q_ftol( ((v[1] * 2.3f + v[0]) * 0.015f + rdt * 6.0f) * TURBSCALE ) & 255] * 0.25f;
+			if ( undulate )
+			{
+				vb->xyz[2] += r_turbsin[Q_ftol(((v[0] * 2.3f + v[1]) * 0.015f + rdt * 3.0f) * TURBSCALE) & 255] * 0.5f +
+					r_turbsin[Q_ftol(((v[1] * 2.3f + v[0]) * 0.015f + rdt * 6.0f) * TURBSCALE) & 255] * 0.25f;
+			}
 
 			vb++;
 			ib++;
@@ -2039,6 +2054,7 @@ static void hk_R_EmitQuakeFloorPolys(msurface_t* fa)
 	//float		scroll;
 	uint32_t	render_flags = 0;
 	DWORD		color = D3DCOLOR_ARGB( 255, 255, 255, 255 );
+	qboolean	undulate = rmx_noflooranim->value ? qfalse : qtrue;
 
 	//take color from previous calls to glColor
 	//if ( D3DState.CurrentState.isSet.bits.color )
@@ -2083,8 +2099,11 @@ static void hk_R_EmitQuakeFloorPolys(msurface_t* fa)
 			//glVertex3fv(v);
 			VectorCopy( v, vb->xyz );
 
-			vb->xyz[2] += r_turbsin[Q_ftol( ((v[0] * 2.3f + v[1]) * 0.015f + rdt * 3.0f) * TURBSCALE ) & 255] * (quake_amount->value * 0.05f) * 0.5f +
-				r_turbsin[Q_ftol( ((v[1] * 2.3f + v[0]) * 0.015f + rdt * 6.0f) * TURBSCALE ) & 255] * (quake_amount->value * 0.05f) * 0.25f;
+			if ( undulate )
+			{
+				vb->xyz[2] += r_turbsin[Q_ftol(((v[0] * 2.3f + v[1]) * 0.015f + rdt * 3.0f) * TURBSCALE) & 255] * (quake_amount->value * 0.05f) * 0.5f +
+					r_turbsin[Q_ftol(((v[1] * 2.3f + v[0]) * 0.015f + rdt * 6.0f) * TURBSCALE) & 255] * (quake_amount->value * 0.05f) * 0.25f;
+			}
 
 			vb++;
 			ib++;
@@ -2215,7 +2234,7 @@ static void (*fp_free)(void*) = 0;
 
 typedef LONG (WINAPI *DetourAction_FP)(_Inout_ PVOID *ppPointer, _In_ PVOID pDetour);
 static void h2_detour_action( DetourAction_FP );
-static gameparam_t __cdecl h2_implement_api( gameops_t op, gameparam_t p0, gameparam_t p1, gameparam_t p2 );
+static gameparamret_t __cdecl h2_implement_api( gameops_t op, gameparam_t p0, gameparam_t p1, gameparam_t p2 );
 
 static void h2_generic_fixes()
 {
@@ -2652,9 +2671,9 @@ static void hk_calcnormals( int param_1, float param_2, float param_3, int param
 	fp_calcnormals( param_1, param_2, param_3, param_4, param_5, param_6 );
 }
 
-static gameparam_t __cdecl h2_implement_api( gameops_t op, gameparam_t p0, gameparam_t p1, gameparam_t p2 )
+static gameparamret_t __cdecl h2_implement_api( gameops_t op, gameparam_t p0, gameparam_t p1, gameparam_t p2 )
 {
-	gameparam_t ret = { 0 };
+	gameparamret_t ret = { 0 };
 
 	switch ( op )
 	{
@@ -2673,6 +2692,9 @@ static gameparam_t __cdecl h2_implement_api( gameops_t op, gameparam_t p0, gamep
 		break; }
 	case OP_DEACTMOUSE:
 		fp_IN_DeactivateMouse();
+		break;
+	case OP_GETNORMALSTHRESHVAL:
+		ret.pfltval = &g_normals_angleval;
 		break;
 	default:
 		riPRINTF(PRINT_WARNING, "Unsupported OP:%d\n", op );

@@ -256,6 +256,9 @@ static void D3DState_SetTransform()
 				D3DGlobal.orthoShaders.constants->SetMatrix(D3DGlobal.pDevice, "projectionMatrix", D3DGlobal.projectionMatrixStack->top());
 				D3DGlobal.orthoShaders.constants->SetMatrix(D3DGlobal.pDevice, "worldMatrix", D3DGlobal.modelMatrixStack->top());
 				D3DGlobal.orthoShaders.constants->SetMatrix(D3DGlobal.pDevice, "viewMatrix", D3DGlobal.viewMatrixStack->top());
+
+				float texelOffset[4] = { -1.0f/D3DState.viewport.Width, 1.0f/D3DState.viewport.Height, 0.0f, 0.0f };
+				D3DGlobal.pDevice->SetVertexShaderConstantF(0, texelOffset, 1);
 			}
 			else
 			{

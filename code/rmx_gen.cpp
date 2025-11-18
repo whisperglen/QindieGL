@@ -20,6 +20,10 @@ static BOOL g_ini_first_init = FALSE;
 static std::string active_map( "" );
 static game_api g_game_api = NULL;
 
+#define FALLBACKLIGHT_ENVAL (60*3)
+static int rmx_fallbacklight_counter = 0;
+static int rmx_fallbacklight_state = 0;
+
 static void iniconf_first_init()
 {
 	if ( g_ini_first_init == FALSE )
@@ -95,6 +99,9 @@ void qdx_begin_loading_map( const char* mapname )
 	{
 		if ( remixOnline )
 		{
+			static float direction[3];
+			static float radiance[3];
+			int distant_handling = 0;
 			mINI::INIMap<std::string>* default_opts;
 			mINI::INIMap<std::string>* map_opts = 0;
 
@@ -107,6 +114,19 @@ void qdx_begin_loading_map( const char* mapname )
 			}
 			default_opts = &g_iniconf[ "rtxconf.default" ];
 
+			if (rmx_fallbacklight_counter)
+			{
+				rmx_fallbacklight_counter = 0;
+				const char* key = "rtx.fallbackLightMode";
+				const char* value = "0";
+				rmx_console_printf(PRINT_ALL, "Setting option %s = %s\n", key, value);
+				remixapi_ErrorCode rercd = remixInterface.SetConfigVariable(key, value);
+				if (REMIXAPI_ERROR_CODE_SUCCESS != rercd)
+				{
+					rmx_console_printf(PRINT_ERROR, "RMX failed to set config var %d\n", rercd);
+				}
+			}
+
 			for ( auto it = default_opts->begin(); it != default_opts->end(); it++ )
 			{
 				const char* key = it->first.c_str();
@@ -115,6 +135,41 @@ void qdx_begin_loading_map( const char* mapname )
 				{
 					value = map_opts->operator[](key).c_str();
 				}
+
+				if (0 && 0 == strcmp(key, "rtx.fallbackLightRadiance"))
+				{
+					sscanf(value, "%f, %f, %f", &radiance[0], &radiance[1], &radiance[2]);
+					distant_handling |= 1;
+					if (distant_handling == 3)
+					{
+						distant_handling = 0;
+						const float origin[3] = { 0,0,0 };
+						qdx_light_add(LIGHT_DISTANT, 0, origin, direction, radiance, 0);
+					}
+					continue;
+				}
+				if (0 && 0 == strcmp(key, "rtx.fallbackLightDirection"))
+				{
+					sscanf(value, "%f, %f, %f", &direction[0], &direction[1], &direction[2]);
+					distant_handling |= 2;
+					if (distant_handling == 3)
+					{
+						distant_handling = 0;
+						const float origin[3] = { 0,0,0 };
+						qdx_light_add(LIGHT_DISTANT, 0, origin, direction, radiance, 0);
+					}
+					continue;
+				}
+				if (0 == strcmp(key, "rtx.fallbackLightMode"))
+				{
+					rmx_fallbacklight_state = value[0] - '0';
+					if (rmx_fallbacklight_state != 0)
+					{
+						//disabled gets set now, but enabled gets set later as a workaround
+						continue;
+					}
+				}
+
 				rmx_console_printf(PRINT_ALL, "Setting option %s = %s\n", key, value);
 				remixapi_ErrorCode rercd = remixInterface.SetConfigVariable( key, value );
 				if ( REMIXAPI_ERROR_CODE_SUCCESS != rercd )
@@ -147,6 +202,25 @@ void rmx_distant_light_radiance(float r, float g, float b, bool enabled)
 	}
 }
 
+void rmx_frame_end()
+{
+	if (rmx_fallbacklight_state != 0 && rmx_fallbacklight_counter < FALLBACKLIGHT_ENVAL)
+	{
+		rmx_fallbacklight_counter++;
+		if (rmx_fallbacklight_counter == FALLBACKLIGHT_ENVAL)
+		{
+			const char* key = "rtx.fallbackLightMode";
+			const char* value = "2";
+			rmx_console_printf(PRINT_ALL, "Setting option %s = %s\n", key, value);
+			remixapi_ErrorCode rercd = remixInterface.SetConfigVariable(key, value);
+			if (REMIXAPI_ERROR_CODE_SUCCESS != rercd)
+			{
+				rmx_console_printf(PRINT_ERROR, "RMX failed to set config var %d\n", rercd);
+			}
+		}
+	}
+}
+
 void rmx_set_game_api( game_api fn )
 {
 	g_game_api = fn;
@@ -162,7 +236,7 @@ int rmx_gamevar_get( const char *name )
 {
 	if ( g_game_api )
 	{
-		gameparam_t ret = g_game_api( OP_GETVAR, name, NULL, NULL );
+		gameparamret_t ret = g_game_api( OP_GETVAR, name, NULL, NULL );
 		return ret.intval;
 	}
 	return 0;
@@ -194,10 +268,10 @@ void rmx_exec_cmd( const char *cmd )
 		g_game_api( OP_EXECMD, cmd, NULL, NULL );
 }
 
-static int sys_timeBase;
 int rmx_milliseconds( void )
 {
 	static bool initialized = false;
+	static int sys_timeBase;
 
 	if ( !initialized ) {
 		sys_timeBase = timeGetTime();
@@ -206,6 +280,16 @@ int rmx_milliseconds( void )
 	int sys_curtime = timeGetTime() -sys_timeBase;
 
 	return sys_curtime;
+}
+
+float* rmx_4imgui_getnormalsthresh()
+{
+	float* ret = 0;
+
+	if (g_game_api)
+		ret = g_game_api(OP_GETNORMALSTHRESHVAL, NULL, NULL, NULL).pfltval;
+
+	return ret;
 }
 
 void qdx_storemapconfflt( const char* base, const char* valname, float value, bool inGlobal )
@@ -296,11 +380,18 @@ void qdx_assert_failed_str(const char* expression, const char* function, unsigne
 	if (will_print)
 	{
 #ifdef NDEBUG
-		if(supressed_msg)
+		if (supressed_msg)
+		{
+			rmx_console_printf(PRINT_ERROR, "Error: assert failed: %s in %s:%d %s\n", expression, function, line, fn);
 			logPrintf("Error: assert failed and supressing: %s in %s:%d %s\n", expression, function, line, fn);
+		}
 		else
+		{
+			rmx_console_printf(PRINT_ERROR, "Error: assert failed: %s in %s:%d %s\n", expression, function, line, fn);
 			logPrintf("Error: assert failed: %s in %s:%d %s\n", expression, function, line, fn);
+		}
 #else
+		rmx_console_printf(PRINT_ERROR, "Error: assert failed: %s in %s:%d %s\n", expression, function, line, fn);
 		logPrintf("Error: assert failed: %s in %s:%d %s\n", expression, function, line, fn);
 #endif
 	}

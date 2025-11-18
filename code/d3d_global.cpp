@@ -814,6 +814,7 @@ static bool D3DGlobal_SetupPresentParams( int width, int height, int bpp, BOOL w
 
 	D3DGlobal.hPresentParams.FullScreen_RefreshRateInHz = D3DGlobal.hCurrentMode.RefreshRate;
 	D3DGlobal.hPresentParams.Windowed = windowed;
+	D3DGlobal.hPresentParams.PresentationInterval = D3DPRESENT_INTERVAL_ONE;
 
 	// request 1 backbuffer
 	D3DGlobal.hPresentParams.BackBufferCount = 1;
@@ -1446,15 +1447,13 @@ OPENGL_API BOOL WINAPI wrap_wglSwapBuffers( HDC )
 			}
 		}
 
-#ifndef QINDIEGLSRC_NO_REMIX
-		qdx_imgui_draw();
-#endif
-
 		D3DGlobal.pDevice->EndScene();
 		D3DGlobal.sceneBegan = false;
 
 #ifndef QINDIEGLSRC_NO_REMIX
+		qdx_imgui_draw();
 		qdx_lights_draw();
+		rmx_frame_end();
 #endif
 
 		HRESULT hr;
