@@ -21,6 +21,13 @@
 #include "fnvhash/fnv.h"
 #include <intrin.h>
 
+#if !id386
+//for non 32-bit define empty functions
+void h2_refgl_init() {}
+void h2_refgl_deinit() {}
+void h2_refgl_frame_ended() {}
+#else
+
 typedef float vec_t;
 typedef float vec3_t[3];
 typedef float matrix3_t[3][3];
@@ -2697,7 +2704,7 @@ static gameparamret_t __cdecl h2_implement_api( gameops_t op, gameparam_t p0, ga
 		ret.pfltval = &g_normals_angleval;
 		break;
 	default:
-		riPRINTF(PRINT_WARNING, "Unsupported OP:%d\n", op );
+		riPRINTF(PRINT_ALL, "Unsupported OP:%d\n", op );
 		break;
 	}
 
@@ -2817,3 +2824,5 @@ static void __cdecl hk_free( void* block )
 
 	fp_free( (byte*)p + sizeof( *p ) );
 }
+
+#endif

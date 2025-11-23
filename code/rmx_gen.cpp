@@ -347,6 +347,126 @@ float qdx_readmapconfflt( const char* base, const char* valname, float default_v
 	return ret;
 }
 
+void qdx_storemapconfstr(const char* base, const char* valname, const char* value, bool inGlobal)
+{
+	if (inGlobal == false && active_map.length() == 0)
+	{
+		return;
+	}
+
+	std::string section(base);
+	section.append(".");
+	if (inGlobal)
+	{
+		section.append(INICONF_GLOBAL);
+	}
+	else
+	{
+		section.append(active_map.c_str());
+	}
+	g_iniconf[section][valname] = std::string(value);
+}
+
+int qdx_readmapconfstr(const char* base, const char* valname, char* out, int outsz)
+{
+	int tries = 0;
+	std::string section(base);
+	section.append(".");
+	if (active_map.length())
+	{
+		section.append(active_map.c_str());
+	}
+	else
+	{
+		section.append(INICONF_GLOBAL);
+		tries = 1;
+	}
+
+	for (; tries < 2; tries++)
+	{
+		if (g_iniconf.has(section) && g_iniconf[section].has(valname))
+		{
+			errno_t ercd = strncpy_s(out, outsz, g_iniconf[section][valname].c_str(), _TRUNCATE);
+			if (ercd == STRUNCATE)
+			{
+				rmx_console_printf(PRINT_ALL, "readmapconfstr: string truncation for %s, expected max %d bytes.\n", valname, outsz);
+				return 0;
+			}
+			if (ercd == 0)
+			{
+				return 1;
+			}
+		}
+		else
+		{
+			section.assign(base);
+			section.append(".");
+			section.append(INICONF_GLOBAL);
+		}
+	}
+	return 0;
+}
+
+intptr_t qdx_readmapconf_ex(const char* base, const char* valname, int radix)
+{
+	intptr_t ret = 0;
+	int tries = 0;
+	std::string section(base);
+	section.append(".");
+	if (active_map.length())
+	{
+		section.append(active_map.c_str());
+	}
+	else
+	{
+		section.append(INICONF_GLOBAL);
+		tries = 1;
+	}
+
+	for (; tries < 2; tries++)
+	{
+		if (g_iniconf.has(section) && g_iniconf[section].has(valname))
+		{
+			ret = strtoul(g_iniconf[section][valname].c_str(), NULL, radix);
+			break;
+		}
+		else
+		{
+			section.assign(base);
+			section.append(".");
+			section.append(INICONF_GLOBAL);
+		}
+	}
+	return ret;
+}
+
+int qdx_readmapconfint(const char* base, const char* valname)
+{
+	return (int)qdx_readmapconf_ex(base, valname, 10);
+}
+
+void qdx_storemapconfint(const char* base, const char* valname, int value, bool inGlobal)
+{
+	if (inGlobal == false && active_map.length() == 0)
+	{
+		return;
+	}
+	char data[32];
+	snprintf(data, sizeof(data), "%d", value);
+
+	std::string section(base);
+	section.append(".");
+	if (inGlobal)
+	{
+		section.append(INICONF_GLOBAL);
+	}
+	else
+	{
+		section.append(active_map.c_str());
+	}
+	g_iniconf[section][valname] = data;
+}
+
 static std::map<std::string, int> asserted_fns;
 #define ASSERT_MAX_PRINTS 1
 

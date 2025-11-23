@@ -8,6 +8,7 @@ src/extractfuncs/extractfuncs.exe
 ### ignore file changes with:  git update-index --skip-worktree <file>
 ### revert ignore with:        git update-index --no-skip-worktree  <file>
 extern/detours/lib.X86*/
+extern/detours/lib.X64*/
 [Rr]eleaseNoDetours/
 [Rr]eleaseNoRemixMods/
 

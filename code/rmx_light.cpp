@@ -49,6 +49,7 @@ struct color_override_data_s
  */
 static light_override_t* qdx_light_find_override( uint64_t hash );
 static vec_t Distance( const vec3_t p1, const vec3_t p2 );
+void AngleVectors(const vec3_t angles, vec3_t forward, vec3_t right, vec3_t up);
 
 /**
  * Globals
@@ -76,6 +77,8 @@ static float LIGHT_RADIANCE_DYNAMIC_SCALE = DEFAULT_LIGHT_RADIANCE_DYNAMIC_SCALE
 static float LIGHT_RADIANCE_CORONAS = DEFAULT_LIGHT_RADIANCE_CORONAS;
 static float LIGHT_RADIUS[2] = { DEFAULT_LIGHT_RADIUS, DEFAULT_CORONA_RADIUS };
 static float LIGHT_RADIUS_DYNAMIC_SCALE = DEFAULT_LIGHT_RADIUS_DYNAMIC_SCALE;
+static float LIGHT_CYLINDER_AXIS[2][3] = { { 0, 0, 0 }, { 0, 0, 0 } };
+static float LIGHT_CYLINDER_LEN[2] = { 15, 15 };
 static float LIGHT_RADIANCE_FLASHLIGHT[NUM_FLASHLIGHT_HND] = { 400.0f, 960.0f, 4000.0f };
 static float FLASHLIGHT_COLORS[NUM_FLASHLIGHT_HND][3] = {
 	{ 0.9f, 0.98f, 1.0f },
@@ -87,7 +90,7 @@ static float FLASHLIGHT_CONE_SOFTNESS[NUM_FLASHLIGHT_HND] = { 0.05f, 0.02f, 0.02
 static float FLASHLIGHT_VOLUMETRIC[NUM_FLASHLIGHT_HND] = { 1.0f, 1.0f, 1.0f };
 static float FLASHLIGHT_POSITION_CACHE[3] = { 0 };
 static float FLASHLIGHT_DIRECTION_CACHE[3] = { 0 };
-static float FLASHLIGHT_POSITION_OFFSET[3] = { -9, 18, 13 };
+static float FLASHLIGHT_POSITION_OFFSET[3] = { -9, 21, 16 };
 static float FLASHLIGHT_DIRECTION_OFFSET[3] = { 0.095f, -0.08f, 0 };
 static uint64_t LIGHT_PICKING_IDS[3] = { 0 };
 static uint32_t LIGHT_PICKING_COUNT = 0;
@@ -101,6 +104,10 @@ float* qdx_4imgui_radiance_coronas_1f() { return &LIGHT_RADIANCE_CORONAS; }
 float* qdx_4imgui_radius_dynamic_1f() { return &LIGHT_RADIUS[0]; }
 float* qdx_4imgui_radius_dynamic_scale_1f() { return &LIGHT_RADIUS_DYNAMIC_SCALE; }
 float* qdx_4imgui_radius_coronas_1f() { return &LIGHT_RADIUS[1]; }
+float* qdx_4imgui_cylinder_axis_dynamic_3f() { return &LIGHT_CYLINDER_AXIS[0][0]; }
+float* qdx_4imgui_cylinder_axis_coronas_3f() { return &LIGHT_CYLINDER_AXIS[1][0]; }
+float* qdx_4imgui_cylinder_len_dynamic_1f() { return &LIGHT_CYLINDER_LEN[0]; }
+float* qdx_4imgui_cylinder_len_coronas_1f() { return &LIGHT_CYLINDER_LEN[1]; }
 float* qdx_4imgui_flashlight_radiance_1f(int idx) { return &LIGHT_RADIANCE_FLASHLIGHT[idx]; }
 float* qdx_4imgui_flashlight_colors_3f(int idx) { return &FLASHLIGHT_COLORS[idx][0]; }
 float* qdx_4imgui_flashlight_coneangles_1f(int idx) { return &FLASHLIGHT_CONE_ANGLES[idx]; }
@@ -481,6 +488,12 @@ void qdx_lights_load( void *pini, const char *mapname )
 	}
 }
 
+static int color_eq(float a, float b)
+{
+	float diff = fabs(a - b);
+	return diff < 9e-4f;
+}
+
 static void qdx_light_color_to_radiance(remixapi_Float3D* rad, int light_type, const vec3_t color, float intensity)
 {
 	float radiance = 1.0f;
@@ -498,7 +511,7 @@ static void qdx_light_color_to_radiance(remixapi_Float3D* rad, int light_type, c
 
 		for ( auto it = g_color_overrides.begin(); it != g_color_overrides.end(); it++ )
 		{
-			if ( (color[0] == it->src[0]) && (color[1] == it->src[1]) && (color[2] == it->src[2]) )
+			if (color_eq(color[0], it->src[0]) && color_eq(color[1], it->src[1]) && color_eq(color[2], it->src[2]) )
 			{
 				rad->x = radiance * it->dst[0];
 				rad->y = radiance * it->dst[1];
@@ -728,6 +741,15 @@ void qdx_lights_draw()
 	}
 }
 
+
+union LightInfoData_u
+{
+	remixapi_LightInfoSphereEXT sphere;
+	remixapi_LightInfoCylinderEXT cylinder;
+	remixapi_LightInfoDistantEXT distant;
+};
+static void* fill_in_light_data(int light_type, union LightInfoData_u &data, light_override_t* ovr, const float* position, float radius);
+
 #define DYNAMIC_LIGHTS_USE_DX9 0
 
 int qdx_light_add(int light_type, int ord, const float *position, const float *direction, const float *color, float radius)
@@ -858,7 +880,6 @@ int qdx_light_add(int light_type, int ord, const float *position, const float *d
 		{
 			return 0;
 		}
-		return 0;
 
 		hash = DISTANTLIGHT_HASH;
 
@@ -901,37 +922,14 @@ int qdx_light_add(int light_type, int ord, const float *position, const float *d
 
 	if (remixOnline)
 	{
+		union LightInfoData_u light_data;
 		light_override_t* ovr = qdx_light_find_override( hash );
-
-		remixapi_LightInfoSphereEXT light_sphere;
-		ZeroMemory( &light_sphere, sizeof(light_sphere) );
-
-		light_sphere.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO_SPHERE_EXT;
-		//light_sphere.pNext = &obj_pick;
-		if ( ovr == NULL )
-		{
-			light_sphere.position.x = position[0];
-			light_sphere.position.y = position[1];
-			light_sphere.position.z = position[2];
-			light_sphere.radius = qdx_light_radius( light_type, radius );
-			light_sphere.shaping_hasvalue = 0;
-			light_sphere.volumetricRadianceScale = 0.0f;
-		}
-		else
-		{
-			light_sphere.position.x = position[0] + ovr->position_offset[0];
-			light_sphere.position.y = position[1] + ovr->position_offset[1];
-			light_sphere.position.z = position[2] + ovr->position_offset[2];
-			light_sphere.radius = qdx_light_radius_override( light_type, radius, ovr );
-			light_sphere.shaping_hasvalue = 0;
-			light_sphere.volumetricRadianceScale = ovr->volumetric_scale;
-		}
 
 		remixapi_LightInfo lightinfo;
 		ZeroMemory(&lightinfo, sizeof(lightinfo));
 
 		lightinfo.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO;
-		lightinfo.pNext = &light_sphere;
+		lightinfo.pNext = fill_in_light_data(light_type, light_data, ovr, position, radius);
 		lightinfo.hash = hash;
 		if ( ovr == NULL )
 		{
@@ -980,6 +978,68 @@ int qdx_light_add(int light_type, int ord, const float *position, const float *d
 	return ret;
 }
 
+static void *fill_in_light_data(int light_type, union LightInfoData_u& data, light_override_t* ovr, const float *position, float radius)
+{
+	switch (light_type)
+	{
+	case LIGHT_DYNAMIC:{
+		remixapi_LightInfoSphereEXT &light_sphere = data.sphere;
+		ZeroMemory(&light_sphere, sizeof(light_sphere));
+		light_sphere.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO_SPHERE_EXT;
+
+		if (ovr == NULL)
+		{
+			light_sphere.position.x = position[0];
+			light_sphere.position.y = position[1];
+			light_sphere.position.z = position[2];
+			light_sphere.radius = qdx_light_radius(light_type, radius);
+			light_sphere.shaping_hasvalue = 0;
+			light_sphere.volumetricRadianceScale = 0.0f;
+		}
+		else
+		{
+			light_sphere.position.x = position[0] + ovr->position_offset[0];
+			light_sphere.position.y = position[1] + ovr->position_offset[1];
+			light_sphere.position.z = position[2] + ovr->position_offset[2];
+			light_sphere.radius = qdx_light_radius_override(light_type, radius, ovr);
+			light_sphere.shaping_hasvalue = 0;
+			light_sphere.volumetricRadianceScale = ovr->volumetric_scale;
+		}
+		break;}
+	case LIGHT_CORONA:{
+		remixapi_LightInfoCylinderEXT &light_cylinder = data.cylinder;
+		ZeroMemory(&light_cylinder, sizeof(light_cylinder));
+		light_cylinder.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO_CYLINDER_EXT;
+
+		if (ovr == NULL)
+		{
+			light_cylinder.position.x = position[0];
+			light_cylinder.position.y = position[1];
+			light_cylinder.position.z = position[2];
+			light_cylinder.radius = qdx_light_radius(light_type, radius);
+			light_cylinder.volumetricRadianceScale = 0.0f;
+		}
+		else
+		{
+			light_cylinder.position.x = position[0] + ovr->position_offset[0];
+			light_cylinder.position.y = position[1] + ovr->position_offset[1];
+			light_cylinder.position.z = position[2] + ovr->position_offset[2];
+			light_cylinder.radius = qdx_light_radius_override(light_type, radius, ovr);
+			light_cylinder.volumetricRadianceScale = ovr->volumetric_scale;
+		}
+		vec3_t anglevec;
+		AngleVectors(&LIGHT_CYLINDER_AXIS[1][0], NULL, NULL, anglevec);
+		light_cylinder.axis.x = anglevec[0];
+		light_cylinder.axis.y = anglevec[1];
+		light_cylinder.axis.z = anglevec[2];
+		light_cylinder.axisLength = LIGHT_CYLINDER_LEN[1];
+		break;}
+	}
+
+	return &data;
+}
+
+#define VectorClear( a )              ( ( a )[0] = ( a )[1] = ( a )[2] = 0 )
 #define VectorSubtract( a,b,c )   ( ( c )[0] = ( a )[0] - ( b )[0],( c )[1] = ( a )[1] - ( b )[1],( c )[2] = ( a )[2] - ( b )[2] )
 
 vec_t VectorLength( const vec3_t v ) {
@@ -995,4 +1055,65 @@ vec_t Distance( const vec3_t p1, const vec3_t p2 ) {
 
 	VectorSubtract( p2, p1, v );
 	return VectorLength( v );
+}
+
+vec_t VectorNormalize2(const vec3_t v, vec3_t out) {
+	float length, ilength;
+
+	length = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+	length = sqrt(length);
+
+	if (length) {
+		ilength = 1 / length;
+		out[0] = v[0] * ilength;
+		out[1] = v[1] * ilength;
+		out[2] = v[2] * ilength;
+	}
+	else {
+		VectorClear(out);
+	}
+
+	return length;
+
+}
+
+#ifndef M_PI
+#define M_PI        3.14159265358979323846f // matches value in gcc v2 math.h
+#endif
+
+// angle indexes
+#define PITCH               0       // up / down
+#define YAW                 1       // left / right
+#define ROLL                2       // fall over
+
+void AngleVectors(const vec3_t angles, vec3_t forward, vec3_t right, vec3_t up) {
+	float angle;
+	static float sr, sp, sy, cr, cp, cy;
+	// static to help MS compiler fp bugs
+
+	angle = angles[YAW] * (M_PI * 2 / 360);
+	sy = sin(angle);
+	cy = cos(angle);
+	angle = angles[PITCH] * (M_PI * 2 / 360);
+	sp = sin(angle);
+	cp = cos(angle);
+	angle = angles[ROLL] * (M_PI * 2 / 360);
+	sr = sin(angle);
+	cr = cos(angle);
+
+	if (forward) {
+		forward[0] = cp * cy;
+		forward[1] = cp * sy;
+		forward[2] = -sp;
+	}
+	if (right) {
+		right[0] = (-1 * sr * sp * cy + -1 * cr * -sy);
+		right[1] = (-1 * sr * sp * sy + -1 * cr * cy);
+		right[2] = -1 * sr * cp;
+	}
+	if (up) {
+		up[0] = (cr * sp * cy + -sr * -sy);
+		up[1] = (cr * sp * sy + -sr * cy);
+		up[2] = cr * cp;
+	}
 }

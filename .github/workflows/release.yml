@@ -44,12 +44,24 @@ jobs:
     strategy:
       matrix:
         config: [Release, ReleaseNoRemixMods]
-        platform: [Win32]
+        platform: [Win32, x64]
         include:
-          - config: Release
-            zip_name: QindieGL.zip
-          - config: ReleaseNoRemixMods
-            zip_name: QindieGL_NoRemixMods.zip
+          - zip_name: QindieGL.zip
+            bin_name: Release
+            config: Release
+            platform: Win32
+          - zip_name: QindieGL_NoRemixMods.zip
+            bin_name: ReleaseNoRemixMods
+            config: ReleaseNoRemixMods
+            platform: Win32
+          - zip_name: QindieGL.x64.zip
+            bin_name: Release.x64
+            config: Release
+            platform: x64
+          - zip_name: QindieGL.x64_NoRemixMods.zip
+            bin_name: ReleaseNoRemixMods.x64
+            config: ReleaseNoRemixMods
+            platform: x64
 
     steps:
     - name: Checkout repository
@@ -68,10 +80,10 @@ jobs:
       working-directory: ${{env.GITHUB_WORKSPACE}}
       # Add additional options to the MSBuild command line here (like platform or verbosity level).
       # See https://docs.microsoft.com/visualstudio/msbuild/msbuild-command-line-reference
-      run: msbuild /m /p:Configuration=${{matrix.config}} ${{env.SOLUTION_FILE_PATH}}
+      run: msbuild /m /p:Configuration=${{matrix.config}} /p:Platform=${{matrix.platform}} ${{env.SOLUTION_FILE_PATH}}
 
     - name: Create artifact
-      run: 7z a -tzip ${{matrix.zip_name}} ./bin/${{matrix.config}}/*
+      run: 7z a -tzip ${{matrix.zip_name}} ./bin/${{matrix.bin_name}}/*
 
     - name: Upload artifact
       uses: actions/github-script@v4

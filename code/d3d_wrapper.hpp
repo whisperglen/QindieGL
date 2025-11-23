@@ -70,6 +70,34 @@
 #define QINDIEGL_MIN(a,b)					((a) < (b) ? (a) : (b))
 
 
+//platformstuff
+#define id386 0
+#define idx64 0
+#define idsse 0
+#define idarm 0
+#define idneon 0
+
+#ifdef _WIN32
+
+#if defined( _M_IX86 )
+#if _M_IX86_FP >= 2
+#undef idsse
+#define idsse 1
+#endif
+#undef id386
+#define id386 1
+#endif
+
+#if defined( _M_AMD64 )
+#undef idx64
+#define idx64 1
+//#undef id386
+//#define id386 1
+#undef idsse
+#define idsse 1
+#endif
+
+#endif
 
 extern void logPrintf( const char *fmt, ... );
 extern void logShutdown();

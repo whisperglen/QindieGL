@@ -82,7 +82,7 @@ const void* hook_find_pattern( unsigned char* pat, int patsz )
 {
 	const void* ret = 0;
 	const void* haystack = exedata.lpBaseOfDll;
-	int haystacksz = exedata.SizeOfImage;
+	size_t haystacksz = exedata.SizeOfImage;
 	const byte* ptr;
 	
 	ptr = (const byte*)memchr( haystack, pat[0], haystacksz );
@@ -126,7 +126,7 @@ void* hook_loadptr( const void* addr )
 void* hook_offset_to_addr( void* offset )
 {
 	void* ret = 0;
-	if ( exedata.SizeOfImage > (DWORD)offset )
+	if ( exedata.SizeOfImage > (intptr_t)offset )
 	{
 		ret = (uint8_t*)exedata.lpBaseOfDll + (intptr_t)offset;
 	}

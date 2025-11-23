@@ -244,12 +244,10 @@
     </CopyFileToFolders>
   </ItemGroup>
   <ItemGroup>
-    <Text Include="..\code\shaders\ortho_ps.hlsl">
-      <Filter>Source Files\shaders</Filter>
-    </Text>
-  </ItemGroup>
-  <ItemGroup>
     <FxCompile Include="..\code\shaders\ortho_vs.hlsl">
+      <Filter>Source Files\shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="..\code\shaders\ortho_ps.hlsl">
       <Filter>Source Files\shaders</Filter>
     </FxCompile>
   </ItemGroup>

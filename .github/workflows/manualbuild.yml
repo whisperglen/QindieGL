@@ -29,7 +29,24 @@ jobs:
     strategy:
       matrix:
         config: [Release, ReleaseNoRemixMods]
-        platform: [Win32]
+        platform: [Win32, x64]
+        include:
+          - zip_name: QindieGL
+            bin_name: Release
+            config: Release
+            platform: Win32
+          - zip_name: QindieGL_NoRemixMods
+            bin_name: ReleaseNoRemixMods
+            config: ReleaseNoRemixMods
+            platform: Win32
+          - zip_name: QindieGL.x64
+            bin_name: Release.x64
+            config: Release
+            platform: x64
+          - zip_name: QindieGL.x64_NoRemixMods
+            bin_name: ReleaseNoRemixMods.x64
+            config: ReleaseNoRemixMods
+            platform: x64
 
     steps:
     - name: Checkout repository
@@ -48,18 +65,10 @@ jobs:
       working-directory: ${{env.GITHUB_WORKSPACE}}
       # Add additional options to the MSBuild command line here (like platform or verbosity level).
       # See https://docs.microsoft.com/visualstudio/msbuild/msbuild-command-line-reference
-      run: msbuild /m /p:Configuration=${{matrix.config}} ${{env.SOLUTION_FILE_PATH}}
+      run: msbuild /m /p:Configuration=${{matrix.config}} /p:Platform=${{matrix.platform}} ${{env.SOLUTION_FILE_PATH}}
 
-    - name: Upload Release Artifacts
-      if: ${{ matrix.config == 'Release' }}
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: QindieGL
-        path: ./bin/${{matrix.config}}/*
-
-    - name: Upload ReleaseNoRemixMods Artifacts
-      if: ${{ matrix.config == 'ReleaseNoRemixMods' }}
-      uses: actions/upload-artifact@v4
-      with:
-        name: QindieGL_NoRemixMods
-        path: ./bin/${{matrix.config}}/*
+        name: ${{matrix.zip_name}}
+        path: ./bin/${{matrix.bin_name}}/*

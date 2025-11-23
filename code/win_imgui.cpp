@@ -124,15 +124,18 @@ static void do_draw()
 		ImGui::Text( "Radius = RADIUS + intensity * RADIUS_SCALE" );
 		ImGui::DragFloat( "RADIUS##1", qdx_4imgui_radius_dynamic_1f(), 0.1, 0, 10 );
 		ImGui::DragFloat( "RADIUS_SCALE##1", qdx_4imgui_radius_dynamic_scale_1f(), 0.0005, 0, 1 );
+		ImGui::DragFloat3("Cylinder Axis##1", qdx_4imgui_cylinder_axis_dynamic_3f(), 1.0, 0, 360);
+		ImGui::DragFloat("Cylinder Length##1", qdx_4imgui_cylinder_len_dynamic_1f(), 0.1, 0, 20);
 
+		bool clearcoronas = false;
 		ImGui::SeparatorText( "Corona Radiance:" );
-		if(ImGui::DragFloat( "BASE##2", qdx_4imgui_radiance_coronas_1f(), 10, 0, 50000 ))
+		if (ImGui::DragFloat("BASE##2", qdx_4imgui_radiance_coronas_1f(), 10, 0, 50000)) clearcoronas = true;
+		if (ImGui::DragFloat("RADIUS##2", qdx_4imgui_radius_coronas_1f(), 0.1, 0, 10)) clearcoronas = true;
+		if (ImGui::DragFloat3("Cylinder Axis##2", qdx_4imgui_cylinder_axis_coronas_3f(), 1.0, 0, 360)) clearcoronas = true;
+		if (ImGui::DragFloat("Cylinder Length##2", qdx_4imgui_cylinder_len_coronas_1f(), 0.1, 0, 20)) clearcoronas = true;
+		if (clearcoronas)
 		{
-			qdx_lights_clear( LIGHT_CORONA );
-		}
-		if(ImGui::DragFloat( "RADIUS##2", qdx_4imgui_radius_coronas_1f(), 0.1, 0, 10 ))
-		{
-			qdx_lights_clear( LIGHT_CORONA );
+			qdx_lights_clear(LIGHT_CORONA);
 		}
 
 		ImGui::NewLine();
