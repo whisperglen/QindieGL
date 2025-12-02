@@ -150,7 +150,7 @@ BOOL APIENTRY DllMain( HMODULE hModule, DWORD ul_reason_for_call, LPVOID )
 					TCHAR* name = _tcsrchr(exename, _T('\\'));
 					if (name) {
 						name++;
-						int count = _tclen( name );
+						size_t count = _tclen( name );
 						TCHAR* tmp = _tcsrchr(exename, _T('.'));
 						if (tmp) {
 							count = tmp - name;

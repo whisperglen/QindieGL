@@ -780,7 +780,7 @@ static LRESULT CALLBACK wnd_proc_hk(HWND hWnd, UINT message_type, WPARAM wParam,
 	default: break; 
 	}
 
-	BOOL imgui_consumed = ImGui_ImplWin32_WndProcHandler( hWnd, message_type, wParam, lParam );
+	BOOL imgui_consumed = (BOOL)ImGui_ImplWin32_WndProcHandler( hWnd, message_type, wParam, lParam );
 
 	static bool mouse0down = false;
 	if ( !imgui_consumed )

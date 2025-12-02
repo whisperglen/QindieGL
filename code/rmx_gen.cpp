@@ -80,7 +80,7 @@ void qdx_begin_loading_map( const char* mapname )
 	}
 
 	const char* ext = strrchr(mapname, '.');
-	int namelen = 0;
+	size_t namelen = 0;
 	if(ext)
 	{
 		namelen = ext - name;
@@ -106,7 +106,7 @@ void qdx_begin_loading_map( const char* mapname )
 			mINI::INIMap<std::string>* map_opts = 0;
 
 			// Apply RTX.conf options
-			snprintf( section, sizeof( section ), "rtxconf.%.*s", namelen, name );
+			snprintf( section, sizeof( section ), "rtxconf.%.*s", (uint32_t)namelen, name );
 			rmx_console_printf(PRINT_ALL, "RTX.conf section %s\n", section);
 			if ( g_iniconf.has( section ) )
 			{

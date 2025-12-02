@@ -561,7 +561,7 @@ static GLubyte D3DPixels_DisassemblePackedPixel( ePixelPackageInternal pack_mode
 template<typename T>
 static T D3DPixels_AssemblePackedPixel( ePixelPackageInternal pack_mode, int num_comp, GLubyte *pixel )
 {
-	DWORD dwPixel =(DWORD)pixel;
+	DWORD dwPixel =(DWORD)pixel[0];
 	switch(pack_mode) {
 	default:
 		logPrintf("WARNING: unsupported packed pixel mode %i\n", pack_mode);

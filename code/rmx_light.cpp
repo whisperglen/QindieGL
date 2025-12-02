@@ -275,7 +275,7 @@ static bool str_starts_with(const std::string& str, const std::string& prefix)
 	return str.size() >= prefix.size() && str.compare(0, prefix.size(), prefix) == 0;
 }
 
-static bool str_starts_with(const std::string& str, const char* prefix, unsigned prefixLen)
+static bool str_starts_with(const std::string& str, const char* prefix, size_t prefixLen)
 {
 	return str.size() >= prefixLen && str.compare(0, prefixLen, prefix, prefixLen) == 0;
 }
@@ -290,7 +290,7 @@ static bool str_ends_with(const std::string& str, const std::string& suffix)
 	return str.size() >= suffix.size() && str.compare(str.size()-suffix.size(), suffix.size(), suffix) == 0;
 }
 
-static bool str_ends_with(const std::string& str, const char* suffix, unsigned suffixLen)
+static bool str_ends_with(const std::string& str, const char* suffix, size_t suffixLen)
 {
 	return str.size() >= suffixLen && str.compare(str.size()-suffixLen, suffixLen, suffix, suffixLen) == 0;
 }

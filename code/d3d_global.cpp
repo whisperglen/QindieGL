@@ -327,7 +327,11 @@ void* D3DGlobal_ReadGameConfPtr(const char* valname)
 	{
 		if (gamename && g_iniconf.has(gamename) && g_iniconf[gamename].has(valname))
 		{
-			ret = (void*)strtoul( g_iniconf[gamename][valname].c_str(), NULL, 16 );
+			ret = (void*)(
+					sizeof(void*) <= sizeof(unsigned long) ?
+						strtoul(g_iniconf[gamename][valname].c_str(), NULL, 16) :
+						_strtoui64(g_iniconf[gamename][valname].c_str(), NULL, 16)
+				);
 			break;
 		}
 		else
