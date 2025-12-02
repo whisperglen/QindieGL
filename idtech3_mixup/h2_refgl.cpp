@@ -479,6 +479,7 @@ static cvarq2_t* rmx_dyn_linger;
 static cvarq2_t* rmx_alphacull;
 static cvarq2_t* rmx_nowateranim;
 static cvarq2_t* rmx_noflooranim;
+static cvarq2_t* rmx_logtextures;
 
 static image_t* (*R_TextureAnimation)(const mtexinfo_t* tex);// = 0xae70;
 static void (APIENTRY** fp_qglMultiTexCoord2fARB)(GLenum target, GLfloat s, GLfloat t);// = 0x53428 0x53770
@@ -494,6 +495,7 @@ static void (*GL_MBind)(GLenum target, int texnum);// = 0x3650
 static void (*GL_EnableMultitexture)( qboolean enable );// = 0x33a0
 static qboolean (*R_CullAliasModel)( vec3_t bbox[8], void* /*entity_t* e*/ );// = 0x2b20
 static image_t* (*GL_FindImage)( const char* name, const imagetype_t type );// = 0x4090
+static image_t* (*GetSkin)(void);// = 0x2070
 }
 
 #define PTR_FROM_OFFSET(typecast, offset) (typecast)((intptr_t)(offset) + (intptr_t)ref_gl_data.lpBaseOfDll)
@@ -507,6 +509,7 @@ static image_t *r_whiteimage = NULL;
 typedef struct drawSurf_s {
 	unsigned    sort;
 	msurface_t *surface;
+	unsigned    flags;
 } drawSurf_t;
 
 #define MAX_DRAWSURFS           0x10000
@@ -575,6 +578,7 @@ void h2_refgl_init()
 			GL_EnableMultitexture = (void (*)(qboolean))((intptr_t)0x33a0 + (intptr_t)ref_gl_data.lpBaseOfDll);
 			R_CullAliasModel = PTR_FROM_OFFSET( qboolean (*)(vec3_t [],void *), 0x2b20 );
 			GL_FindImage = PTR_FROM_OFFSET( image_t *(*)(const char *,const imagetype_t), 0x4090 );
+			GetSkin = PTR_FROM_OFFSET(image_t * (*)(void), 0x2070);
 
 			//sanity check: ideally we'd want to map this to quake2.dll
 			intptr_t fp = dp_ri[RI_CVAR_GET];
@@ -600,6 +604,7 @@ void h2_refgl_init()
 			rmx_alphacull = riCVAR_GET("rmx_alphacull", "0", 1);
 			rmx_nowateranim = riCVAR_GET("rmx_nowateranim", "0", 1);
 			rmx_noflooranim = riCVAR_GET("rmx_noflooranim", "0", 1);
+			rmx_logtextures = riCVAR_GET("rmx_logtextures", "0", 0);
 
 			riADD_CMD( "rmx_flashlight_toggle", h2_flashlight_toggle );
 
@@ -1154,6 +1159,8 @@ union sort_pack_u
 	} bits;
 };
 
+static bool h2_should_compute_normals(const image_t* image);
+
 static void R_AddDrawSurf(msurface_t *surf)
 {
 	int index;
@@ -1187,7 +1194,13 @@ static void R_AddDrawSurf(msurface_t *surf)
 			}
 		}
 
-		sort.bits.texnum = R_TextureAnimation( surf->texinfo )->texnum;
+		unsigned surflags = 0;
+		image_t* image = R_TextureAnimation(surf->texinfo);
+		if (h2_should_compute_normals(image))
+		{
+			surflags |= RECALC_NORMALS | RENDER_NORMALS;
+		}
+		sort.bits.texnum = image->texnum;
 		sort.bits.flowing = 0;// surf->texinfo->flags& SURF_FLOWING;
 		if ( rmx_skiplightmaps->value )
 			sort.bits.lightmap = SKIP_LIGHTMAP;
@@ -1196,6 +1209,7 @@ static void R_AddDrawSurf(msurface_t *surf)
 
 		g_surfList.surfs[index].sort = sort.all;
 		g_surfList.surfs[index].surface = surf;
+		g_surfList.surfs[index].flags = surflags;
 		g_surfList.numSurfs++;
 	}
 	else
@@ -1237,6 +1251,8 @@ static void R_SortAndDrawSurfaces( drawSurf_t* surfs, int numSurfs )
 			R_RenderSurfs(flags);
 		}
 
+		flags = s->flags;
+
 		//check if new textures need to be bound
 		if ( sort.bits.dynamic )
 		{
@@ -1276,16 +1292,15 @@ static void R_SortAndDrawSurfaces( drawSurf_t* surfs, int numSurfs )
 
 			GL_MBind( /*GL_TEXTURE0_SGIS*/GL_TEXTURE0, sort.bits.texnum/*image->texnum*/ );
 			GL_MBind( /*GL_TEXTURE1_SGIS*/GL_TEXTURE1, /*gl_state.lightmap_textures*/gl_state_lightmap_textures + lmtex );
-			flags = RENDER_TWOTEXTURES;
+			flags |= RENDER_TWOTEXTURES;
 		}
 		else if( oldTexnum != sort.bits.texnum || oldLightmap != sort.bits.lightmap )
 		{
-			flags = 0;
 			GL_MBind( /*GL_TEXTURE0_SGIS*/GL_TEXTURE0, sort.bits.texnum/*image->texnum*/ );
 			if ( sort.bits.lightmap != SKIP_LIGHTMAP )
 			{
 				GL_MBind( /*GL_TEXTURE1_SGIS*/GL_TEXTURE1, /*gl_state.lightmap_textures*/gl_state_lightmap_textures + sort.bits.lightmap/*lmtex*/ );
-				flags = RENDER_TWOTEXTURES;
+				flags |= RENDER_TWOTEXTURES;
 			}
 		}
 		oldSort = sort.all;
@@ -1302,7 +1317,7 @@ static void R_SortAndDrawSurfaces( drawSurf_t* surfs, int numSurfs )
 
 typedef union colorinfo_u
 {
-	byte b[4];
+	byte b[4]; //bgra
 	unsigned all;
 } colorinfo_t;
 
@@ -1413,6 +1428,35 @@ static void R_Model_BuildVBuffAndDraw(int *order, float *normals_array, int *p_a
 	uint32_t render_flags = 0;
 	if(rmx_normals->value)
 		render_flags |= RENDER_NORMALS;
+
+	image_t* image = GetSkin();
+	if (h2_should_compute_normals(image))
+	{
+		render_flags |= RECALC_NORMALS;
+	}
+
+	uint32_t currententity_flags;
+	memcpy(&currententity_flags, &currententity[0x30], sizeof(uint32_t));
+
+	unsigned char alpha = currententity[0x2f];//currententity->color.a;
+	if ((currententity_flags & 0x4000) == 0)
+	{ //not TRANS_ADD
+		if ((currententity_flags & 0x10000) == 0)
+		{ //not TRANS_GHOST
+			alpha = 255;
+		}
+	}
+	else if ((currententity_flags & 0x8000) == 0)
+	{ //not TRANS_ADD_ALPHA
+		if ((currententity_flags & 0x20000) == 0)
+		{ //not ALPHA_TEXTURE
+			alpha = 255;
+		}
+	}
+	else if ((currententity_flags & 0x20000) == 0)
+	{
+		alpha = 255;
+	}
 	
 	while ( 1 )
 	{
@@ -1435,7 +1479,6 @@ static void R_Model_BuildVBuffAndDraw(int *order, float *normals_array, int *p_a
 		int index_xyz;
 		struct vertexData_s* vb;
 		unsigned short* ib;
-		unsigned char alpha = 255;// (*p_alpha) ? 255 : 127;
 
 		int totalindexes = (3 * count) - 6;
 		R_CheckDrawBufferSpace( count, totalindexes, render_flags );
@@ -1501,11 +1544,19 @@ static void R_Model_BuildVBuffAndDraw(int *order, float *normals_array, int *p_a
 						normals = normals_array + index_xyz * 3;
 					}
 					//qglColor4f (l* shadelight[0], l*shadelight[1], l*shadelight[2], alpha);
+#if 0
+					//use vertex light
 					vec3_t colors;
 					float colorscale = l * 255;
 					VectorScale( shadelight, colorscale, colors );
 					VectorCopyClamp( colors, vb->clr.b, 255 );
 					vb->clr.b[3] = alpha;
+#else
+					vb->clr.b[0] = 255;
+					vb->clr.b[1] = 255;
+					vb->clr.b[2] = 255;
+					vb->clr.b[3] = alpha;
+#endif
 				}
 				float* vsrc = s_lerped + index_xyz * 3;
 				//qglVertex3fv (s_lerped[index_xyz]);
@@ -1564,13 +1615,13 @@ static inline int h2_vertexes_compare2( const struct vertexData_s* a, const stru
 	const float epsilon = 1e-9f;
 
 	const float dx = a->xyz[0] - b->xyz[0];
-	if ( abs( dx ) < epsilon )
+	if (fabsf( dx ) < epsilon )
 	{
 		const float dy = a->xyz[1] - b->xyz[1];
-		if ( abs( dy ) < epsilon )
+		if (fabsf( dy ) < epsilon )
 		{
 			const float dz = a->xyz[2] - b->xyz[2];
-			if ( abs( dz ) < epsilon )
+			if (fabsf( dz ) < epsilon )
 			{
 				return 0;
 			}
@@ -1579,6 +1630,28 @@ static inline int h2_vertexes_compare2( const struct vertexData_s* a, const stru
 		else return (signbit(dy) ? -1 : 1);
 	}
 	else return (signbit( dx ) ? -1 : 1);
+}
+
+static inline int h2_normals_compare2(const struct vertexData_s* a, const struct vertexData_s* b)
+{
+	const float epsilon = 1e-9f;
+
+	const float dx = a->normal[0] - b->normal[0];
+	if (fabsf(dx) < epsilon)
+	{
+		const float dy = a->normal[1] - b->normal[1];
+		if (fabsf(dy) < epsilon)
+		{
+			const float dz = a->normal[2] - b->normal[2];
+			if (fabsf(dz) < epsilon)
+			{
+				return 0;
+			}
+			else return (signbit(dz) ? -1 : 1);
+		}
+		else return (signbit(dy) ? -1 : 1);
+	}
+	else return (signbit(dx) ? -1 : 1);
 }
 
 static int h2_vertexes_compare( void const* x0, void const* x1 )
@@ -1596,6 +1669,21 @@ static int h2_vertexes_compare( void const* x0, void const* x1 )
 	return res;
 }
 
+static int h2_normals_compare(void const* x0, void const* x1)
+{
+	const struct vertexData_s* a = &g_drawBuff.vertexes[*((uint16_t*)x0)];
+	const struct vertexData_s* b = &g_drawBuff.vertexes[*((uint16_t*)x1)];
+	int res = h2_normals_compare2(a, b);
+
+	if (res == 0)
+	{
+		if (a < b)
+			return -1;
+		return 1;
+	}
+	return res;
+}
+
 inline int IsVectorZero( const vec3_t v )
 {
 	return (v[0] == 0.f) && (v[1] == 0.f) && (v[2] == 0.f);
@@ -1603,8 +1691,7 @@ inline int IsVectorZero( const vec3_t v )
 
 inline void MergeNormal( const vec3_t normal, uint index, const uint16_t* remapvpos )
 {
-	float* ndst, dot;
-	int vzero;
+	float* ndst;
 	if (remapvpos)
 		index = remapvpos[index];
 	ndst = g_drawBuff.vertexes[index].normal;
@@ -1613,31 +1700,31 @@ inline void MergeNormal( const vec3_t normal, uint index, const uint16_t* remapv
 	VectorNormalize( ndst );
 }
 
-static float g_normals_angleval = 0.01f;
+static float g_normals_angleval = 0.48f;
 
 static void h2_recalculate_normals()
 {
-	static uint16_t sortvpos[MAX_VERTEXES];
+	static uint16_t sortidx[MAX_VERTEXES];
 	static uint16_t remapvpos[MAX_VERTEXES];
 	static uint16_t dupvpos[2*MAX_VERTEXES];
 
 	for ( int i = 0; i < g_drawBuff.numVertexes; i++ )
 	{
-		sortvpos[i] = i;
+		sortidx[i] = i;
 		remapvpos[i] = i;
 	}
 
 	if ( 1 )
 	{
-		qsort( sortvpos, g_drawBuff.numVertexes, sizeof( uint16_t ), h2_vertexes_compare );
+		qsort( sortidx, g_drawBuff.numVertexes, sizeof( uint16_t ), h2_vertexes_compare );
 
 		uint16_t* it = dupvpos;
 		int count = 0;
-		int backi = sortvpos[0];
+		int backi = sortidx[0];
 		const struct vertexData_s* backv = &g_drawBuff.vertexes[backi];
 		for ( int i = 1; i < g_drawBuff.numVertexes; i++ )
 		{
-			int fronti = sortvpos[i];
+			int fronti = sortidx[i];
 			const struct vertexData_s* frontv = &g_drawBuff.vertexes[fronti];
 			if ( 0 == h2_vertexes_compare2( backv, frontv ) )
 			{
@@ -1703,6 +1790,21 @@ static void h2_recalculate_normals()
 
 		uint32_t visited = 0;
 		uint32_t visitend = (1 << count) - 1;
+		uint32_t skipadd = 0;
+		//mark duplicated normals
+		for (int i = 0; i < count; i++)
+		{
+			const struct vertexData_s* backv = &g_drawBuff.vertexes[i];
+			for (int j = i + 1; j < count; j++)
+			{
+				const struct vertexData_s* frontv = &g_drawBuff.vertexes[j];
+				if (0 == h2_normals_compare2(backv, frontv))
+				{
+					skipadd |= 1 << j;
+				}
+			}
+		}
+		//go over face combinations, check for angle of surfaces and merge normals
 		for ( int i = 0; i < count && visited != visitend; i++ )
 		{
 			vec3_t sum;
@@ -1724,7 +1826,8 @@ static void h2_recalculate_normals()
 				float dot = DotProduct( nj, ni );
 				if ( dot > g_normals_angleval )
 				{
-					VectorAdd(nj, sum, sum);
+					if ((skipadd & visitid) == 0)
+						VectorAdd(nj, sum, sum);
 					//remapvpos[indexj] = indexi;
 					visitnow |= visitid;
 				}
@@ -1837,7 +1940,7 @@ static void R_RenderSurfs( int flags )
 {
 	if ( g_drawBuff.numIndexes )
 	{
-		c_brush_polys++;
+		//c_brush_polys++;
 
 		if ( flags & RECALC_NORMALS || rmx_normals->value >= 2 )
 		{
@@ -1914,6 +2017,8 @@ static void hk_R_EmitWaterPolys(msurface_t* fa, qboolean undulate)
 
 	if (rmx_nowateranim->value)
 		undulate = qfalse;
+
+	R_RenderSurfs(render_flags);
 
 	for (bp = fa->polys; bp != NULL; bp = bp->next)
 	{
@@ -1996,6 +2101,8 @@ static void hk_R_EmitUnderwaterPolys(msurface_t* fa)
 	//if ( D3DState.CurrentState.isSet.bits.color )
 		color = D3DState.CurrentState.currentColor;
 
+	R_RenderSurfs(render_flags);
+
 	for (bp = fa->polys; bp != NULL; bp = bp->next)
 	{
 		p = bp;
@@ -2067,6 +2174,8 @@ static void hk_R_EmitQuakeFloorPolys(msurface_t* fa)
 	//if ( D3DState.CurrentState.isSet.bits.color )
 	color = D3DState.CurrentState.currentColor;
 
+	R_RenderSurfs(render_flags);
+
 	for (bp = fa->polys; bp != NULL; bp = bp->next)
 	{
 		p = bp;
@@ -2123,22 +2232,76 @@ static void hk_R_EmitQuakeFloorPolys(msurface_t* fa)
 	R_RenderSurfs( render_flags );
 }
 
+static std::map<std::string, int> g_compnormals_textures;
+static std::map<std::string, int> g_logtextures;
+
 void h2_refgl_frame_ended()
 {
 	if ( rmx_dyn_linger->modified )
 	{
 		rmx_dyn_linger->modified = qfalse;
-
 		qdx_lights_dynamic_linger( int(rmx_dyn_linger->value) );
 	}
 
 	if ( rmx_coronas->modified && !rmx_coronas->value )
 	{
+		rmx_coronas->modified = qfalse;
 		qdx_lights_clear( LIGHT_CORONA );
+	}
+
+	if (rmx_logtextures->value)
+	{
+		riCVAR_SET("rmx_logtextures", "0");
+
+		auto it = g_logtextures.begin();
+		while (it != g_logtextures.end())
+		{
+			riPRINTF(PRINT_ALL, "%s\n", it->first.c_str());
+			it++;
+		}
+		g_logtextures.clear();
 	}
 
 	glClearColor( 0, 0, 0, 0 );
 	//glClear( GL_COLOR_BUFFER_BIT );
+}
+
+static void h2_read_compnormals_textures()
+{
+	char fieldname[16];
+	char texname[128];
+	int i = 0;
+	while (1)
+	{
+		snprintf(fieldname, sizeof(fieldname), "texture%d", i);
+		int res = qdx_readmapconfstr("compnormals", fieldname, texname, sizeof(texname));
+		if (res == 0)
+			break;
+		g_compnormals_textures.emplace(texname, 1);
+		i++;
+	}
+	riPRINTF(PRINT_ALL, "ComputeNormals: found %d texturenames\n", i+1);
+}
+
+static bool h2_should_compute_normals(const image_t* image)
+{
+	bool ret = false;
+
+	if (rmx_logtextures->value)
+	{
+		if (g_logtextures.find(image->name) == g_logtextures.end())
+		{
+			g_logtextures[image->name] = 1;
+		}
+	}
+
+	auto it = g_compnormals_textures.find(image->name);
+	if (it != g_compnormals_textures.end())
+	{
+		ret = true;
+	}
+
+	return ret;
 }
 
 typedef struct ResMngr_Block_s
@@ -2501,6 +2664,8 @@ static void hk_R_BeginRegistration( const char* model )
 
 		mapname.assign( model );
 	}
+
+	h2_read_compnormals_textures();
 	
 	fp_R_BeginRegistration( model );
 }
@@ -2560,14 +2725,14 @@ typedef struct entity_s
 void AngleVectors( const vec3_t angles, vec3_t forward )
 {
 	float angle;
-	float sr, sp, sy, cr, cp, cy;
+	float sp, sy, cp, cy;
 
 	angle = angles[YAW] * float(M_PI * 2 / 360);
-	sy = sin( angle );
-	cy = cos( angle );
+	sy = sinf( angle );
+	cy = cosf( angle );
 	angle = angles[PITCH] * float(M_PI * 2 / 360);
-	sp = sin( angle );
-	cp = cos( angle );
+	sp = sinf( angle );
+	cp = cosf( angle );
 
 	if ( forward ) {
 		forward[0] = cp * cy;

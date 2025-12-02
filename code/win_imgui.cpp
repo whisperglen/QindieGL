@@ -4,12 +4,14 @@
 #include "imgui.h"
 #include "backends/imgui_impl_dx9.h"
 #include "backends/imgui_impl_win32.h"
+#define _USE_MATH_DEFINES
 #include <math.h>
 #include "d3d_wrapper.hpp"
 #include "d3d_global.hpp"
 #include "d3d_matrix_stack.hpp"
 #include "d3d_state.hpp"
 #include "d3d_helpers.hpp"
+//#include "camera_search.h"
 #include <string>
 
 #define GVAR_SHOW_IMGUI "rmx_show_imgui"
@@ -517,9 +519,19 @@ static void do_draw()
 	float* normals_thresh = rmx_4imgui_getnormalsthresh();
 	if (normals_thresh)
 	{
-		ImGui::NewLine();
-		ImGui::SliderFloat("Normals DOT Threshold", normals_thresh, -1.5, 1.5);
+		if (ImGui::CollapsingHeader("Normals Generation"))
+		{
+			ImGui::SliderFloat("Limit", normals_thresh, -1.0, 1.0);
+			ImGui::Text("Angle value %.3f", (180.0 / M_PI) * acosf(*normals_thresh));
+		}
 	}
+
+
+	//ImGui::NewLine();
+	//if (ImGui::Button("Scan 4 Camera", toggle_sz))
+	//{
+	//	camera_search_start();
+	//}
 
 #ifdef DEBUG_HELPERS
 	/*==========================
