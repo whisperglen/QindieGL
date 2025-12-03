@@ -2280,7 +2280,7 @@ static void h2_read_compnormals_textures()
 		g_compnormals_textures.emplace(texname, 1);
 		i++;
 	}
-	riPRINTF(PRINT_ALL, "ComputeNormals: found %d texturenames\n", i+1);
+	riPRINTF(PRINT_ALL, "ComputeNormals: found %d texturenames\n", i);
 }
 
 static bool h2_should_compute_normals(const image_t* image)
@@ -2655,14 +2655,15 @@ static void hk_R_BeginRegistration( const char* model )
 {
 	HOOK_ONLINE_NOTICE();
 
-	static std::string mapname("");
-	if ( mapname.compare( model ) != 0 )
+	//we need to do this to recreate coronas on resolution change
+	//static std::string mapname("");
+	//if ( mapname.compare( model ) != 0 )
 	{
 		//do some cleaning
 		g_halosvalidation.clear();
 		qdx_begin_loading_map( model );
 
-		mapname.assign( model );
+		//mapname.assign( model );
 	}
 
 	h2_read_compnormals_textures();
