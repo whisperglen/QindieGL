@@ -2382,6 +2382,7 @@ static void (*fp_calcnormals)( int param_1, float param_2, float param_3, int pa
 static void (*fp_IN_DeactivateMouse)();// = 0x1d240
 static byte** dp_sv_client;// = 0x7becc
 #define sv_client *(dp_sv_client)
+static void (*CLFX_LoadDll)(void);// = 0x33e80
 
 #define REFDEF_VIEWORG_OFF 7
 #define REFDEF_CLIENTVIEWORG_OFF 10
@@ -2479,6 +2480,11 @@ static void h2_generic_fixes()
 			{
 				memset( code, 0x90, 5 );
 				hook_protect( code, 5, restore );
+
+				//we are too late unfortunately since the call was already made
+				//however we can make the call again with the patched code
+				CLFX_LoadDll = (void(*)())((byte*)quake2_data.lpBaseOfDll + 0x33e80);
+				CLFX_LoadDll();
 
 				logPrintf( "h2_generic_fixes: CLFX_LoadDll was patched\n" );
 			}
