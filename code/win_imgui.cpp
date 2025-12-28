@@ -509,12 +509,6 @@ static void do_draw()
 		}
 	}
 #endif
-	
-	ImGui::NewLine(); ImVec2 toggle_sz( 150, 0 );
-	if ( ImGui::Button( "Toggle Flashlight", toggle_sz ) )
-	{
-		rmx_flashlight_enable();
-	}
 
 	float* normals_thresh = rmx_4imgui_getnormalsthresh();
 	if (normals_thresh)
@@ -524,6 +518,12 @@ static void do_draw()
 			ImGui::SliderFloat("Limit", normals_thresh, -1.0, 1.0);
 			ImGui::Text("Angle value %.3f", (180.0 / M_PI) * acosf(*normals_thresh));
 		}
+	}
+	
+	ImGui::NewLine(); ImVec2 toggle_sz( 150, 0 );
+	if ( ImGui::Button( "Toggle Flashlight", toggle_sz ) )
+	{
+		rmx_flashlight_enable();
 	}
 
 

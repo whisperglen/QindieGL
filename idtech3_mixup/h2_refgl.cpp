@@ -462,6 +462,7 @@ int *dp_currenttmu;// = 0x5ff78
 #define currenttmu (*dp_currenttmu)
 int *currenttexture;// = 0x5ff70
 float *r_turbsin;// = 0x30684
+float *skymins_0, *skymins_1, *skymaxs_0, *skymaxs_1;
 static cvarq2_t* r_fullbright;
 static cvarq2_t* gl_drawflat;
 static cvarq2_t* gl_sortmulti;
@@ -527,6 +528,7 @@ static void h2_check_crtent_frame_vs_oldframe();
 static void R_RecursiveWorldNodeEx( mnode_t* node, BOOL inpvs );
 static void R_SortAndDrawSurfaces( drawSurf_t* surfs, int numSurfs );
 static void R_AddDrawSurf( msurface_t* surf );
+static void h2_DrawFullSky();
 
 static void h2_generic_fixes();
 static void h2_generic_fixes_deinit();
@@ -565,6 +567,10 @@ void h2_refgl_init()
 			dp_currenttmu = PTR_FROM_OFFSET( int*, 0x5ff78 );
 			currenttexture = PTR_FROM_OFFSET( int*, 0x5ff70 );
 			r_turbsin = PTR_FROM_OFFSET( float*, 0x30684 );
+			skymins_0 = PTR_FROM_OFFSET(float*, 0x5fb00);
+			skymins_1 = PTR_FROM_OFFSET(float*, 0x5fb18);
+			skymaxs_0 = PTR_FROM_OFFSET(float*, 0x5fa60);
+			skymaxs_1 = PTR_FROM_OFFSET(float*, 0x5fa78);
 
 			R_TextureAnimation = (image_t*(*)(const mtexinfo_t *))((intptr_t)0xae70 + (intptr_t)ref_gl_data.lpBaseOfDll);
 			fp_qglMultiTexCoord2fARB = (void (APIENTRY **)(GLenum,GLfloat,GLfloat))((intptr_t)0x53770 + (intptr_t)ref_gl_data.lpBaseOfDll);
@@ -1032,7 +1038,8 @@ static void R_RecursiveWorldNodeEx(mnode_t* node, BOOL inpvs)
 		if (surf->texinfo->flags & SURF_SKY)
 		{
 			// Just adds to visible sky bounds
-			R_AddSkySurface(surf);
+			//R_AddSkySurface(surf);
+			h2_DrawFullSky();
 		}
 		else if (surf->texinfo->flags & (SURF_TRANS33 | SURF_TRANS66))
 		{
@@ -1098,7 +1105,8 @@ static void R_RecursiveWorldNodeEx(mnode_t* node, BOOL inpvs)
 			if (surf->texinfo->flags & SURF_SKY)
 			{
 				// Just adds to visible sky bounds
-				R_AddSkySurface(surf);
+				//R_AddSkySurface(surf);
+				h2_DrawFullSky();
 			}
 			else if (surf->texinfo->flags & (SURF_TRANS33 | SURF_TRANS66))
 			{
@@ -1249,9 +1257,10 @@ static void R_SortAndDrawSurfaces( drawSurf_t* surfs, int numSurfs )
 		{
 			//render what was accumulated so far, with the bound textures
 			R_RenderSurfs(flags);
+			flags = 0;
 		}
 
-		flags = s->flags;
+		flags |= s->flags;
 
 		//check if new textures need to be bound
 		if ( sort.bits.dynamic )
@@ -1903,6 +1912,64 @@ static void h2_draw_normals()
 	GL_MBind(GL_TEXTURE0, oldtexture);
 
 	//glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
+}
+
+#define WHITE_CLR { 255, 255, 255, 255 }
+static const int SKY_FRONT_IDX = 0;
+static const int SKY_LEFT_IDX = 4;
+static const int SKY_BACK_IDX = 8;
+static const int SKY_RIGHT_IDX = 12;
+static const int SKY_TOP_IDX = 16;
+static const int SKY_BOTTOM_IDX = 20;
+static struct vertexData_s skyverts[] =
+{   // xyz[3] normal[3] clr tex0[2] tex1[2]
+	// front
+	{  0.5f, -0.5f, -0.5f,  0, 0, 0,  WHITE_CLR,  0, 0,  0, 0 },
+	{ -0.5f, -0.5f, -0.5f,  0, 0, 0,  WHITE_CLR,  1, 0,  0, 0 },
+	{ -0.5f,  0.5f, -0.5f,  0, 0, 0,  WHITE_CLR,  1, 1,  0, 0 },
+	{  0.5f,  0.5f, -0.5f,  0, 0, 0,  WHITE_CLR,  0, 1,  0, 0 },
+
+	//left
+	{  0.5f, -0.5f,  0.5f,  0, 0, 0,  WHITE_CLR,  0, 0,  0, 0},
+	{  0.5f, -0.5f, -0.5f,  0, 0, 0,  WHITE_CLR,  1, 0,  0, 0},
+	{  0.5f,  0.5f, -0.5f,  0, 0, 0,  WHITE_CLR,  1, 1,  0, 0},
+	{  0.5f,  0.5f,  0.5f,  0, 0, 0,  WHITE_CLR,  0, 1,  0, 0},
+
+	//back
+	{ -0.5f, -0.5f,  0.5f,  0, 0, 0,  WHITE_CLR,  0, 0,  0, 0},
+	{  0.5f, -0.5f,  0.5f,  0, 0, 0,  WHITE_CLR,  1, 0,  0, 0},
+	{  0.5f,  0.5f,  0.5f,  0, 0, 0,  WHITE_CLR,  1, 1,  0, 0},
+	{ -0.5f,  0.5f,  0.5f,  0, 0, 0,  WHITE_CLR,  0, 1,  0, 0},
+
+	//right
+	{ -0.5f, -0.5f, -0.5f,  0, 0, 0,  WHITE_CLR,  0, 0,  0, 0},
+	{ -0.5f, -0.5f,  0.5f,  0, 0, 0,  WHITE_CLR,  1, 0,  0, 0},
+	{ -0.5f,  0.5f,  0.5f,  0, 0, 0,  WHITE_CLR,  1, 1,  0, 0},
+	{ -0.5f,  0.5f, -0.5f,  0, 0, 0,  WHITE_CLR,  0, 1,  0, 0},
+
+	//top
+	{ -0.5f,  0.5f, -0.5f,  0, 0, 0,  WHITE_CLR,  0, 1,  0, 0},
+	{ -0.5f,  0.5f,  0.5f,  0, 0, 0,  WHITE_CLR,  0, 0,  0, 0},
+	{  0.5f,  0.5f,  0.5f,  0, 0, 0,  WHITE_CLR,  1, 0,  0, 0},
+	{  0.5f,  0.5f, -0.5f,  0, 0, 0,  WHITE_CLR,  1, 1,  0, 0},
+
+	//bottom
+	{ -0.5f, -0.5f, -0.5f,  0, 0, 0,  WHITE_CLR,  0, 0,  0, 0},
+	{ -0.5f, -0.5f,  0.5f,  0, 0, 0,  WHITE_CLR,  0, 1,  0, 0},
+	{  0.5f, -0.5f,  0.5f,  0, 0, 0,  WHITE_CLR,  1, 1,  0, 0},
+	{  0.5f, -0.5f, -0.5f,  0, 0, 0,  WHITE_CLR,  1, 0,  0, 0},
+};
+
+static void h2_DrawFullSky()
+{
+	for (int i = 0; i < 6; i++)
+	{
+		//forces full sky to draw
+		skymins_0[i] = -1;
+		skymins_1[i] = -1;
+		skymaxs_0[i] = 1;
+		skymaxs_1[i] = 1;
+	}
 }
 
 OPENGL_API void WINAPI glClear( GLbitfield mask );
