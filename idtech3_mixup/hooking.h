@@ -32,6 +32,20 @@ void* hook_offset_to_addr( void* offset );
   } \
 }
 
+enum fstack_check_mode_e
+{
+	FPSTK_IGNORE,
+	FPSTK_CLEAR,
+	FPSTK_SAVE
+};
+
+typedef struct fstack_save_data_s
+{
+	uint32_t data[27];
+} fstack_save_data_t;
+
+uint32_t check_fp_stack(int mode, fstack_save_data_t* dest);
+void restore_fp_stack(void* dest);
 
 #ifdef __cplusplus
 }

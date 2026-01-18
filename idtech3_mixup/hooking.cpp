@@ -223,3 +223,58 @@ void hook_frame_ended()
 	if ( h2_initialised )
 		h2_refgl_frame_ended();
 }
+
+#if !id386
+uint32_t check_fp_stack(int mode, fstack_save_data_t* dest) { return 0; }
+void restore_fp_stack(void* dest) {};
+#else
+uint32_t check_fp_stack(int mode, fstack_save_data_t* dest)
+{
+	uint32_t flags;
+
+	_asm {
+		xor eax, eax
+		fwait
+		fnstsw ax
+		sar ax, 11
+		mov flags, eax
+		and flags, 7
+		jz short fpstack_end
+	}
+
+	switch (mode)
+	{
+	case FPSTK_CLEAR: //clear stack
+		_asm {
+			mov eax, flags
+			fpstack_loop :
+			fstp st(0)
+				dec eax
+				jnz fpstack_loop
+		}
+		break;
+	case FPSTK_SAVE: //store stack
+		if (dest != NULL)
+		{
+			void* fsave_dest = dest->data;
+			_asm {
+				fwait
+				fsave fsave_dest
+			}
+		}
+		break;
+	}
+fpstack_end:
+
+	return flags;
+}
+
+void restore_fp_stack(void* dest)
+{
+	_asm {
+		fwait
+		finit
+		frstor dest
+	}
+}
+#endif

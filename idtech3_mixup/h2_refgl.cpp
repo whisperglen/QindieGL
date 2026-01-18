@@ -520,6 +520,7 @@ typedef struct {
 } surfList_t;
 
 static surfList_t g_surfList = { 0 };
+static int g_draw_fullsky_requested = 0;
 
 static void h2_intercept_RecursiveWorldNode( mnode_t* node );
 static qboolean h2_intercept_R_CullAliasModel( vec3_t bbox[8], void* e /*entity_t* e*/ );
@@ -851,6 +852,7 @@ static void h2_intercept_RecursiveWorldNode( mnode_t* node )
 	HOOK_ONLINE_NOTICE();
 
 	g_surfList.numSurfs = 0;
+	g_draw_fullsky_requested = 0;
 
 	glPushDebugGroup(0, 0, -1, "R_RecursiveWorldNodeEx");
 
@@ -1172,6 +1174,7 @@ static bool h2_should_compute_normals(const image_t* image);
 static void R_AddDrawSurf(msurface_t *surf)
 {
 	int index;
+	bool normals = rmx_normals->value > 0;
 
 	index = g_surfList.numSurfs;
 	if ( index < MAX_DRAWSURFS )
@@ -1204,7 +1207,7 @@ static void R_AddDrawSurf(msurface_t *surf)
 
 		unsigned surflags = 0;
 		image_t* image = R_TextureAnimation(surf->texinfo);
-		if (h2_should_compute_normals(image))
+		if (normals && h2_should_compute_normals(image))
 		{
 			surflags |= RECALC_NORMALS | RENDER_NORMALS;
 		}
@@ -1424,6 +1427,13 @@ static void R_Model_BuildVBuffAndDraw(int *order, float *normals_array, int *p_a
 {
 	HOOK_ONLINE_NOTICE();
 
+	fstack_save_data_t fps;
+	uint32_t fpsc = check_fp_stack(FPSTK_IGNORE, &fps);
+	if (fpsc)
+	{
+		riPRINTF(PRINT_ALL, "Warning: R_Model_BuildVBuffAndDraw: FP stack size: %d\n", fpsc);
+	}
+
 	//if ( g_calcnormals != normals_array )
 	//{
 	//	__debugbreak();
@@ -1436,12 +1446,14 @@ static void R_Model_BuildVBuffAndDraw(int *order, float *normals_array, int *p_a
 
 	uint32_t render_flags = 0;
 	if(rmx_normals->value)
+	{
 		render_flags |= RENDER_NORMALS;
 
-	image_t* image = GetSkin();
-	if (h2_should_compute_normals(image))
-	{
-		render_flags |= RECALC_NORMALS;
+		image_t* image = GetSkin();
+		if (h2_should_compute_normals(image))
+		{
+			render_flags |= RECALC_NORMALS;
+		}
 	}
 
 	uint32_t currententity_flags;
@@ -1623,14 +1635,45 @@ static inline int h2_vertexes_compare2( const struct vertexData_s* a, const stru
 {
 	const float epsilon = 1e-9f;
 
+	//there seems to be a huge bottleneck in this code in debug mode
+	// sse code does not seem to fix it, maybe I'll figure smth out in time
+#if 0
+	__m128 va, vb;
+	const __m128 clr = { 1,1,1,0 };
+	va = _mm_loadu_ps(a->xyz);
+	vb = _mm_loadu_ps(b->xyz);
+	//va = _mm_mul_ps(va, clr);
+	//vb = _mm_mul_ps(vb, clr);
+	__m128 vd = _mm_sub_ps(va, vb);
+	__m128 vepsilon = _mm_set_ps1(epsilon);
+	__m128 vnepsilon = _mm_set_ps1(-epsilon);
+	__m128 vgt = _mm_cmpgt_ps(vd, vepsilon);
+	__m128i ones = _mm_set1_epi32(1);
+	__m128i vgt2 = _mm_and_si128(_mm_castps_si128(vgt), ones);
+	__m128 vle = _mm_cmple_ps(vd, vnepsilon);
+	__m128i vor = _mm_or_si128(vgt2, _mm_castps_si128(vle));
+	int chk[4];
+	int res = 0;
+	_mm_storeu_si128((__m128i*)chk, vor);
+	for (int i = 0; i < 3; i++)
+	{
+		if (chk[i])
+		{
+			res = chk[i];
+			break;
+		}
+	}
+	return res;
+#endif
+
 	const float dx = a->xyz[0] - b->xyz[0];
-	if (fabsf( dx ) < epsilon )
+	if (fabs( dx ) < epsilon )
 	{
 		const float dy = a->xyz[1] - b->xyz[1];
-		if (fabsf( dy ) < epsilon )
+		if (fabs( dy ) < epsilon )
 		{
 			const float dz = a->xyz[2] - b->xyz[2];
-			if (fabsf( dz ) < epsilon )
+			if (fabs( dz ) < epsilon )
 			{
 				return 0;
 			}
@@ -1646,13 +1689,13 @@ static inline int h2_normals_compare2(const struct vertexData_s* a, const struct
 	const float epsilon = 1e-9f;
 
 	const float dx = a->normal[0] - b->normal[0];
-	if (fabsf(dx) < epsilon)
+	if (fabs(dx) < epsilon)
 	{
 		const float dy = a->normal[1] - b->normal[1];
-		if (fabsf(dy) < epsilon)
+		if (fabs(dy) < epsilon)
 		{
 			const float dz = a->normal[2] - b->normal[2];
-			if (fabsf(dz) < epsilon)
+			if (fabs(dz) < epsilon)
 			{
 				return 0;
 			}
@@ -1962,13 +2005,18 @@ static struct vertexData_s skyverts[] =
 
 static void h2_DrawFullSky()
 {
-	for (int i = 0; i < 6; i++)
+	if (!g_draw_fullsky_requested)
 	{
-		//forces full sky to draw
-		skymins_0[i] = -1;
-		skymins_1[i] = -1;
-		skymaxs_0[i] = 1;
-		skymaxs_1[i] = 1;
+		g_draw_fullsky_requested = 1;
+
+		for (int i = 0; i < 6; i++)
+		{
+			//forces full sky to draw
+			skymins_0[i] = -1;
+			skymins_1[i] = -1;
+			skymaxs_0[i] = 1;
+			skymaxs_1[i] = 1;
+		}
 	}
 }
 
@@ -2009,11 +2057,18 @@ static void R_RenderSurfs( int flags )
 	{
 		//c_brush_polys++;
 
-		if ( flags & RECALC_NORMALS || rmx_normals->value >= 2 )
+		if (rmx_normals->value >= 2)
+		{
+			flags |= RECALC_NORMALS;
+			if (rmx_normals->value >= 3)
+			{
+				flags |= RENDER_NORMALS;
+			}
+		}
+
+		if ( flags & RECALC_NORMALS )
 		{
 			h2_recalculate_normals();
-			if ( rmx_normals->value >= 3 )
-				flags |= RENDER_NORMALS;
 		}
 
 		glEnableClientState( GL_VERTEX_ARRAY );
@@ -2076,6 +2131,15 @@ static void hk_R_EmitWaterPolys(msurface_t* fa, qboolean undulate)
 	//take color from previous calls to glColor
 	//if ( D3DState.CurrentState.isSet.bits.color )
 		color = D3DState.CurrentState.currentColor;
+
+	if (rmx_normals->value)
+	{
+		image_t* image = R_TextureAnimation(fa->texinfo);
+		if (h2_should_compute_normals(image))
+		{
+			render_flags |= RENDER_NORMALS | RECALC_NORMALS;
+		}
+	}
 	
 	if (fa->texinfo->flags & SURF_FLOWING)
 		scroll = -64.0f * ((rdt * 0.5f) - floorf(rdt * 0.5f));
