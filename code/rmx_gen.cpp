@@ -228,15 +228,22 @@ void rmx_set_game_api( game_api fn )
 
 void rmx_gamevar_set( const char *name, const char *val )
 {
-	if ( g_game_api )
-		g_game_api( OP_SETVAR, name, val, NULL );
+	if (g_game_api)
+	{
+		gameparam_t pname, pval, pnull = { 0 };
+		pname.strval = name;
+		pval.strval = val;
+		g_game_api(OP_SETVAR, pname, pval, pnull);
+	}
 }
 
 int rmx_gamevar_get( const char *name )
 {
 	if ( g_game_api )
 	{
-		gameparamret_t ret = g_game_api( OP_GETVAR, name, NULL, NULL );
+		gameparam_t pname, pnull = { 0 };
+		pname.strval = name;
+		gameparamret_t ret = g_game_api( OP_GETVAR, pname, pnull, pnull);
 		return ret.intval;
 	}
 	return 0;
@@ -244,8 +251,11 @@ int rmx_gamevar_get( const char *name )
 
 void rmx_deactivate_mouse()
 {
-	if ( g_game_api )
-		g_game_api( OP_DEACTMOUSE, NULL, NULL, NULL );
+	if (g_game_api)
+	{
+		gameparam_t pnull = { 0 };
+		g_game_api(OP_DEACTMOUSE, pnull, pnull, pnull);
+	}
 }
 
 void rmx_console_printf( int printLevel, const char *fmt, ... )
@@ -258,14 +268,21 @@ void rmx_console_printf( int printLevel, const char *fmt, ... )
 		va_start( args, fmt );
 		vsnprintf( msg, sizeof( msg ), fmt, args );
 		va_end( args );
-		g_game_api( OP_CONPRINT, printLevel, msg, NULL );
+		gameparam_t plevel, pmsg, pnull = { 0 };
+		plevel.intval = printLevel;
+		pmsg.strval = msg;
+		g_game_api( OP_CONPRINT, plevel, pmsg, pnull );
 	}
 }
 
 void rmx_exec_cmd( const char *cmd )
 {
-	if ( g_game_api )
-		g_game_api( OP_EXECMD, cmd, NULL, NULL );
+	if (g_game_api)
+	{
+		gameparam_t pcmd, pnull = { 0 };
+		pcmd.strval = cmd;
+		g_game_api(OP_EXECMD, pcmd, pnull, pnull);
+	}
 }
 
 int rmx_milliseconds( void )
@@ -287,7 +304,10 @@ float* rmx_4imgui_getnormalsthresh()
 	float* ret = 0;
 
 	if (g_game_api)
-		ret = g_game_api(OP_GETNORMALSTHRESHVAL, NULL, NULL, NULL).pfltval;
+	{
+		gameparam_t pnull = { 0 };
+		ret = g_game_api(OP_GETNORMALSTHRESHVAL, pnull, pnull, pnull).pfltval;
+	}
 
 	return ret;
 }

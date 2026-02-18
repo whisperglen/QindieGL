@@ -51,12 +51,6 @@ typedef union gameparam_u
 	const char* strval;
 	const int* pintval;
 	const float* pfltval;
-	gameparam_u() : intval( 0 ) {}
-	gameparam_u(int32_t p) : intval( p ) {}
-	gameparam_u(float p) : fltval( p ) {}
-	gameparam_u(const char* p) : strval( p ) {}
-	gameparam_u(const int* p) : pintval( p ) {}
-	gameparam_u(const float* p) : pfltval(p) {}
 } gameparam_t;
 typedef union gameparamret_u
 {
@@ -65,14 +59,10 @@ typedef union gameparamret_u
 	char* strval;
 	int* pintval;
 	float* pfltval;
-	gameparamret_u() : intval(0) {}
-	gameparamret_u(int32_t p) : intval(p) {}
-	gameparamret_u(float p) : fltval(p) {}
-	gameparamret_u(char* p) : strval(p) {}
-	gameparamret_u(int* p) : pintval(p) {}
-	gameparamret_u(float* p) : pfltval(p) {}
 } gameparamret_t;
-typedef gameparamret_t (__cdecl* game_api)(gameops_t op, gameparam_t p0, gameparam_t p1, gameparam_t p2);
+extern "C" {
+	typedef gameparamret_t(__cdecl* game_api)(gameops_t op, gameparam_t p0, gameparam_t p1, gameparam_t p2);
+}
 void rmx_set_game_api( game_api fn );
 void rmx_flashlight_enable( int val = -1 );
 void rmx_distant_light_radiance(float r, float g, float b, bool enabled);

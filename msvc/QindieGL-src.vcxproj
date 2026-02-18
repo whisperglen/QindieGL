@@ -424,6 +424,7 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration).$(Platf
     <ClInclude Include="..\code\d3d_texture.hpp" />
     <ClInclude Include="..\code\d3d_utils.hpp" />
     <ClInclude Include="..\code\d3d_wrapper.hpp" />
+    <ClInclude Include="..\code\qindie_rmx.h" />
     <ClInclude Include="..\code\resource.h" />
     <ClInclude Include="..\code\rmx_gen.h" />
     <ClInclude Include="..\code\rmx_light.h" />

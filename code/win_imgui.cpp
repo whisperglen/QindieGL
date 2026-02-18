@@ -843,13 +843,17 @@ static void exchange_wndproc_and_mouse( enum exc_wprocnmouse_e action )
 			rmx_gamevar_set( "in_mouse", "0" );
 		rmx_deactivate_mouse();
 		break;
-	case WNDPROC_RESTORE_GAME:
+	case WNDPROC_RESTORE_GAME:{
 		if( g_game_wndproc )
 			SetWindowLongPtr( HWND( g_hwnd ), GWLP_WNDPROC, LONG_PTR( g_game_wndproc ) );
 		g_game_wndproc = NULL;
 		if( g_in_mouse_val )
-			rmx_gamevar_set( "in_mouse", "1" );
+		{
+			char value[4] = { 0 };
+			snprintf(value, sizeof(value), "%d", g_in_mouse_val);
+			rmx_gamevar_set( "in_mouse", value );
+		}
 		g_in_mouse_val = 0;
-		break;
+		break;}
 	}
 }

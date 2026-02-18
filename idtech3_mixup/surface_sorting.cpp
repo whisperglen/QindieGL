@@ -498,7 +498,7 @@ static gameparamret_t __cdecl surface_sorting_implement_api(gameops_t op, gamepa
 	switch (op)
 	{
 	case OP_GETVAR: {
-		ret = fp_cvarGet ? (cvarGet(fp_cvarGet))(p0.strval, "0", 0)->integer : -1;
+		ret.intval = fp_cvarGet ? (cvarGet(fp_cvarGet))(p0.strval, "0", 0)->integer : -1;
 		break; }
 	case OP_SETVAR:
 		if (fp_cvarSet) (cvarSet(fp_cvarSet))(p0.strval, p1.strval);

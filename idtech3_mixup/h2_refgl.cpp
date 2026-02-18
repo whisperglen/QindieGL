@@ -2989,7 +2989,7 @@ static gameparamret_t __cdecl h2_implement_api( gameops_t op, gameparam_t p0, ga
 	{
 	case OP_GETVAR: {
 		cvarq2_t* cv = riCVAR_GET(p0.strval, "0", 0 );
-		ret = int(cv->value);
+		ret.intval = int(cv->value);
 		break; }
 	case OP_SETVAR:
 		riCVAR_SET( p0.strval, p1.strval );
