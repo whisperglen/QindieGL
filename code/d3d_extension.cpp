@@ -304,6 +304,7 @@ void D3DExtension_BuildExtensionsString()
 	ExtensionBuf.AddExtension( "GL_EXT_fog_coord" );
 	ExtensionBuf.AddExtension( "GL_EXT_packed_pixels" );
 	ExtensionBuf.AddExtension( "GL_EXT_secondary_color" );
+	ExtensionBuf.AddExtension( "GL_ARB_vertex_buffer_object" );
 
 	checkCaps = (D3DPTEXTURECAPS_VOLUMEMAP);
 	if ((D3DGlobal.hD3DCaps.TextureCaps & checkCaps) == checkCaps) ExtensionBuf.AddExtension( "GL_EXT_texture3D" );
