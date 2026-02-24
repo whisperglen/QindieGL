@@ -27,6 +27,8 @@
 #include "d3d_matrix_stack.hpp"
 #include "d3d_helpers.hpp"
 
+#include <vector>
+
 //!DO NOT UNCOMMENT THIS UNLESS YOU MAKE PERFORMANCE TESTS!
 //#define VA_USE_IMMEDIATE_MODE
 
@@ -831,6 +833,255 @@ void D3DVABuffer :: DrawPrimitive()
 }
 
 //------------------------------------------------------------------------------------------------------
+struct vbodata_s
+{
+	GLubyte* dataptr;
+	size_t bufsize;
+	size_t usedsz;
+	bool inUse;
+};
+typedef struct vbodata_s vbodata_t;
+
+static std::vector<vbodata_t> g_vbolist;
+static vbodata_t* g_active_array_vbo = NULL;
+static vbodata_t* g_active_elem_vbo = NULL;
+
+static void vbo_offset_to_ptr(D3DVAInfo* pVAInfo, const vbodata_t *bs)
+{
+	if ((intptr_t)pVAInfo->data < bs->usedsz)
+	{
+		pVAInfo->data = bs->dataptr + (GLubyte)pVAInfo->data;
+	}
+}
+
+static void Consider_Active_VBO()
+{
+	vbodata_t* bs = g_active_array_vbo;
+	if (bs && bs->dataptr && bs->usedsz > 0)
+	{
+		if (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_COLOR_BIT)
+		{
+			vbo_offset_to_ptr(&D3DState.ClientVertexArrayState.colorInfo, bs);
+		}
+		if (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_COLOR2_BIT)
+		{
+			vbo_offset_to_ptr(&D3DState.ClientVertexArrayState.color2Info, bs);
+		}
+		if (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_FOG_BIT)
+		{
+			vbo_offset_to_ptr(&D3DState.ClientVertexArrayState.fogInfo, bs);
+		}
+		if (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_NORMAL_BIT)
+		{
+			vbo_offset_to_ptr(&D3DState.ClientVertexArrayState.normalInfo, bs);
+		}
+		uint32_t tmu = 1 << VA_TEXTURE_BIT_SHIFT;
+		for (int i = 0; i < D3DGlobal.maxActiveTMU; i++)
+		{
+			if (D3DState.ClientVertexArrayState.vertexArrayEnable & tmu)
+			{
+				vbo_offset_to_ptr(&D3DState.ClientVertexArrayState.texCoordInfo[i], bs);
+			}
+			tmu = tmu << 1;
+		}
+		if (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_VERTEX_BIT)
+		{
+			vbo_offset_to_ptr(&D3DState.ClientVertexArrayState.vertexInfo, bs);
+		}
+	}
+}
+
+OPENGL_API void WINAPI glBindBufferARB(GLenum target, GLuint buffer)
+{
+	if (buffer < 0 || buffer >= g_vbolist.size())
+	{
+		logPrintf("ERROR: bad BindBuffer 0x%x\n", buffer);
+		return;
+	}
+
+	vbodata_t *bs = NULL;
+	if (buffer != 0)
+	{
+		bs = &g_vbolist[buffer];
+	}
+
+	if (target == GL_ARRAY_BUFFER)
+	{
+		g_active_array_vbo = bs;
+	}
+	else if (target == GL_ELEMENT_ARRAY_BUFFER)
+	{
+		g_active_elem_vbo = bs;
+	}
+}
+
+OPENGL_API void WINAPI glGenBuffersARB(GLsizei n, GLuint* buffers)
+{
+	vbodata_t t = { 0 };
+	t.inUse = true;
+	if (g_vbolist.size() == 0)
+	{
+		g_vbolist.push_back(t);
+	}
+
+	int found = 0;
+	vbodata_t* bs = &g_vbolist[0];
+	int max_vbos = g_vbolist.size();
+	for (int i = 0; i < max_vbos; i++, bs++)
+	{
+		if (bs->inUse == false)
+		{
+			bs->inUse = true;
+			buffers[found] = i;
+			found++;
+			if (found == n)
+				return;
+		}
+	}
+
+	while (found < n)
+	{
+		buffers[found] = g_vbolist.size();
+		found++;
+		g_vbolist.push_back(t);
+	}
+}
+
+OPENGL_API void WINAPI glDeleteBuffersARB(GLsizei n, const GLuint* buffers)
+{
+	int max_vbos = g_vbolist.size();
+
+	for (int i = 0; i < n; i++)
+	{
+		int id = buffers[i];
+		if (id > 0 && id < max_vbos)
+		{
+			g_vbolist[id].inUse = false;
+		}
+	}
+}
+
+OPENGL_API void* WINAPI glMapBufferARB(GLenum target, GLenum access)
+{
+	vbodata_t* bs = NULL;
+	if (target == GL_ARRAY_BUFFER)
+	{
+		bs = g_active_array_vbo;
+	}
+	else if (target == GL_ELEMENT_ARRAY_BUFFER)
+	{
+		bs = g_active_elem_vbo;
+	}
+	return bs ? bs->dataptr : NULL;
+}
+
+OPENGL_API void WINAPI glUnmapBufferARB(GLenum target)
+{
+	//hmm
+}
+
+OPENGL_API GLboolean WINAPI glIsBufferARB(GLuint buffer)
+{
+	GLboolean ret = GL_FALSE;
+
+	if (buffer > 0 && buffer < g_vbolist.size())
+	{
+		if (g_vbolist[buffer].inUse == true)
+			ret = GL_TRUE;
+	}
+	return ret;
+}
+
+static const size_t vbo_data_inc = 255;
+inline size_t vbo_calc_datasz(size_t in) { return (in + vbo_data_inc) & ~vbo_data_inc; }
+
+OPENGL_API void WINAPI glBufferDataARB(GLenum target, GLsizeiptr size, const void* data, GLenum usage)
+{
+	vbodata_t* bs = NULL;
+	if (target == GL_ARRAY_BUFFER)
+	{
+		bs = g_active_array_vbo;
+	}
+	else if (target == GL_ELEMENT_ARRAY_BUFFER)
+	{
+		bs = g_active_elem_vbo;
+	}
+
+	if (bs)
+	{
+		if (size > bs->bufsize)
+		{
+			void* p;
+			if (bs->dataptr)
+			{
+				free(bs->dataptr);
+				bs->bufsize = 0;
+				bs->usedsz = 0;
+			}
+
+			size_t newsize = vbo_calc_datasz(size);
+			bs->dataptr = (GLubyte*)malloc(newsize);
+			if (bs->dataptr)
+			{
+				bs->bufsize = newsize;
+				bs->usedsz = 0;
+			}
+		}
+
+		if (size <= bs->bufsize && bs->dataptr)
+		{
+			if (data)
+			{
+				memcpy(bs->dataptr, data, size);
+			}
+			else
+			{
+				memset(bs->dataptr, 0, size);
+			}
+			bs->usedsz = size;
+		}
+	}
+}
+
+OPENGL_API void WINAPI glBufferSubDataARB(GLenum target, GLintptr offset, GLsizeiptr size, const void* data)
+{
+	vbodata_t* bs = NULL;
+	if (target == GL_ARRAY_BUFFER)
+	{
+		bs = g_active_array_vbo;
+	}
+	else if (target == GL_ELEMENT_ARRAY_BUFFER)
+	{
+		bs = g_active_elem_vbo;
+	}
+
+	if (bs)
+	{
+		if (size + offset > bs->bufsize)
+		{
+			void* p;
+			size_t newsize = vbo_calc_datasz(size + offset);
+			if (bs->dataptr)
+				p = realloc(bs->dataptr, newsize);
+			else
+				p = malloc(newsize);
+
+			if (p)
+			{
+				bs->dataptr = (GLubyte*)p;
+				bs->bufsize = newsize;
+			}
+		}
+
+		if (size + offset <= bs->bufsize && bs->dataptr)
+		{
+			if(data)
+				memcpy(bs->dataptr + offset, data, size);
+			if (size + offset > bs->usedsz)
+				bs->usedsz = size + offset;
+		}
+	}
+}
 
 OPENGL_API void WINAPI glColorPointer( GLint size, GLenum type, GLsizei stride, const GLvoid *pointer )
 {
@@ -1182,6 +1433,8 @@ OPENGL_API void WINAPI glInterleavedArrays( GLenum format, GLsizei stride, const
 OPENGL_API void WINAPI glArrayElement( GLint i )
 {
 	assert( D3DGlobal.pIMBuffer != nullptr );
+
+	Consider_Active_VBO();
 	if (!(D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_VERTEX_BIT)) {
 		logPrintf("WARNING: glArrayElement: vertex array is disabled\n");
 		return;
@@ -1367,12 +1620,14 @@ static void internal_DrawElements( GLenum mode, GLuint start, GLuint end, GLsize
 
 OPENGL_API void WINAPI glDrawArrays( GLenum mode, GLint first, GLsizei count )
 {
+	Consider_Active_VBO();
 	D3DState_Check();
 	D3DState_AssureBeginScene();
 	internal_DrawArrays( mode, first, count );
 }
 OPENGL_API void WINAPI glDrawElements( GLenum mode, GLsizei count, GLenum type, const GLvoid *indices )
 {
+	Consider_Active_VBO();
 	D3DState_Check();
 	D3DState_AssureBeginScene();
 	internal_DrawElements( mode, ~0u, 0, count, type, indices );
@@ -1380,6 +1635,7 @@ OPENGL_API void WINAPI glDrawElements( GLenum mode, GLsizei count, GLenum type, 
 
 OPENGL_API void WINAPI glDrawRangeElements( GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices )
 {
+	Consider_Active_VBO();
 	D3DState_Check();
 	D3DState_AssureBeginScene();
 	internal_DrawElements( mode, start, end, count, type, indices );
@@ -1387,6 +1643,7 @@ OPENGL_API void WINAPI glDrawRangeElements( GLenum mode, GLuint start, GLuint en
 
 OPENGL_API void WINAPI glMultiDrawArrays( GLenum mode, const GLint *first, const GLsizei *count, GLsizei primcount )
 {
+	Consider_Active_VBO();
 	D3DState_Check();
 	D3DState_AssureBeginScene();
 	for (int i = 0; i < primcount; ++i)
@@ -1395,6 +1652,7 @@ OPENGL_API void WINAPI glMultiDrawArrays( GLenum mode, const GLint *first, const
 
 OPENGL_API void WINAPI glMultiDrawElements( GLenum mode, GLsizei *count, GLenum type, const GLvoid **indices, GLsizei primcount )
 {
+	Consider_Active_VBO();
 	D3DState_Check();
 	D3DState_AssureBeginScene();
 	for (int i = 0; i < primcount; ++i)

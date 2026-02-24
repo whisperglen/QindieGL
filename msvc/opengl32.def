@@ -341,6 +341,14 @@ EXPORTS
 	glVertex4sv
 	glVertexPointer 
 	glViewport
+	glBindBufferARB
+	glGenBuffersARB
+	glDeleteBuffersARB
+	glIsBufferARB
+	glBufferDataARB
+	glBufferSubDataARB
+	glMapBufferARB
+	glUnmapBufferARB
 	wglChoosePixelFormat = wrap_wglChoosePixelFormat
 	wglCopyContext = wrap_wglCopyContext
 	wglCreateContext = wrap_wglCreateContext
