@@ -43,8 +43,8 @@ OPENGL_API const GLubyte * WINAPI glGetString( GLenum name )
 	{
 	case GL_VENDOR: return (const GLubyte*)WRAPPER_GL_VENDOR_STRING;
 	case GL_VERSION: return (const GLubyte*)WRAPPER_GL_VERSION_STRING;
-	case GL_EXTENSIONS: return (const GLubyte*)D3DGlobal.szExtensions;
-	case GL_RENDERER: return (const GLubyte*)D3DGlobal.szRendererName;
+	case GL_EXTENSIONS: return (const GLubyte*)(D3DGlobal.szExtensions ? D3DGlobal.szExtensions : "");
+	case GL_RENDERER: return (const GLubyte*)(D3DGlobal.szRendererName ? D3DGlobal.szRendererName : "Generic OpenGL");
 	case GL_WRAPPER_NAME_CHS: return (const GLubyte*)WRAPPER_GL_WRAPPER_NAME_STRING;
 	case GL_WRAPPER_VERSION_CHS: return (const GLubyte*)WRAPPER_GL_WRAPPER_VERSION_STRING;
 	default: return (GLubyte*)"";
@@ -574,6 +574,8 @@ OPENGL_API void WINAPI glGetFloatv( GLenum pname, GLfloat *params )
 
 OPENGL_API void WINAPI glGetPointerv( GLenum pname, GLvoid* *params )
 {
+	if (!params) return;
+
 	switch (pname) {
 	case GL_SELECTION_BUFFER_POINTER:
 	case GL_FEEDBACK_BUFFER_POINTER:

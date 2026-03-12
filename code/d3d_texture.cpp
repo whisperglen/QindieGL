@@ -495,6 +495,8 @@ HRESULT D3DTextureObject :: CopyTextureSubLevel( GLint cubeface, GLint level, GL
 	D3DLOCKED_RECT dstlockrect;
 
 	y = D3DGlobal.hCurrentMode.Height - (height + y);
+	if (y < 0) { y = 0; }
+
 	srcrect.left = x;
 	srcrect.right = x + width;
 	srcrect.top = y;
@@ -503,6 +505,9 @@ HRESULT D3DTextureObject :: CopyTextureSubLevel( GLint cubeface, GLint level, GL
 	dstrect.right = xoffset + width;
 	dstrect.top = yoffset;
 	dstrect.bottom = yoffset + height;
+	
+	if (srcrect.right > D3DGlobal.hCurrentMode.Width) srcrect.right = D3DGlobal.hCurrentMode.Width;
+	if (srcrect.bottom > D3DGlobal.hCurrentMode.Height) srcrect.bottom = D3DGlobal.hCurrentMode.Height;
 
 	hr = D3DGlobal.pSystemMemRT->LockRect( &srclockrect, &srcrect, D3DLOCK_NOSYSLOCK|D3DLOCK_READONLY );
 	if (FAILED(hr)) {
@@ -534,8 +539,10 @@ HRESULT D3DTextureObject :: CopyTextureSubLevel( GLint cubeface, GLint level, GL
 	}
 
 	//copy pixels flipping vertical
-	for (int i = 0; i < height; ++i) {
-		memcpy( (byte*)dstlockrect.pBits + i*dstlockrect.Pitch, (byte*)srclockrect.pBits + (height-1-i)*srclockrect.Pitch, width * 4 );
+	int copyWidth = (srcrect.right - srcrect.left) * m_dstbytes;
+	int actualHeight = srcrect.bottom - srcrect.top;
+	for (int i = 0; i < actualHeight; ++i) {
+		memcpy( (byte*)dstlockrect.pBits + i*dstlockrect.Pitch, (byte*)srclockrect.pBits + (actualHeight -1-i)*srclockrect.Pitch, copyWidth );
 	}
 	
 	D3DGlobal.pSystemMemRT->UnlockRect();
@@ -904,8 +911,12 @@ static void D3DTex_LoadSubImage(GLenum target, GLint level, GLint xoffset, GLint
 		cubeFace = target - GL_TEXTURE_CUBE_MAP_POSITIVE_X_ARB;
 
 	int currentTMU = D3DState.TextureState.currentTMU;
-	assert(D3DState.TextureState.currentTexture[currentTMU][targetIndex] != nullptr);
-	assert(D3DState.TextureState.currentTexture[currentTMU][targetIndex]->GetD3DTexture() != nullptr);
+	if ((D3DState.TextureState.currentTexture[currentTMU][targetIndex] == nullptr) ||
+		(D3DState.TextureState.currentTexture[currentTMU][targetIndex]->GetD3DTexture() == nullptr))
+	{
+		// Texture not initialized (e.g. creation failed earlier), ignore sub-update
+		return;
+	}
 
 	if (pixels)
 	{
@@ -1039,8 +1050,12 @@ static void D3DTex_CopySubImage( GLenum target, GLint level, GLint xoffset, GLin
 		cubeFace = target - GL_TEXTURE_CUBE_MAP_POSITIVE_X_ARB;
 
 	int currentTMU = D3DState.TextureState.currentTMU;
-	assert(D3DState.TextureState.currentTexture[currentTMU][targetIndex] != nullptr);
-	assert(D3DState.TextureState.currentTexture[currentTMU][targetIndex]->GetD3DTexture() != nullptr);
+	if ((D3DState.TextureState.currentTexture[currentTMU][targetIndex] == nullptr) ||
+		(D3DState.TextureState.currentTexture[currentTMU][targetIndex]->GetD3DTexture() == nullptr))
+	{
+		// Texture not initialized (e.g. creation failed earlier), ignore sub-copy
+		return;
+	}
 
 	HRESULT hr = D3DState.TextureState.currentTexture[currentTMU][targetIndex]->CopyTextureSubLevel( cubeFace, level, xoffset, yoffset, x, y, width, height );
 	if (FAILED(hr)) {
@@ -1055,12 +1070,14 @@ static void D3DTex_CopySubImage( GLenum target, GLint level, GLint xoffset, GLin
 //=========================================
 OPENGL_API void WINAPI glDeleteTextures( GLsizei n, const GLuint *textures )
 {
+	if (!textures) return;
 	assert(D3DGlobal.pObjectBuffer != nullptr);
 	HRESULT hr = D3DGlobal.pObjectBuffer->DeleteObjects( D3D_OBJECT_TYPE_TEXTURE, n, textures );
 	if (FAILED(hr)) D3DGlobal.lastError = hr;
 }
 OPENGL_API void WINAPI glGenTextures( GLsizei n, GLuint *textures )
 {
+	if (!textures) return;
 	assert(D3DGlobal.pObjectBuffer != nullptr);
 	HRESULT hr = D3DGlobal.pObjectBuffer->GenObjects( D3D_OBJECT_TYPE_TEXTURE, n, textures );
 	if (FAILED(hr)) D3DGlobal.lastError = hr;

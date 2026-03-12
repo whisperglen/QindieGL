@@ -123,6 +123,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="mixup.cpp">
+      <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">OnlyExplicitInline</InlineFunctionExpansion>
+      <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">OnlyExplicitInline</InlineFunctionExpansion>
+      <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">OnlyExplicitInline</InlineFunctionExpansion>
+      <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='Release|x64'">OnlyExplicitInline</InlineFunctionExpansion>
+    </ClCompile>
     <ClCompile Include="texgen.cpp" />
     <ClCompile Include="_main.cpp" />
   </ItemGroup>

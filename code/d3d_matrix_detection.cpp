@@ -62,7 +62,10 @@ enum det_flags
 mat_detection_t g_mat_camera;
 #endif
 
+extern "C" int ptr_is_on_stack(const void* ptr);
+
 static bool matrix_is_flippingmat(const float* mat);
+static bool matrix_is_ortho(const float* mat);
 
 static struct matrix_log_data g_mat_log_data[100];
 static int g_mat_log_idx = 0;
@@ -73,6 +76,7 @@ static int g_mat_log_print_one_round = 0;
 void* g_mat_addrs[3];
 int g_mat_addr_count = 0;
 int g_mat_addr_selected = 0;
+int g_mat_store_first = 1;
 
 static float g_mat_identity[16] =
 {
@@ -82,6 +86,8 @@ static float g_mat_identity[16] =
 	0.0, 0.0, 0.0, 1.0
 };
 
+static float g_mat_store[16];
+
 static D3DXMATRIX g_mat_cache;
 static D3DXMATRIX g_mat_cache_inverse;
 
@@ -89,7 +95,8 @@ enum detection_mode_e
 {
 	DETECTION_NONE = 0,
 	DETECTION_IDTECH2 = 1,
-	DETECTION_IDTECH3 = 2
+	DETECTION_IDTECH3 = 2,
+	DETECTION_XASH3D = 3
 };
 
 bool g_mat_detection_enabled = false;
@@ -146,6 +153,51 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 			//matrix_print_s(&detected_view->m[0][0], "detected view N");
 		}
 	}
+	else if (g_mat_detection_mode == DETECTION_XASH3D)
+	{
+		bool identity = matrix_is_identity(mat);
+
+		if (g_mat_store_first && !identity)
+		{
+			g_mat_store_first = 0;
+			memcpy(g_mat_store, mat, sizeof(g_mat_store));
+		}
+
+		if(identity)
+		{
+			D3DXMatrixIdentity(detected_model);
+			D3DXMatrixIdentity(detected_view);
+			if (g_mat_log_print_one_round & 2)
+			{
+				logPrintf("matrix simple (detected identity)\n");
+			}
+		}
+		if (matrix_detect_are_equal(g_mat_store, mat, 16))
+		{
+			//camera matrix
+			D3DXMatrixIdentity(detected_model);
+			memcpy(&detected_view->m[0][0], mat, 16 * sizeof(float));
+
+			if (g_mat_log_print_one_round & 2)
+			{
+				//matrix_print_s(&detected_model->m[0][0], "detected model XASH");
+				matrix_print_s(&detected_view->m[0][0], "detected view XASH");
+			}
+		}
+		else
+		{
+			//modelview matrix
+			D3DXMATRIX local = D3DXMATRIX(mat);
+			D3DXMatrixMultiply(detected_model, &local, matrix_get_inverse((const float*)(g_mat_store)));
+			memcpy(&detected_view->m[0][0], g_mat_store, sizeof(detected_view->m));
+
+			if (g_mat_log_print_one_round & 2)
+			{
+				matrix_print_s(&detected_model->m[0][0], "detected model ID3inv");
+				matrix_print_s(&detected_view->m[0][0], "detected view ID3inv");
+			}
+		}
+	}
 	else if (g_mat_addr_count == 0 || g_mat_detection_mode == DETECTION_IDTECH2)
 	{
 		D3DXMatrixIdentity(detected_model);
@@ -158,6 +210,15 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 	}
 	else if(g_mat_detection_mode == DETECTION_IDTECH3)
 	{
+		if (ptr_is_on_stack(mat))
+		{
+			g_mat_detection_mode = DETECTION_NONE;
+			memcpy(&detected_model->m[0][0], mat, 16 * sizeof(float));
+			D3DXMatrixIdentity(detected_view);
+			logPrintf("WARNING: MatrixDetection was Disabled: selected idtech3 mode, but game supplied a matrix located on stack %p\n", mat);
+			return;
+		}
+
 		if (matrix_is_identity(mat))
 		{
 			D3DXMatrixIdentity(detected_model);
@@ -324,6 +385,8 @@ void matrix_detect_on_world_retrieve(const float* mat, D3DXMATRIX* detected_mode
 
 void matrix_detect_frame_ended()
 {
+	g_mat_store_first = 1;
+
 	key_inputs_t keys = keypress_get();
 
 	if (keys.o && (keys.ctrl || keys.alt))
@@ -469,4 +532,22 @@ OPENGL_API void WINAPI matrix_print_s(const float* mat, const char *info)
 			mat[8], mat[9], mat[10], mat[11],
 			mat[12], mat[13], mat[14], mat[15]);
 	}
+}
+
+int ptr_is_on_stack(const void* ptr)
+{
+	intptr_t stackptr;
+	int ret = 0;
+#if id386
+	_asm {	mov stackptr, esp }
+#else
+	stackptr = (intptr_t)&ret;
+#endif
+
+	if (((intptr_t)ptr > stackptr) && ((intptr_t)ptr < (stackptr + 0x400))) //within 1K of stack
+	{
+		ret = 1;
+	}
+
+	return ret;
 }
