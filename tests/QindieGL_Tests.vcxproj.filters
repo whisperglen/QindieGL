@@ -21,6 +21,9 @@
     <ClCompile Include="texgen.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="mixup.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="tests.h">
