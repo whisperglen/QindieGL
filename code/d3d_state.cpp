@@ -451,6 +451,37 @@ static void D3DState_SetTextureEnv( int stage, int sampler, eTexTypeInternal int
 		D3DGlobal.pDevice->SetSamplerState( sampler, D3DSAMP_MIPMAPLODBIAS, UTIL_FloatToDword(D3DState.TextureState.textureLodBias[stage])  );
 }
 
+/*
+** ConvertTexMatrixToD3D9
+** Fixes 4x4 matrix for D3D9 2D texture coordinate generation (D3DTTFF_COUNT2)
+** by swapping row 3 and 4, and resetting columns 3 and 4 to safe identity values.
+*/
+static void ConvertTexMatrixToD3D9(const float in[16], float out[16]) {
+	// Row 1: U scale/shear
+	out[0] = in[0];
+	out[1] = in[1];
+	out[2] = 0.0f; // Reset Col 3
+	out[3] = 0.0f; // Reset Col 4
+
+	// Row 2: V scale/shear
+	out[4] = in[4];
+	out[5] = in[5];
+	out[6] = 0.0f; // Reset Col 3
+	out[7] = 0.0f; // Reset Col 4
+
+	// Row 3: D3D9 2D Translation (Pulled from input Row 4)
+	out[8] = in[12];
+	out[9] = in[13];
+	out[10] = 1.0f; // Z identity
+	out[11] = 0.0f; // W identity
+
+	// Row 4: Pulled from input Row 3
+	out[12] = in[8];
+	out[13] = in[9];
+	out[14] = 0.0f; // Z identity
+	out[15] = 1.0f; // W identity
+}
+
 void D3DState_SetTexture()
 {
 	if (!D3DState.TextureState.textureSamplerStateChanged)
@@ -471,6 +502,7 @@ void D3DState_SetTexture()
 		if (matrixChanged) {
 			D3DState.textureMatrixModified[i] = false;
 			D3DStateMatrix& mat = D3DGlobal.textureMatrixStack[i]->top();
+#if 0
 			if ( !mat.is_identity() ||
 				D3DState.TextureState.transformEnabled )
 			{
@@ -487,6 +519,50 @@ void D3DState_SetTexture()
 					break;
 				}
 			}
+#else
+			if (!mat.is_identity())
+			{
+				D3DXMATRIX *transform = mat, local;
+				int numCoords = D3DState.ClientVertexArrayState.texCoordInfo[i].elementCount;
+				if (numCoords < 0) numCoords = 0;
+				if (numCoords > 4) numCoords = 4;
+
+				const DWORD flags[] = { D3DTTFF_DISABLE, D3DTTFF_COUNT1, D3DTTFF_COUNT2, D3DTTFF_COUNT3, D3DTTFF_COUNT4 };
+				DWORD transformFlags = flags[numCoords];
+
+				// For 2D coordinates, swap 3rd and 4th rows of the matrix, since DX9 fills-in the 3rd and 4th texCoord as { 1.0, 0.0 }
+				if (numCoords == 2)
+				{
+					ConvertTexMatrixToD3D9(&transform->m[0][0], &local.m[0][0]);
+					transform = &local;
+				}
+				// Restore projection ONLY for 3D/4D coordinates
+				if (numCoords == 4)
+				{
+					transformFlags |= D3DTTFF_PROJECTED;
+				}
+				// Enable texture transform (projected) for this specific sampler
+				D3DGlobal.pDevice->SetTextureStageState(currentSampler, D3DTSS_TEXTURETRANSFORMFLAGS, transformFlags);
+
+				hr = D3DGlobal.pDevice->SetTransform((D3DTRANSFORMSTATETYPE)(D3DTS_TEXTURE0 + currentSampler), transform);
+				if (FAILED(hr)) {
+					D3DGlobal.lastError = hr;
+					break;
+				}
+			}
+			else
+			{
+				// Disable texture transform since the matrix is identity
+				D3DGlobal.pDevice->SetTextureStageState(currentSampler, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+
+				// Although the transform is disabled, setting the identity matrix ensures consistent state
+				hr = D3DGlobal.pDevice->SetTransform((D3DTRANSFORMSTATETYPE)(D3DTS_TEXTURE0 + currentSampler), mat);
+				if (FAILED(hr)) {
+					D3DGlobal.lastError = hr;
+					break;
+				}
+			}
+#endif
 		}
 
 		D3DTextureObject *bestTexture( nullptr );

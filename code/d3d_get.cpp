@@ -352,6 +352,9 @@ template<typename T> static void glGet( GLenum pname, T *params )
 		}
 		return;
 
+	case GL_MATRIX_MODE:
+		params[0] = (T)D3DState.TransformState.matrixMode;
+		break;
 	case GL_MODELVIEW_MATRIX:
 		{
 			D3DMATRIX *pm = D3DGlobal.modelviewMatrixStack->top();
