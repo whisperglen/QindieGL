@@ -2910,7 +2910,7 @@ static void hk_R_RenderView( int* refdef )
 			for ( int i = 0; i < numAlphaEntities; i++, alpha_entities++ )
 			{
 				model_t** model = (*alpha_entities)->model;
-				if ( 0 == strncmp( HALO_STR, (*model)->name, sizeof( HALO_STR ) -1 ) )
+				if ( model && *model && 0 == strncmp( HALO_STR, (*model)->name, sizeof( HALO_STR ) -1 ) )
 				{
 					paletteRGBA_t clrb = (*alpha_entities)->color;
 					uint32_t hash = fnv_32a_buf( &clrb, sizeof( clrb ), 42 );
