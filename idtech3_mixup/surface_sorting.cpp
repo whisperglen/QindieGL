@@ -545,7 +545,7 @@ static int config_int( const char* name, bool required, bool* not_found = 0 )
 	return 0;
 }
 
-static void* config_hex(const char* name, bool required, bool *not_found = 0)
+static void* config_codeptr(const char* name, bool required, bool *not_found = 0)
 {
 	void* ret = 0;
 
@@ -553,6 +553,28 @@ static void* config_hex(const char* name, bool required, bool *not_found = 0)
 	if (ret)
 	{
 		ret = hook_offset_to_addr( ret );
+		logPrintf("SurfaceSort: config %s found %p\n", name, ret);
+		return ret;
+	}
+
+	if (not_found)
+	{
+		*not_found = true;
+	}
+	if (required)
+	{
+		logPrintf("SurfaceSort: config %s not found\n", name);
+	}
+	return 0;
+}
+
+static void* config_hex(const char* name, bool required, bool* not_found = 0)
+{
+	void* ret = 0;
+
+	ret = D3DGlobal_ReadGameConfPtr(name);
+	if (ret)
+	{
 		logPrintf("SurfaceSort: config %s found %p\n", name, ret);
 		return ret;
 	}
@@ -652,7 +674,7 @@ static bool read_conf()
 		const char* searchstr = "qsortFast";
 
 		//see if there is a function hex address
-		fp_qsortFast = config_hex( searchstr, false );
+		fp_qsortFast = config_codeptr( searchstr, false );
 
 		//search for hex patterns
 		strncpy_s( name, sizeof( name ), searchstr, _TRUNCATE );
@@ -667,7 +689,7 @@ static bool read_conf()
 		const char* searchstr = "qsortFast_uc0";
 
 		//see if there is a function hex address
-		fp_qsortFast_uc0 = config_hex( searchstr, false );
+		fp_qsortFast_uc0 = config_codeptr( searchstr, false );
 
 		//search for hex patterns
 		strncpy_s( name, sizeof( name ), searchstr, _TRUNCATE );
@@ -678,10 +700,10 @@ static bool read_conf()
 		}
 	}
 
-	fp_cvarSet = (const void**)config_hex("fp_cvarSet", false);
-	fp_cvarGet = (const void**)config_hex("fp_cvarGet", false);
+	fp_cvarSet = (const void**)config_codeptr("fp_cvarSet", false);
+	fp_cvarGet = (const void**)config_codeptr("fp_cvarGet", false);
 
-	fp_markLeaves = config_hex( "markLeaves", false );
+	fp_markLeaves = config_codeptr( "markLeaves", false );
 	if ( fp_markLeaves )
 	{
 		if (!fp_cvarSet || !fp_cvarGet)
@@ -689,16 +711,16 @@ static bool read_conf()
 			not_found = true;
 			logPrintf("SurfaceSort: config cvar not found %p/%p\n", fp_cvarSet, fp_cvarGet);
 		}
-		tr_dp_skyportal = (const int*)config_hex( "tr_dp_skyportal", true, &not_found );
+		tr_dp_skyportal = (const int*)config_codeptr( "tr_dp_skyportal", true, &not_found );
 	}
-	jmp_skyOnscreen = (byte*)config_hex( "jmp_skyOnscreen", false );
+	jmp_skyOnscreen = (byte*)config_codeptr( "jmp_skyOnscreen", false );
 
 	//search for jmp
 	memset( jmp_helpers, 0, sizeof( jmp_helpers ) );
 	for ( i = 0, j = 0; i < ARRAYSIZE( jmp_helpers ); i++ )
 	{
 		snprintf( name, sizeof( name ), "jmp_target%d", i );
-		byte* addr = (byte*)config_hex( name, false );
+		byte* addr = (byte*)config_codeptr( name, false );
 		if ( !addr ) addr = (byte*)config_pattern( name, false );
 		if ( addr != 0 )
 		{
@@ -744,19 +766,19 @@ static bool read_conf()
 		tr_dp_viewfov = (float*)hook_loadptr(config_pattern( "tr_dp_viewfov", true, &not_found ));
 	}
 
-	fp_renderview = (void(*)(void*))config_hex( "fp_renderview", false );
+	fp_renderview = (void(*)(void*))config_codeptr( "fp_renderview", false );
 	if ( fp_renderview )
 	{
-		dp_callrenderview = (byte*)config_hex("dp_callrenderview", true );
-		fp_skyrender = (void(*)())config_hex( "fp_skyrender", true );
+		dp_callrenderview = (byte*)config_codeptr("dp_callrenderview", true );
+		fp_skyrender = (void(*)())config_codeptr( "fp_skyrender", true );
 	}
 
 	//fp_surfacemodelcached = (void*)0x004fa210;
 
-	fp_retvoid = config_hex( "fp_retvoid", false );
-	fp_retzero = config_hex( "fp_retzero", false );
-	fp_retone = config_hex( "fp_retone", false );
-	fp_retnegone = config_hex( "fp_retnegone", false );
+	fp_retvoid = config_codeptr( "fp_retvoid", false );
+	fp_retzero = config_codeptr( "fp_retzero", false );
+	fp_retone = config_codeptr( "fp_retone", false );
+	fp_retnegone = config_codeptr( "fp_retnegone", false );
 
 	return (false == not_found);
 }
