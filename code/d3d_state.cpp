@@ -471,6 +471,7 @@ void D3DState_SetTexture()
 		if (matrixChanged) {
 			D3DState.textureMatrixModified[i] = false;
 			D3DStateMatrix& mat = D3DGlobal.textureMatrixStack[i]->top();
+#if 0
 			if ( !mat.is_identity() ||
 				D3DState.TextureState.transformEnabled )
 			{
@@ -487,6 +488,44 @@ void D3DState_SetTexture()
 					break;
 				}
 			}
+#else
+			if (!mat.is_identity())
+			{
+				int numCoords = D3DState.ClientVertexArrayState.texCoordInfo[i].elementCount;
+				if (numCoords < 0) numCoords = 0;
+				if (numCoords > 4) numCoords = 4;
+
+				const DWORD flags[] = { D3DTTFF_DISABLE, D3DTTFF_COUNT1, D3DTTFF_COUNT2, D3DTTFF_COUNT3, D3DTTFF_COUNT4 };
+
+				DWORD transformFlags = flags[numCoords];
+
+				// Restore projection ONLY for 3D/4D coordinates
+				if (numCoords == 4)
+				{
+					transformFlags |= D3DTTFF_PROJECTED;
+				}
+				// Enable texture transform (projected) for this specific sampler
+				D3DGlobal.pDevice->SetTextureStageState(currentSampler, D3DTSS_TEXTURETRANSFORMFLAGS, transformFlags);
+
+				hr = D3DGlobal.pDevice->SetTransform((D3DTRANSFORMSTATETYPE)(D3DTS_TEXTURE0 + currentSampler), mat);
+				if (FAILED(hr)) {
+					D3DGlobal.lastError = hr;
+					break;
+				}
+			}
+			else
+			{
+				// Disable texture transform since the matrix is identity
+				D3DGlobal.pDevice->SetTextureStageState(currentSampler, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+
+				// Although the transform is disabled, setting the identity matrix ensures consistent state
+				hr = D3DGlobal.pDevice->SetTransform((D3DTRANSFORMSTATETYPE)(D3DTS_TEXTURE0 + currentSampler), mat);
+				if (FAILED(hr)) {
+					D3DGlobal.lastError = hr;
+					break;
+				}
+			}
+#endif
 		}
 
 		D3DTextureObject *bestTexture( nullptr );
