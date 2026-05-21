@@ -749,8 +749,8 @@ union LightInfoData_u
 	remixapi_LightInfoDistantEXT distant;
 };
 static void* fill_in_light_data(int light_type, union LightInfoData_u &data, light_override_t* ovr, const float* position, float radius);
+static void  apply_flashlight_offsets(const float* position, const float* direction, D3DXVECTOR3* outpos, D3DXVECTOR3* outdir);
 
-#define DYNAMIC_LIGHTS_USE_DX9 0
 
 int qdx_light_add(int light_type, int ord, const float *position, const float *direction, const float *color, float radius)
 {
@@ -769,11 +769,7 @@ int qdx_light_add(int light_type, int ord, const float *position, const float *d
 
 	if (light_type == LIGHT_DYNAMIC)
 	{
-#if DYNAMIC_LIGHTS_USE_DX9
-		hash = hashord;
-#else
 		hash = hashpos;
-#endif
 	}
 	if (light_type == LIGHT_CORONA)
 	{
@@ -816,37 +812,24 @@ int qdx_light_add(int light_type, int ord, const float *position, const float *d
 			qdx_lights_clear( LIGHT_FLASHLIGHT );
 		}
 
+		D3DXVECTOR3 tpos, tdir;
+		apply_flashlight_offsets(position, direction, &tpos, &tdir);
+
 		for ( int i = 0; i < NUM_FLASHLIGHT_HND; i++ )
 		{
 
 			remixapi_LightInfoSphereEXT light_sphere;
 			ZeroMemory( &light_sphere, sizeof( light_sphere ) );
 
-			D3DXVECTOR3 tpos, tdir;
-			D3DXMATRIX invview, viewrot;
-			const D3DXVECTOR3 updir( 0, 0, 1 );
-			const D3DXVECTOR3 zero( 0, 0, 1 );
-			D3DXMatrixLookAtRH( &viewrot, &zero, (D3DXVECTOR3*)FLASHLIGHT_DIRECTION_CACHE, &updir );
-			//D3DGlobal_GetCamera( &viewrot );
-			viewrot._41 = 0.0;
-			viewrot._42 = 0.0;
-			viewrot._43 = 0.0;
-			D3DXMatrixInverse( &invview, NULL, (D3DXMATRIX*)&viewrot );
-			D3DXVec3TransformCoord( &tpos, (D3DXVECTOR3*)FLASHLIGHT_POSITION_OFFSET, &invview );
-			D3DXVec3TransformNormal( &tdir, (D3DXVECTOR3*)FLASHLIGHT_DIRECTION_OFFSET, &invview );
-
 			light_sphere.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO_SPHERE_EXT;
-			light_sphere.position.x = tpos.x + position[0];
-			light_sphere.position.y = tpos.y + position[1];
-			light_sphere.position.z = tpos.z + position[2];
+			light_sphere.position.x = tpos.x;
+			light_sphere.position.y = tpos.y;
+			light_sphere.position.z = tpos.z;
 			light_sphere.radius = 1.0f;
 			light_sphere.volumetricRadianceScale = FLASHLIGHT_VOLUMETRIC[i];
 
 			light_sphere.shaping_hasvalue = 1;
 			{
-				tdir.x += direction[0];
-				tdir.y += direction[1];
-				tdir.z += direction[2];
 				D3DXVec3Normalize( (D3DXVECTOR3*)&light_sphere.shaping_value.direction, &tdir );
 				light_sphere.shaping_value.coneAngleDegrees = FLASHLIGHT_CONE_ANGLES[i];
 				light_sphere.shaping_value.coneSoftness = FLASHLIGHT_CONE_SOFTNESS[i];
@@ -1116,4 +1099,78 @@ void AngleVectors(const vec3_t angles, vec3_t forward, vec3_t right, vec3_t up) 
 		up[1] = (cr * sp * sy + -sr * cy);
 		up[2] = cr * cp;
 	}
+}
+
+static void apply_flashlight_offsets(const float* position, const float* direction, D3DXVECTOR3* outpos, D3DXVECTOR3* outdir)
+{
+#if 0
+	D3DXMATRIX invview, viewrot;
+	const D3DXVECTOR3 updir(0, 0, 1);
+	const D3DXVECTOR3 zero(0, 0, 0);
+	D3DXVECTOR3 playerDir(direction[0], direction[1], direction[2]);
+	D3DXMatrixLookAtRH(&viewrot, &zero, &playerDir, &updir);
+	//D3DGlobal_GetCamera( &viewrot );
+	viewrot._41 = 0.0;
+	viewrot._42 = 0.0;
+	viewrot._43 = 0.0;
+	D3DXMatrixInverse(&invview, NULL, (D3DXMATRIX*)&viewrot);
+	D3DXVec3TransformCoord(outpos, (D3DXVECTOR3*)FLASHLIGHT_POSITION_OFFSET, &invview);
+	outpos->x += position[0];
+	outpos->y += position[1];
+	outpos->z += position[2];
+	D3DXVec3TransformNormal(outdir, (D3DXVECTOR3*)FLASHLIGHT_DIRECTION_OFFSET, &invview);
+	outdir->x += direction[0];
+	outdir->y += direction[1];
+	outdir->z += direction[2];
+#else
+	// 1. Setup the player's base vectors
+	D3DXVECTOR3 playerDir(direction[0], direction[1], direction[2]);
+	D3DXVec3Normalize(&playerDir, &playerDir);
+
+	// id Tech uses Z-Up
+	D3DXVECTOR3 worldUp(0.0f, 0.0f, 1.0f);
+
+	// 2. Calculate the Local Axes (Right, Up, Forward)
+	D3DXVECTOR3 right, localUp;
+
+	// Right vector is perpendicular to Forward and WorldUp
+	D3DXVec3Cross(&right, &playerDir, &worldUp);
+	D3DXVec3Normalize(&right, &right);
+
+	// True local Up vector is perpendicular to Right and Forward
+	D3DXVec3Cross(&localUp, &right, &playerDir);
+	D3DXVec3Normalize(&localUp, &localUp);
+
+	// Emulate OpenGL / id Tech Right-Handed space (-Z is Forward)
+	D3DXVECTOR3 engineZ(-playerDir.x, -playerDir.y, -playerDir.z);
+
+	// 3. Apply the Position Offset
+	D3DXVECTOR3 posOffset = *((D3DXVECTOR3*)FLASHLIGHT_POSITION_OFFSET);
+
+	// Use engineZ so a positive offset pushes backward, matching original game data
+	outpos->x = position[0] + (right.x * posOffset.x) + (localUp.x * posOffset.y) + (engineZ.x * posOffset.z);
+	outpos->y = position[1] + (right.y * posOffset.x) + (localUp.y * posOffset.y) + (engineZ.y * posOffset.z);
+	outpos->z = position[2] + (right.z * posOffset.x) + (localUp.z * posOffset.y) + (engineZ.z * posOffset.z);
+
+	// 4. Direction Offset (Treating as Radians)
+	float pitch = ((float*)FLASHLIGHT_DIRECTION_OFFSET)[0]; // Up/Down rotation
+	float yaw = ((float*)FLASHLIGHT_DIRECTION_OFFSET)[1]; // Left/Right rotation
+	float roll = ((float*)FLASHLIGHT_DIRECTION_OFFSET)[2]; // Twist
+
+	// Create a rotation matrix from the radians
+	D3DXMATRIX localRot;
+	D3DXMatrixRotationYawPitchRoll(&localRot, yaw, pitch, roll);
+
+	// The flashlight points "forward" (Z=-1) by default in OpenGL local space
+	D3DXVECTOR3 localForward(0.0f, 0.0f, -1.0f);
+	D3DXVECTOR3 rotatedLocalForward;
+
+	// Apply the radian angles to the local forward vector
+	D3DXVec3TransformNormal(&rotatedLocalForward, &localForward, &localRot);
+
+	// 5. Convert that local rotated direction into World Space using the engine's Z
+	outdir->x = (right.x * rotatedLocalForward.x) + (localUp.x * rotatedLocalForward.y) + (engineZ.x * rotatedLocalForward.z);
+	outdir->y = (right.y * rotatedLocalForward.x) + (localUp.y * rotatedLocalForward.y) + (engineZ.y * rotatedLocalForward.z);
+	outdir->z = (right.z * rotatedLocalForward.x) + (localUp.z * rotatedLocalForward.y) + (engineZ.z * rotatedLocalForward.z);
+#endif
 }
