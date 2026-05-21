@@ -532,11 +532,29 @@ FAST_PATH_CHECK_ABORT:
 				//skyboxScale = sqrtf( (skyboxScale * skyboxScale) * 0.33f );
 				skyboxScale *= 0.5744f;
 			}
+#if 0
 			const D3DXMATRIX* mvmat = D3DGlobal.modelviewMatrixStack->top().inverse();
 			D3DXMatrixScaling( &shiftmat, skyboxScale, skyboxScale, skyboxScale );
 			D3DXMATRIX scratch;
 			D3DXMatrixTranslation( &scratch, mvmat->m[3][0], mvmat->m[3][1], mvmat->m[3][2] );
 			D3DXMatrixMultiply( &shiftmat, &shiftmat, &scratch );
+#else
+			// The upper 3x3 portion of the matrix needs to be orthonormal
+			const D3DXMATRIX* mvmat = D3DGlobal.modelviewMatrixStack->top();
+
+			// Extract camera world position without a 4x4 Inverse
+			float camX = -(mvmat->m[3][0] * mvmat->m[0][0] + mvmat->m[3][1] * mvmat->m[0][1] + mvmat->m[3][2] * mvmat->m[0][2]);
+			float camY = -(mvmat->m[3][0] * mvmat->m[1][0] + mvmat->m[3][1] * mvmat->m[1][1] + mvmat->m[3][2] * mvmat->m[1][2]);
+			float camZ = -(mvmat->m[3][0] * mvmat->m[2][0] + mvmat->m[3][1] * mvmat->m[2][1] + mvmat->m[3][2] * mvmat->m[2][2]);
+
+			// Manually construct the Scale * Translate matrix
+			shiftmat = D3DXMATRIX(
+				skyboxScale, 0.0f, 0.0f, 0.0f,
+				0.0f, skyboxScale, 0.0f, 0.0f,
+				0.0f, 0.0f, skyboxScale, 0.0f,
+				camX, camY, camZ, 1.0f
+			);
+#endif
 		}
 		//Fill vertex buffer with data
 		for (int i = 0; i < count; ++i) {
