@@ -1180,6 +1180,10 @@ static void D3DState_EnableDisableState( GLenum cap, DWORD value )
 	case GL_DEPTH_TEST:
 		D3DState.EnableState.depthTestEnabled = value;
 		D3DState_SetRenderState( D3DRS_ZENABLE, D3DState.EnableState.depthTestEnabled );
+		if (D3DGlobal.settings.game.depthOffDisablesWrites && D3DState.DepthBufferState.depthWriteMask )
+		{
+			D3DState_SetRenderState(D3DRS_ZWRITEENABLE, value);
+		}
 		break;
 	case GL_DITHER:
 		D3DState.EnableState.ditherEnabled = value;

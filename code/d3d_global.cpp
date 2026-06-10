@@ -976,6 +976,7 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 	D3DGlobal.settings.game.remixapi = D3DGlobal_ReadGameConf( "remixapi" );
 	D3DGlobal.settings.game.orthovertexshader = D3DGlobal_ReadGameConf( "orthovertexshader" );
 	D3DGlobal.settings.game.orthoskipuntextureddraws = D3DGlobal_ReadGameConf( "orthoskipuntextureddraws" );
+	D3DGlobal.settings.game.depthOffDisablesWrites = D3DGlobal_ReadGameConf( "depthOffDisablesWrites" );
 
 	D3DGlobal.normalPtrGuessEnabled = 0;
 	{

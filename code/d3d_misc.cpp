@@ -105,7 +105,9 @@ OPENGL_API void WINAPI glDepthMask( GLboolean flag )
 {
 	if (D3DState.DepthBufferState.depthWriteMask != flag) {
 		D3DState.DepthBufferState.depthWriteMask = flag;
-		D3DState_SetRenderState( D3DRS_ZWRITEENABLE, flag );
+		if( !D3DGlobal.settings.game.depthOffDisablesWrites ||
+				( D3DGlobal.settings.game.depthOffDisablesWrites && D3DState.EnableState.depthTestEnabled ) )
+						D3DState_SetRenderState( D3DRS_ZWRITEENABLE, flag );
 	}
 }
 OPENGL_API void WINAPI glDepthRange( GLclampd zNear, GLclampd zFar )

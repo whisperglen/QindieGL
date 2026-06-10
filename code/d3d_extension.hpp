@@ -57,9 +57,9 @@ extern OPENGL_API void WINAPI glMultiTexCoord4sv( GLenum target, const GLshort *
 extern OPENGL_API void WINAPI glMultiTexCoord4iv( GLenum target, const GLint *v );
 extern OPENGL_API void WINAPI glMultiTexCoord4fv( GLenum target, const GLfloat *v );
 extern OPENGL_API void WINAPI glMultiTexCoord4dv( GLenum target, const GLdouble *v );
-extern OPENGL_API void WINAPI WINAPI glActiveStencilFace(GLenum face);
-extern OPENGL_API void WINAPI WINAPI glDeleteTextures(GLsizei n, const GLuint *textures);
-extern OPENGL_API void WINAPI WINAPI glGenTextures(GLsizei n, GLuint *textures);
+extern OPENGL_API void WINAPI glActiveStencilFace(GLenum face);
+extern OPENGL_API void WINAPI glDeleteTextures(GLsizei n, const GLuint *textures);
+extern OPENGL_API void WINAPI glGenTextures(GLsizei n, GLuint *textures);
 extern OPENGL_API GLboolean WINAPI glIsTexture(GLuint texture);
 extern OPENGL_API void WINAPI glBindTexture(GLenum target, GLuint texture);
 extern OPENGL_API GLboolean WINAPI glAreTexturesResident(GLsizei n,  const GLuint *textures,  GLboolean *residences);
