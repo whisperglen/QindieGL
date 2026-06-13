@@ -527,7 +527,7 @@ static void qdx_light_color_to_radiance(remixapi_Float3D* rad, int light_type, c
 	}
 }
 
-static void qdx_light_color_to_radiance_flashlight(remixapi_Float3D* rad, int light_type, int idx, const vec3_t color)
+static void qdx_light_color_to_radiance_flashlight(remixapi_Float3D* rad, int light_type, int idx, const float *color)
 {
 	float radiance = 1.0f;
 	if ( light_type == LIGHT_FLASHLIGHT )
@@ -844,7 +844,7 @@ int qdx_light_add(int light_type, int ord, const float *position, const float *d
 			lightinfo.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO;
 			lightinfo.pNext = &light_sphere;
 			lightinfo.hash = fhash;
-			qdx_light_color_to_radiance_flashlight( &lightinfo.radiance, light_type, i, FLASHLIGHT_COLORS[i] );
+			qdx_light_color_to_radiance_flashlight( &lightinfo.radiance, light_type, i, &FLASHLIGHT_COLORS[i][0]);
 
 			rercd = remixInterface.CreateLight( &lightinfo, &g_flashlight_handle[i] );
 			if ( rercd != REMIXAPI_ERROR_CODE_SUCCESS )

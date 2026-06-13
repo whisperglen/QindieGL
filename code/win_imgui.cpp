@@ -824,7 +824,7 @@ static LRESULT CALLBACK wnd_proc_hk(HWND hWnd, UINT message_type, WPARAM wParam,
 
 		if ( pass_msg_to_game || ( !imgui_consumed && !io->WantCaptureMouse && !io->WantCaptureKeyboard) )
 		{
-			return g_game_wndproc( hWnd, message_type, wParam, lParam );
+			return CallWindowProc( g_game_wndproc, hWnd, message_type, wParam, lParam );
 		}
 	}
 
