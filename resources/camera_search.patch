@@ -1,0 +1,258 @@
+diff --git a/code/camera_search.cpp b/code/camera_search.cpp
+new file mode 100644
+index 0000000..c71e8bc
+--- /dev/null
++++ b/code/camera_search.cpp
+@@ -0,0 +1,232 @@
++
++#include "camera_search.h"
++#include <Windows.h>
++#include "d3d_wrapper.hpp"
++
++static const float epsilon = 1e-6f;
++
++static HANDLE g_hndthread = 0;
++static DWORD g_threadid = 0;
++
++static DWORD WINAPI LeThreadFunction(LPVOID lpParam);
++
++void camera_search_start()
++{
++    if (g_hndthread == 0)
++    {
++        HANDLE hndthread = CreateThread(
++            NULL,                   // default security attributes
++            0,                      // use default stack size  
++            LeThreadFunction,       // thread function name
++            (LPVOID)"ref_gl.dll",                      // argument to thread function 
++            0,                      // use default creation flags 
++            &g_threadid);           // returns the thread identifier 
++
++        if (hndthread == NULL)
++        {
++            LPVOID lpMsgBuf;
++            DWORD dw = GetLastError();
++
++            FormatMessage(
++                FORMAT_MESSAGE_ALLOCATE_BUFFER |
++                FORMAT_MESSAGE_FROM_SYSTEM |
++                FORMAT_MESSAGE_IGNORE_INSERTS,
++                NULL,
++                dw,
++                MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
++                (LPTSTR)&lpMsgBuf,
++                0, NULL);
++
++            logPrintf("WARNING: Failed to create thread %s\n", lpMsgBuf);
++            LocalFree(lpMsgBuf);
++        }
++        else
++        {
++            g_hndthread = hndthread;
++        }
++    }
++}
++
++void camera_search_stop()
++{
++}
++
++typedef float vec_t;
++typedef float vec3_t[3];
++
++static inline float DotProduct(const vec3_t x, const vec3_t y)
++{
++    return (x[0]*y[0]+x[1]*y[1]+x[2]*y[2]);
++}
++
++static inline void CrossProduct(const vec3_t v1, const vec3_t v2, vec3_t cross) {
++    cross[0] = v1[1] * v2[2] - v1[2] * v2[1];
++    cross[1] = v1[2] * v2[0] - v1[0] * v2[2];
++    cross[2] = v1[0] * v2[1] - v1[1] * v2[0];
++}
++
++static inline int Vec3Compare(const vec3_t v1, const vec3_t v2)
++{
++    const float dx = v1[0] - v2[0];
++    if (fabsf(dx) < epsilon)
++    {
++        const float dy = v1[1] - v2[1];
++        if (fabsf(dy) < epsilon)
++        {
++            const float dz = v1[2] - v2[2];
++            if (fabsf(dz) < epsilon)
++            {
++                return 0;
++            }
++            else return (signbit(dz) ? -1 : 1);
++        }
++        else return (signbit(dy) ? -1 : 1);
++    }
++    else return (signbit(dx) ? -1 : 1);
++}
++
++static void vec_fill(vec3_t dest, const float* src)
++{
++    dest[0] = src[0];
++    dest[1] = src[4];
++    dest[2] = src[8];
++}
++
++static void vec_fillt(vec3_t dest, const float* src)
++{
++    dest[0] = src[0];
++    dest[1] = src[1];
++    dest[2] = src[2];
++}
++
++#define BREAKABLE_BLOCK do
++#define BREAKABLE_BLOCK_END while(0)
++
++//View Matrix row-major, left-handed layout
++//Right.x 	                Up.x 	            Forward.x 	                0
++//Right.y 	                Up.y 	            Forward.y 	                0
++//Right.z 	                Up.z 	            Forward.z 	                0
++//-dot(Right, Position) 	-dot(Up, Position) 	-dot(Forward, Position) 	1
++
++//dot(Right, Up) = 0
++//dot(Up, Forward) = 0
++//dot(Forward, Right) = 0
++//
++//(For Left-Handed systems)
++//cross(Up, Right) = Forward
++//cross(Right, Forward) = Up
++//cross(Forward, Up) = Right
++
++static int check_dotandcrossproduct(vec3_t right, vec3_t up, vec3_t forward)
++{
++    int ret = 0;
++    float dotru, dotuf, dotfr;
++    vec3_t crossur, crossrf, crossfu;
++
++    BREAKABLE_BLOCK
++    {
++        dotru = DotProduct(right, up);
++        if (fabsf(dotru) > epsilon)
++            break;
++
++        dotuf = DotProduct(up, forward);
++        if (fabsf(dotuf) > epsilon)
++            break;
++
++        dotfr = DotProduct(forward, right);
++        if (fabsf(dotfr) > epsilon)
++            break;
++
++        CrossProduct(up, right, crossur);
++        if (Vec3Compare(crossur, forward) != 0)
++            break;
++
++        CrossProduct(right, forward, crossrf);
++        if (Vec3Compare(crossrf, up) != 0)
++            break;
++
++        CrossProduct(forward, up, crossfu);
++        if (Vec3Compare(crossfu, right) != 0)
++            break;
++
++        //we have one
++        ret = 1;
++        __debugbreak();
++
++    } BREAKABLE_BLOCK_END;
++
++    return ret;
++}
++
++static void scan_buffer(const void* start, size_t size)
++{
++    const float* mem = (const float*)start;
++    vec3_t right, up, forward;
++    int scanned = 0;
++
++    while (scanned + 16*sizeof(float) <= size)
++    {
++        //row-major
++        if (mem[0*4 + 3] == 0 && mem[1*4 + 3] == 0 && mem[2*4 + 3] == 0 && mem[3*4 + 3] == 1)
++        {
++            vec_fill(right, mem);
++            vec_fill(up, mem + 1);
++            vec_fill(forward, mem + 2);
++
++            if (check_dotandcrossproduct(right, up, forward))
++            {
++                //store ptr
++                //break;//?
++            }
++        }
++        //column-major
++        else if (mem[3*4 + 0] == 0 && mem[3*4 + 1] == 0 && mem[3*4 + 2] == 0 && mem[3*4 + 3] == 1)
++        {
++            vec_fillt(right, mem);
++            vec_fillt(up, mem + 4);
++            vec_fillt(forward, mem + 8);
++
++            if (check_dotandcrossproduct(right, up, forward))
++            {
++                //store ptr
++                //break;//?
++            }
++        }
++
++        mem += 4;
++        scanned += 4*sizeof(float);
++    }
++}
++
++static DWORD WINAPI LeThreadFunction(LPVOID lpParam)
++{
++    const char* modulename = (const char*)lpParam;
++    HMODULE hmod = GetModuleHandle(modulename);
++
++    MEMORY_BASIC_INFORMATION info;
++    // Start at PE32 header
++    SIZE_T len = VirtualQuery(hmod, &info, sizeof(info));
++    if (len > 0)
++    {
++        BYTE* dllBase = (BYTE*)info.AllocationBase;
++        BYTE* address = dllBase;
++        while(1) {
++            len = VirtualQuery(address, &info, sizeof(info));
++            if (len == 0)
++                break;
++            
++            if (info.AllocationBase != dllBase)
++                break;
++
++            if (info.Protect == PAGE_EXECUTE_READWRITE || info.Protect == PAGE_READWRITE)
++            {
++                scan_buffer(info.BaseAddress, info.RegionSize);
++            }
++            address = (BYTE*)info.BaseAddress + info.RegionSize;
++        }
++    }
++
++    g_hndthread = 0;
++
++    return 0;
++}
+\ No newline at end of file
+diff --git a/code/camera_search.h b/code/camera_search.h
+new file mode 100644
+index 0000000..d58e649
+--- /dev/null
++++ b/code/camera_search.h
+@@ -0,0 +1,13 @@
++#pragma once
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++void camera_search_start();
++void camera_search_stop();
++
++
++#ifdef __cplusplus
++}
++#endif

@@ -1,0 +1,303 @@
+From b17d8d0b89b70a3bfc1bcbe13c6203ef9c8ab5a4 Mon Sep 17 00:00:00 2001
+From: whisperglen <whisperglen45@gmail.com>
+Date: Thu, 4 Jun 2026 22:10:30 +0300
+Subject: [PATCH] VBO: handle EBO usage in gl/Multi/Draw/Range/Elements
+
+- added missing glGetBufferParameterivARB, glGetBufferSubDataARB, glGetBufferPointervARB
+---
+ code/d3d_array.cpp | 162 +++++++++++++++++++++++++++++++++------------
+ msvc/opengl32.def  |   3 +
+ 2 files changed, 123 insertions(+), 42 deletions(-)
+
+diff --git a/code/d3d_array.cpp b/code/d3d_array.cpp
+index 136c7b4..ee261a5 100644
+--- a/code/d3d_array.cpp
++++ b/code/d3d_array.cpp
+@@ -854,9 +854,10 @@ void D3DVABuffer :: DrawPrimitive()
+ struct vbodata_s
+ {
+ 	GLubyte* dataptr;
+-	size_t bufsize;
+-	size_t usedsz;
+-	bool inUse;
++	int32_t  bufsize;
++	GLint    usage;
++	bool     inUse;
++	bool     isMapped;
+ };
+ typedef struct vbodata_s vbodata_t;
+ 
+@@ -866,16 +867,30 @@ static vbodata_t* g_active_elem_vbo = NULL;
+ 
+ static void vbo_offset_to_ptr(D3DVAInfo* pVAInfo, const vbodata_t *bs)
+ {
+-	if ((intptr_t)pVAInfo->data < bs->usedsz)
++	if ((intptr_t)pVAInfo->data < bs->bufsize)
+ 	{
+-		pVAInfo->data = bs->dataptr + (GLubyte)pVAInfo->data;
++		pVAInfo->data = bs->dataptr + (intptr_t)pVAInfo->data;
+ 	}
+ }
+ 
++static const void* Consider_Active_EBO(const void* data)
++{
++	const void* ret = data;
++	vbodata_t* bs = g_active_elem_vbo;
++	if (bs && bs->dataptr && bs->bufsize > 0)
++	{
++		if ((intptr_t)data < bs->bufsize)
++		{
++			ret = bs->dataptr + (intptr_t)data;
++		}
++	}
++	return ret;
++}
++
+ static void Consider_Active_VBO()
+ {
+ 	vbodata_t* bs = g_active_array_vbo;
+-	if (bs && bs->dataptr && bs->usedsz > 0)
++	if (bs && bs->dataptr && bs->bufsize > 0)
+ 	{
+ 		if (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_COLOR_BIT)
+ 		{
+@@ -936,6 +951,7 @@ OPENGL_API void WINAPI glBindBufferARB(GLenum target, GLuint buffer)
+ OPENGL_API void WINAPI glGenBuffersARB(GLsizei n, GLuint* buffers)
+ {
+ 	vbodata_t t = { 0 };
++	t.usage = GL_STATIC_DRAW;
+ 	t.inUse = true;
+ 	if (g_vbolist.size() == 0)
+ 	{
+@@ -949,6 +965,7 @@ OPENGL_API void WINAPI glGenBuffersARB(GLsizei n, GLuint* buffers)
+ 	{
+ 		if (bs->inUse == false)
+ 		{
++			bs->usage = GL_STATIC_DRAW;
+ 			bs->inUse = true;
+ 			buffers[found] = i;
+ 			found++;
+@@ -990,12 +1007,43 @@ OPENGL_API void* WINAPI glMapBufferARB(GLenum target, GLenum access)
+ 	{
+ 		bs = g_active_elem_vbo;
+ 	}
++
++	if (bs)
++		bs->isMapped = true;
++
+ 	return bs ? bs->dataptr : NULL;
+ }
+ 
++OPENGL_API void WINAPI glGetBufferPointervARB(GLenum target, GLenum pname, void** params)
++{
++	vbodata_t* bs = NULL;
++	if (target == GL_ARRAY_BUFFER)
++	{
++		bs = g_active_array_vbo;
++	}
++	else if (target == GL_ELEMENT_ARRAY_BUFFER)
++	{
++		bs = g_active_elem_vbo;
++	}
++
++	if (params)
++		params[0] = (bs && bs->isMapped) ? bs->dataptr : nullptr;
++}
++
+ OPENGL_API void WINAPI glUnmapBufferARB(GLenum target)
+ {
+-	//hmm
++	vbodata_t* bs = NULL;
++	if (target == GL_ARRAY_BUFFER)
++	{
++		bs = g_active_array_vbo;
++	}
++	else if (target == GL_ELEMENT_ARRAY_BUFFER)
++	{
++		bs = g_active_elem_vbo;
++	}
++
++	if (bs)
++		bs->isMapped = false;
+ }
+ 
+ OPENGL_API GLboolean WINAPI glIsBufferARB(GLuint buffer)
+@@ -1010,9 +1058,6 @@ OPENGL_API GLboolean WINAPI glIsBufferARB(GLuint buffer)
+ 	return ret;
+ }
+ 
+-static const size_t vbo_data_inc = 255;
+-inline size_t vbo_calc_datasz(size_t in) { return (in + vbo_data_inc) & ~vbo_data_inc; }
+-
+ OPENGL_API void WINAPI glBufferDataARB(GLenum target, GLsizeiptr size, const void* data, GLenum usage)
+ {
+ 	vbodata_t* bs = NULL;
+@@ -1029,20 +1074,16 @@ OPENGL_API void WINAPI glBufferDataARB(GLenum target, GLsizeiptr size, const voi
+ 	{
+ 		if (size > bs->bufsize)
+ 		{
+-			void* p;
+ 			if (bs->dataptr)
+ 			{
+ 				free(bs->dataptr);
+ 				bs->bufsize = 0;
+-				bs->usedsz = 0;
+ 			}
+ 
+-			size_t newsize = vbo_calc_datasz(size);
+-			bs->dataptr = (GLubyte*)malloc(newsize);
++			bs->dataptr = (GLubyte*)malloc(size);
+ 			if (bs->dataptr)
+ 			{
+-				bs->bufsize = newsize;
+-				bs->usedsz = 0;
++				bs->bufsize = size;
+ 			}
+ 		}
+ 
+@@ -1052,12 +1093,9 @@ OPENGL_API void WINAPI glBufferDataARB(GLenum target, GLsizeiptr size, const voi
+ 			{
+ 				memcpy(bs->dataptr, data, size);
+ 			}
+-			else
+-			{
+-				memset(bs->dataptr, 0, size);
+-			}
+-			bs->usedsz = size;
+ 		}
++
++		bs->usage = usage;
+ 	}
+ }
+ 
+@@ -1075,28 +1113,68 @@ OPENGL_API void WINAPI glBufferSubDataARB(GLenum target, GLintptr offset, GLsize
+ 
+ 	if (bs)
+ 	{
+-		if (size + offset > bs->bufsize)
++		if (offset >= 0 && size + offset <= bs->bufsize && bs->dataptr)
+ 		{
+-			void* p;
+-			size_t newsize = vbo_calc_datasz(size + offset);
+-			if (bs->dataptr)
+-				p = realloc(bs->dataptr, newsize);
+-			else
+-				p = malloc(newsize);
+-
+-			if (p)
+-			{
+-				bs->dataptr = (GLubyte*)p;
+-				bs->bufsize = newsize;
+-			}
++			if(data)
++				memcpy(bs->dataptr + offset, data, size);
+ 		}
++	}
++}
++
++OPENGL_API void WINAPI glGetBufferSubDataARB(GLenum target, GLintptr offset, GLsizeiptr size, void* data)
++{
++	vbodata_t* bs = NULL;
++	if (target == GL_ARRAY_BUFFER)
++	{
++		bs = g_active_array_vbo;
++	}
++	else if (target == GL_ELEMENT_ARRAY_BUFFER)
++	{
++		bs = g_active_elem_vbo;
++	}
+ 
+-		if (size + offset <= bs->bufsize && bs->dataptr)
++	if (bs)
++	{
++		if (offset >= 0 && size + offset <= bs->bufsize && bs->dataptr)
+ 		{
+-			if(data)
+-				memcpy(bs->dataptr + offset, data, size);
+-			if (size + offset > bs->usedsz)
+-				bs->usedsz = size + offset;
++			if (data)
++				memcpy(data, bs->dataptr + offset, size);
++		}
++	}
++}
++
++OPENGL_API void WINAPI glGetBufferParameterivARB(GLenum target, GLenum value, GLint* data)
++{
++	vbodata_t* bs = NULL;
++	if (target == GL_ARRAY_BUFFER)
++	{
++		bs = g_active_array_vbo;
++	}
++	else if (target == GL_ELEMENT_ARRAY_BUFFER)
++	{
++		bs = g_active_elem_vbo;
++	}
++
++	if (data)
++	{
++		if (bs) {
++			switch (value)
++			{
++			case GL_BUFFER_SIZE:
++				*data = bs->bufsize;
++				break;
++			case GL_BUFFER_USAGE:
++				*data = bs->usage;
++				break;
++			case GL_BUFFER_MAPPED:
++				*data = bs->isMapped;
++				break;
++			default:
++				logPrintf("WARNING: Unsupported VBO BufferParameteriv %d\n", value);
++				break;
++			}
++		} else {
++			*data = GL_FALSE;
+ 		}
+ 	}
+ }
+@@ -1648,7 +1726,7 @@ OPENGL_API void WINAPI glDrawElements( GLenum mode, GLsizei count, GLenum type,
+ 	Consider_Active_VBO();
+ 	D3DState_Check();
+ 	D3DState_AssureBeginScene();
+-	internal_DrawElements( mode, ~0u, 0, count, type, indices );
++	internal_DrawElements( mode, ~0u, 0, count, type, Consider_Active_EBO(indices) );
+ }
+ 
+ OPENGL_API void WINAPI glDrawRangeElements( GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices )
+@@ -1656,7 +1734,7 @@ OPENGL_API void WINAPI glDrawRangeElements( GLenum mode, GLuint start, GLuint en
+ 	Consider_Active_VBO();
+ 	D3DState_Check();
+ 	D3DState_AssureBeginScene();
+-	internal_DrawElements( mode, start, end, count, type, indices );
++	internal_DrawElements( mode, start, end, count, type, Consider_Active_EBO(indices) );
+ }
+ 
+ OPENGL_API void WINAPI glMultiDrawArrays( GLenum mode, const GLint *first, const GLsizei *count, GLsizei primcount )
+@@ -1674,7 +1752,7 @@ OPENGL_API void WINAPI glMultiDrawElements( GLenum mode, GLsizei *count, GLenum
+ 	D3DState_Check();
+ 	D3DState_AssureBeginScene();
+ 	for (int i = 0; i < primcount; ++i)
+-		if (count[i] > 0) internal_DrawElements( mode, ~0u, 0, count[i], type, indices[i] );
++		if (count[i] > 0) internal_DrawElements( mode, ~0u, 0, count[i], type, Consider_Active_EBO(indices[i]) );
+ }
+ 
+ template<typename T>
+diff --git a/msvc/opengl32.def b/msvc/opengl32.def
+index 7de3410..c7a2fe0 100644
+--- a/msvc/opengl32.def
++++ b/msvc/opengl32.def
+@@ -349,6 +349,9 @@ EXPORTS
+ 	glBufferSubDataARB
+ 	glMapBufferARB
+ 	glUnmapBufferARB
++	glGetBufferPointervARB
++	glGetBufferSubDataARB
++	glGetBufferParameterivARB
+ 	wglChoosePixelFormat = wrap_wglChoosePixelFormat
+ 	wglCopyContext = wrap_wglCopyContext
+ 	wglCreateContext = wrap_wglCreateContext
+-- 
+2.34.0.windows.1
+
