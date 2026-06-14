@@ -8,8 +8,10 @@
 #include "d3d_global.hpp"
 #include "surface_sorting.h"
 #include "h2_refgl.h"
+#include "heavy_metal.h"
 
 static BOOL h2_initialised = FALSE;
+static BOOL hm_initialised = FALSE;
 
 void* fp_exit = exit; //ExitProcess;
 
@@ -195,6 +197,12 @@ void hook_do_init(const char *exename, const char* dllname, const char *gamename
 		h2_initialised = TRUE;
 		h2_refgl_init();
 	}
+
+	if (D3DGlobal_ReadGameConfPtr("patch_heavymetal"))
+	{
+		hm_initialised = TRUE;
+		hm_init();
+	}
 }
 
 void hook_do_deinit()
@@ -215,6 +223,11 @@ void hook_do_deinit()
 	{
 		h2_refgl_deinit();
 	}
+
+	if (hm_initialised)
+	{
+		hm_deinit();
+	}
 }
 
 void hook_frame_ended()
@@ -222,6 +235,8 @@ void hook_frame_ended()
 	hook_surface_sorting_frame_ended();
 	if ( h2_initialised )
 		h2_refgl_frame_ended();
+	if (hm_initialised)
+		hm_frame_ended();
 }
 
 #if !id386

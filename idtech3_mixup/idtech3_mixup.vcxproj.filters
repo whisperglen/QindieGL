@@ -24,6 +24,9 @@
     <ClCompile Include="h2_refgl.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="heavymetal.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="surface_sorting.h">
@@ -33,6 +36,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="h2_refgl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="heavy_metal.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

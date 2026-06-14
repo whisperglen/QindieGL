@@ -1,0 +1,60 @@
+diff --git a/code/d3d_array.cpp b/code/d3d_array.cpp
+index 136c7b4..e1fbd73 100644
+--- a/code/d3d_array.cpp
++++ b/code/d3d_array.cpp
+@@ -324,7 +324,7 @@ void D3DVABuffer :: Lock( GLint first, GLint last )
+ 			)
+ 		{
+ 			int numCoords = D3DState.ClientVertexArrayState.texCoordInfo[j].elementCount;
+-			if ( D3DState.TextureState.transformEnabled )
++			if ( D3DState.TextureState.transformEnabled || D3DState.EnableState.texGenEnabled[j])
+ 			{
+ 				numCoords = 4;
+ 			}
+@@ -628,7 +628,7 @@ FAST_PATH_CHECK_ABORT:
+ 			for ( int j = 0; j < D3DGlobal.maxActiveTMU; ++j ) {
+ 				if (D3DState.EnableState.textureEnabled[j]) {
+ 					int numCoords = D3DState.ClientVertexArrayState.texCoordInfo[j].elementCount;
+-					if ( D3DState.TextureState.transformEnabled )
++					if ( D3DState.TextureState.transformEnabled || D3DState.EnableState.texGenEnabled[j])
+ 					{
+ 						numCoords = 4;
+ 					}
+diff --git a/code/d3d_immediate.cpp b/code/d3d_immediate.cpp
+index 4b6a801..e93428d 100644
+--- a/code/d3d_immediate.cpp
++++ b/code/d3d_immediate.cpp
+@@ -111,7 +111,7 @@ UINT D3DIMBuffer :: ReorderBufferToFVF( int fvf, int fvfsz )
+ 
+ 		for ( int j = 0; j < D3DGlobal.maxActiveTMU; ++j ) {
+ 			int numCoords = 4;
+-			if ( D3DState.TextureState.transformEnabled == FALSE )
++			if ( D3DState.TextureState.transformEnabled == FALSE && !D3DState.EnableState.texGenEnabled[j])
+ 			{
+ 				numCoords = (DWORD( D3DState.CurrentState.isSet.bits.texcoord ) >> (j * 2)) & 0x3;
+ 				numCoords++;
+@@ -198,7 +198,7 @@ void D3DIMBuffer :: End( )
+ 	for ( int i = 0; i < D3DGlobal.maxActiveTMU; ++i ) {
+ 		if ( D3DState.EnableState.textureEnabled[i] ) {
+ 			m_samplerMask |= ( 1 << i );
+-			int numCoordsX = D3DState.TextureState.transformEnabled ? 3 :
++			int numCoordsX = (D3DState.TextureState.transformEnabled || D3DState.EnableState.texGenEnabled[i]) ? 3 :
+ 				(DWORD( D3DState.CurrentState.isSet.bits.texcoord ) >> (i * 2)) & 0x3;
+ 			switch ( numCoordsX )
+ 			{
+diff --git a/code/d3d_state.cpp b/code/d3d_state.cpp
+index 3597a3a..3adb324 100644
+--- a/code/d3d_state.cpp
++++ b/code/d3d_state.cpp
+@@ -537,9 +537,9 @@ void D3DState_SetTexture()
+ 					transform = &local;
+ 				}
+ 				// Restore projection ONLY for 3D/4D coordinates
+-				if (numCoords == 4)
++				if (numCoords == 4 || D3DState.EnableState.texGenEnabled[i])
+ 				{
+-					transformFlags |= D3DTTFF_PROJECTED;
++					transformFlags = D3DTTFF_COUNT4 | D3DTTFF_PROJECTED;
+ 				}
+ 				// Enable texture transform (projected) for this specific sampler
+ 				D3DGlobal.pDevice->SetTextureStageState(currentSampler, D3DTSS_TEXTURETRANSFORMFLAGS, transformFlags);

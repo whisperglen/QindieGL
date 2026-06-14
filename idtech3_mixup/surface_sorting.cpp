@@ -17,29 +17,6 @@
 
 static int g_dump_data = false;
 
-typedef enum {
-	SF_BAD,
-	SF_SKIP,                // ignore
-	SF_FACE,
-	SF_GRID,
-	SF_TRIANGLES,
-	SF_POLY,
-	SF_MD3,
-	SF_MDC,
-	SF_MDS,
-	SF_FLARE,
-	SF_ENTITY,
-	SF_DISPLAY_LIST,
-
-	SF_NUM_SURFACE_TYPES,
-	SF_MAX = 0xffffffff         // ensures that sizeof( surfaceType_t ) == sizeof( int )
-} surfaceType_t;
-
-typedef struct drawSurf_s {
-	unsigned sort;                      // bit combination for fast compares
-	surfaceType_t       *surface;       // any of surface*_t
-} drawSurf_t;
-
 uint32_t qsort_extract(uint32_t val, uint32_t shift, uint32_t mask)
 {
 	return ((val >> shift) & mask);
@@ -91,30 +68,6 @@ static int qsort_compare( const void *arg1, const void *arg2 )
 
 	return ret;
 }
-
-typedef float vec_t;
-typedef vec_t vec3_t[3];
-typedef enum {qfalse, qtrue}    qboolean;
-typedef uint8_t byte;
-typedef uint32_t uint;
-typedef uint16_t ushort;
-
-typedef struct cvar_s {
-	char        *name;
-	char        *string;
-	char        *resetString;       // cvar_restart will reset to this value
-	char        *latchedString;     // for CVAR_LATCH vars
-	int flags;
-	qboolean modified;              // set each time the cvar is changed
-	int modificationCount;          // incremented each time the cvar is changed
-	float value;                    // atof( string )
-	int integer;                    // atoi( string )
-	struct cvar_s *next;
-	struct cvar_s *hashNext;
-} cvar_t;
-
-typedef cvar_t* (*cvarGet)(const char* name, const char* value, int flags);
-typedef void (*cvarSet)(const char*, const char*);
 
 typedef struct jmp_helper_s
 {
@@ -285,10 +238,6 @@ static void hook_addworldsurfaces()
 	((void(*)())fp_addworldsurfaces)();
 }
 
-typedef float vec3_t[3];
-
-#define VectorCopy(a,b)			(b[0]=a[0],b[1]=a[1],b[2]=a[2])
-#define DotProduct( x,y )         ( ( x )[0] * ( y )[0] + ( x )[1] * ( y )[1] + ( x )[2] * ( y )[2] )
 #define PLANE_NON_AXIAL 3
 
 vec3_t frustumnormals[4] = { 0 };
@@ -423,6 +372,43 @@ static void hook_setupfrustum()
 	//	}
 	//	SetPlaneSignbits(&frustum[i]);
 	//}
+	//float hugeDist = -99999999.0f; // Far beyond CoD's max map size
+
+	//// Plane 0: +X boundary (Normal points -X, inward)
+	//frustum[0].normal[0] = -1.0f; frustum[0].normal[1] = 0.0f; frustum[0].normal[2] = 0.0f;
+	//frustum[0].dist = hugeDist;
+	//frustum[0].type = 0; // 0 = PLANE_X
+	//frustum[0].signbits = 1; // 1 = Negative X normal
+
+	//// Plane 1: -X boundary (Normal points +X, inward)
+	//frustum[1].normal[0] = 1.0f; frustum[1].normal[1] = 0.0f; frustum[1].normal[2] = 0.0f;
+	//frustum[1].dist = hugeDist;
+	//frustum[1].type = 0;
+	//frustum[1].signbits = 0; // Positive X normal
+
+	//// Plane 2: +Y boundary (Normal points -Y, inward)
+	//frustum[2].normal[0] = 0.0f; frustum[2].normal[1] = -1.0f; frustum[2].normal[2] = 0.0f;
+	//frustum[2].dist = hugeDist;
+	//frustum[2].type = 1; // 1 = PLANE_Y
+	//frustum[2].signbits = 2; // 2 = Negative Y normal
+
+	//// Plane 3: -Y boundary (Normal points +Y, inward)
+	//frustum[3].normal[0] = 0.0f; frustum[3].normal[1] = 1.0f; frustum[3].normal[2] = 0.0f;
+	//frustum[3].dist = hugeDist;
+	//frustum[3].type = 1;
+	//frustum[3].signbits = 0; // Positive Y normal
+
+	//// Plane 4: +Z boundary (Normal points -Z, inward)
+	//frustum[4].normal[0] = 0.0f; frustum[4].normal[1] = 0.0f; frustum[4].normal[2] = -1.0f;
+	//frustum[4].dist = hugeDist;
+	//frustum[4].type = 2; // 2 = PLANE_Z
+	//frustum[4].signbits = 4; // 4 = Negative Z normal
+
+	//// Plane 5: -Z boundary (Normal points +Z, inward)
+	//frustum[5].normal[0] = 0.0f; frustum[5].normal[1] = 0.0f; frustum[5].normal[2] = 1.0f;
+	//frustum[5].dist = hugeDist;
+	//frustum[5].type = 2;
+	//frustum[5].signbits = 0; // Positive Z normal
 }
 
 #if id386
@@ -754,11 +740,11 @@ static bool read_conf()
 		tr_dp_viewcount = (int*)hook_loadptr(config_pattern( "tr_dp_viewcount", true, &not_found ));
 	}
 
-	fp_addworldsurfaces = config_pattern( "fp_addworldsurfaces", false );
-	if ( fp_addworldsurfaces )
-	{
-		fp_dumpdxf = config_pattern( "fp_dumpdxf", true, &not_found );
-	}
+	//fp_addworldsurfaces = config_pattern( "fp_addworldsurfaces", false );
+	//if ( fp_addworldsurfaces )
+	//{
+	//	fp_dumpdxf = config_pattern( "fp_dumpdxf", true, &not_found );
+	//}
 
 	fp_setupfrustum = config_pattern( "fp_setupfrustum", false );
 	if ( fp_setupfrustum )

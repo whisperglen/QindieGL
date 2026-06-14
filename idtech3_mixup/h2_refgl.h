@@ -1,6 +1,6 @@
 
-#ifndef __H2_RSURF_H
-#define __H2_RSURF_H
+#ifndef __H2_REFGL_H
+#define __H2_REFGL_H
 
 #include "hooking.h"
 
