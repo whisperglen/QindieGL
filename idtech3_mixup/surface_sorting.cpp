@@ -911,8 +911,8 @@ void hook_surface_sorting_do_init()
 			}
 		}
 
-
-		rmx_set_game_api(surface_sorting_implement_api);
+		if(fp_cvarGet || fp_cvarSet)
+			rmx_set_game_api(surface_sorting_implement_api);
 	}
 	else
 	{
