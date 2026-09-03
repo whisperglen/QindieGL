@@ -37,7 +37,7 @@ public:
 	GLsizei GetLockCount() const { return m_lockCount; }
 
 protected:
-	void SetMinimumVertexBufferSize( GLsizei numVerts );
+	bool SetMinimumVertexBufferSize( GLsizei numVerts );
 	int  SetMinimumIndexBufferSize( GLsizei numIndices, GLuint maximumIndex );
 	void SetupTexCoords( const float *texcoords, int num_coords, const float *position,
 		const float *normal, int stage, const D3DXMATRIX *softwareTransform,

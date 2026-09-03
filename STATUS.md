@@ -563,3 +563,57 @@ was estimated at 260 MiB (288 MiB peak), and process commitment had fallen from
 its previous-location peak, so the run showed no runaway wrapper allocation.
 Phase D is revalidated with the real occlusion path. The NVIDIA overlay not
 appearing over gameplay is a newly observed low-priority compatibility issue.
+
+## Phase E - correct VBO support
+
+Status: **complete and user-validated**.
+
+YAE already exercised the VBO path because its compatibility profile must
+advertise `GL_ARB_vertex_buffer_object` to pass the DS2 hardware gate. The
+global extension switch remains disabled so unrelated applications do not opt
+into the compatibility implementation accidentally. For YAE, VBO data remains
+in CPU shadow storage and is copied into the existing D3D9 streaming buffers at
+draw time; this preserves the renderer path whose performance and stability
+were established in Phases C and D.
+
+The extension entry-point table now publishes both core and ARB names from the
+same implementations. Previously, entries which were already ARB-suffixed
+caused the table macro to generate invalid names such as
+`glBufferDataARBARB`. The complete advertised surface now includes buffer
+creation/deletion, data replacement, `BufferSubData`, readback, mapping, and
+buffer parameter/map-pointer queries.
+
+The CPU-backed implementation now:
+
+- preserves the previous data store if replacement allocation fails;
+- validates targets, usage/access values, negative sizes, and overflow-safe
+  byte ranges;
+- rejects updates/readback while a buffer is mapped;
+- cleans all buffer storage when the final GL context is destroyed while
+  retaining it across D3D device resets;
+- resolves array-buffer pointers as byte offsets captured when each legacy
+  array is specified;
+- resolves element-buffer pointers as byte offsets at draw time;
+- validates every enabled VBO-backed vertex attribute through the largest
+  referenced index before touching the D3D9 streaming buffers;
+- aborts invalid draws safely instead of submitting zero-filled or
+  uninitialized vertices.
+
+The user loaded and played the new build without visual or stability issues and
+reported 30-60 FPS depending on location. Textures, lightmaps, geometry, and
+the prior rendering fixes remained intact. The clean shutdown summary reported:
+
+```text
+frames: 39181
+draw calls: 17730732
+failed D3D calls: none
+device resets: 0
+unsupported enums: none
+VBOs created: 937
+peak VBO storage: 58845996 bytes
+VBO range failures: none
+```
+
+This satisfies Phase E acceptance: YAE reaches and renders its gameplay scenes
+correctly with VBO enabled. The next task in the supplied plan is optional
+Phase F, ARB shader support.

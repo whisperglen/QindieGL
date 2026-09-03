@@ -19,6 +19,7 @@
 * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
 ***************************************************************************/
 #include <cstring>
+#include <new>
 #include <unordered_map>
 
 #include "d3d_wrapper.hpp"
@@ -29,27 +30,89 @@
 static std::unordered_map<GLuint, D3DBufferObject> g_bufferObjects;
 static GLuint g_arrayBufferBinding = 0;
 static GLuint g_elementArrayBufferBinding = 0;
-// TODO: reuse deleted buffer IDs when glDeleteBuffersARB is implemented
 static GLuint g_nextBufferId = 1;
+
+static bool D3DBuffer_IsValidTarget( GLenum target )
+{
+	return target == GL_ARRAY_BUFFER_ARB || target == GL_ELEMENT_ARRAY_BUFFER_ARB;
+}
+
+static bool D3DBuffer_IsValidUsage( GLenum usage )
+{
+	switch (usage) {
+	case GL_STREAM_DRAW_ARB:
+	case GL_STREAM_READ_ARB:
+	case GL_STREAM_COPY_ARB:
+	case GL_STATIC_DRAW_ARB:
+	case GL_STATIC_READ_ARB:
+	case GL_STATIC_COPY_ARB:
+	case GL_DYNAMIC_DRAW_ARB:
+	case GL_DYNAMIC_READ_ARB:
+	case GL_DYNAMIC_COPY_ARB:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static D3DBufferObject *D3DBuffer_GetBoundObject( GLenum target )
+{
+	if (!D3DBuffer_IsValidTarget(target)) {
+		QGL_SET_ERROR(E_INVALID_ENUM);
+		return nullptr;
+	}
+
+	const GLuint binding = D3DBuffer_GetBinding(target);
+	if (!binding) {
+		QGL_SET_ERROR(E_INVALID_OPERATION);
+		return nullptr;
+	}
+
+	D3DBufferObject *bufferObject = D3DBuffer_GetObject(binding, false);
+	if (!bufferObject) {
+		QGL_SET_ERROR(E_INVALID_OPERATION);
+		return nullptr;
+	}
+
+	return bufferObject;
+}
+
+static bool D3DBuffer_ValidateRange( const D3DBufferObject *bufferObject,
+	GLintptrARB offset, GLsizeiptrARB size )
+{
+	if (offset < 0 || size < 0) {
+		QGL_SET_ERROR(E_INVALIDARG);
+		return false;
+	}
+
+	const size_t byteOffset = static_cast<size_t>(offset);
+	const size_t byteCount = static_cast<size_t>(size);
+	const size_t bufferSize = static_cast<size_t>(bufferObject->size);
+	if (byteOffset > bufferSize || byteCount > bufferSize - byteOffset) {
+		QGL_SET_ERROR(E_INVALIDARG);
+		return false;
+	}
+
+	return true;
+}
 
 void D3DBuffer_Bind( GLenum target, GLuint buffer )
 {
-	switch (target) {
-		case GL_ARRAY_BUFFER_ARB:
-			g_arrayBufferBinding = buffer;
-			break;
-		case GL_ELEMENT_ARRAY_BUFFER_ARB:
-			g_elementArrayBufferBinding = buffer;
-			break;
-		default:
-			QGL_SET_ERROR(E_INVALID_ENUM);
-			return;
+	if (!D3DBuffer_IsValidTarget(target)) {
+		QGL_SET_ERROR(E_INVALID_ENUM);
+		return;
 	}
 
+	// Do not change the binding if creating the object fails.
 	if (buffer != 0 && !D3DBuffer_GetObject(buffer, true)) {
 		QGL_SET_ERROR(E_OUTOFMEMORY);
 		return;
 	}
+
+	if (target == GL_ARRAY_BUFFER_ARB)
+		g_arrayBufferBinding = buffer;
+	else
+		g_elementArrayBufferBinding = buffer;
 
 	QGL_SET_ERROR(S_OK);
 }
@@ -83,8 +146,14 @@ D3DBufferObject *D3DBuffer_GetObject( GLuint buffer, bool create )
 	object.mapped = false;
 	object.mapAccess = GL_WRITE_ONLY_ARB;
 
-	auto result = g_bufferObjects.emplace(buffer, object);
-	if (!result.second) return nullptr;
+	std::pair<std::unordered_map<GLuint, D3DBufferObject>::iterator, bool> result;
+	try {
+		result = g_bufferObjects.emplace(buffer, object);
+	}
+	catch (const std::bad_alloc &) {
+		return nullptr;
+	}
+	if (!result.second) return &result.first->second;
 	QGL_DiagnosticsRecordVBOCreated();
 
 	return &result.first->second;
@@ -117,6 +186,22 @@ const GLubyte *D3DBuffer_ResolvePointer( GLuint buffer, const GLvoid *pointer, s
 	return static_cast<const GLubyte *>(bufferObject->storage) + offset;
 }
 
+void D3DBuffer_Cleanup()
+{
+	for (auto &entry : g_bufferObjects) {
+		D3DBufferObject &bufferObject = entry.second;
+		if (bufferObject.storage) {
+			QGL_DiagnosticsRecordVBOBytes(-static_cast<int64_t>(bufferObject.size));
+			UTIL_Free(bufferObject.storage);
+			bufferObject.storage = nullptr;
+		}
+	}
+	g_bufferObjects.clear();
+	g_arrayBufferBinding = 0;
+	g_elementArrayBufferBinding = 0;
+	g_nextBufferId = 1;
+}
+
 OPENGL_API void WINAPI glBindBuffer( GLenum target, GLuint buffer )
 {
 	D3DBuffer_Bind( target, buffer );
@@ -127,15 +212,23 @@ OPENGL_API void WINAPI glBindBufferARB( GLenum target, GLuint buffer )
 	glBindBuffer( target, buffer );
 }
 
-OPENGL_API void WINAPI glGenBuffersARB( GLsizei n, GLuint *buffers )
+OPENGL_API void WINAPI glGenBuffers( GLsizei n, GLuint *buffers )
 {
-	if (n <= 0 || !buffers) {
+	if (n < 0 || (n > 0 && !buffers)) {
+		QGL_SET_ERROR(E_INVALIDARG);
+		return;
+	}
+	if (n == 0) {
 		QGL_SET_ERROR(S_OK);
 		return;
 	}
 
 	for (GLsizei i = 0; i < n; ++i) {
-		GLuint id = g_nextBufferId++;
+		GLuint id = 0;
+		do {
+			id = g_nextBufferId++;
+			if (!g_nextBufferId) g_nextBufferId = 1;
+		} while (!id || D3DBuffer_GetObject(id, false));
 		if (!D3DBuffer_GetObject(id, true)) {
 			QGL_SET_ERROR(E_OUTOFMEMORY);
 			return;
@@ -146,22 +239,15 @@ OPENGL_API void WINAPI glGenBuffersARB( GLsizei n, GLuint *buffers )
 	QGL_SET_ERROR(S_OK);
 }
 
-OPENGL_API GLvoid* WINAPI glMapBufferARB( GLenum target, GLenum access )
+OPENGL_API void WINAPI glGenBuffersARB( GLsizei n, GLuint *buffers )
 {
-	GLuint binding = D3DBuffer_GetBinding( target );
-	if (D3DGlobal.lastError == E_INVALID_ENUM) {
-		return nullptr;
-	}
-	if (!binding) {
-		QGL_SET_ERROR(E_INVALID_OPERATION);
-		return nullptr;
-	}
+	glGenBuffers(n, buffers);
+}
 
-	D3DBufferObject *bufferObject = D3DBuffer_GetObject( binding, false );
-	if (!bufferObject || !bufferObject->storage) {
-		QGL_SET_ERROR(E_INVALID_OPERATION);
-		return nullptr;
-	}
+OPENGL_API GLvoid* WINAPI glMapBuffer( GLenum target, GLenum access )
+{
+	D3DBufferObject *bufferObject = D3DBuffer_GetBoundObject(target);
+	if (!bufferObject) return nullptr;
 
 	switch (access) {
 		case GL_READ_ONLY_ARB:
@@ -185,19 +271,16 @@ OPENGL_API GLvoid* WINAPI glMapBufferARB( GLenum target, GLenum access )
 	return bufferObject->storage;
 }
 
-OPENGL_API GLboolean WINAPI glUnmapBufferARB( GLenum target )
+OPENGL_API GLvoid* WINAPI glMapBufferARB( GLenum target, GLenum access )
 {
-	GLuint binding = D3DBuffer_GetBinding( target );
-	if (D3DGlobal.lastError == E_INVALID_ENUM) {
-		return GL_FALSE;
-	}
-	if (!binding) {
-		QGL_SET_ERROR(E_INVALID_OPERATION);
-		return GL_FALSE;
-	}
+	return glMapBuffer(target, access);
+}
 
-	D3DBufferObject *bufferObject = D3DBuffer_GetObject( binding, false );
-	if (!bufferObject || !bufferObject->mapped) {
+OPENGL_API GLboolean WINAPI glUnmapBuffer( GLenum target )
+{
+	D3DBufferObject *bufferObject = D3DBuffer_GetBoundObject(target);
+	if (!bufferObject) return GL_FALSE;
+	if (!bufferObject->mapped) {
 		QGL_SET_ERROR(E_INVALID_OPERATION);
 		return GL_FALSE;
 	}
@@ -207,9 +290,18 @@ OPENGL_API GLboolean WINAPI glUnmapBufferARB( GLenum target )
 	return GL_TRUE;
 }
 
-OPENGL_API void WINAPI glDeleteBuffersARB( GLsizei n, const GLuint *buffers )
+OPENGL_API GLboolean WINAPI glUnmapBufferARB( GLenum target )
 {
-	if (n <= 0 || !buffers) {
+	return glUnmapBuffer(target);
+}
+
+OPENGL_API void WINAPI glDeleteBuffers( GLsizei n, const GLuint *buffers )
+{
+	if (n < 0 || (n > 0 && !buffers)) {
+		QGL_SET_ERROR(E_INVALIDARG);
+		return;
+	}
+	if (n == 0) {
 		QGL_SET_ERROR(S_OK);
 		return;
 	}
@@ -246,80 +338,122 @@ OPENGL_API void WINAPI glDeleteBuffersARB( GLsizei n, const GLuint *buffers )
 	QGL_SET_ERROR(S_OK);
 }
 
-OPENGL_API GLboolean WINAPI glIsBufferARB( GLuint buffer )
+OPENGL_API void WINAPI glDeleteBuffersARB( GLsizei n, const GLuint *buffers )
+{
+	glDeleteBuffers(n, buffers);
+}
+
+OPENGL_API GLboolean WINAPI glIsBuffer( GLuint buffer )
 {
 	if (!buffer) {
+		QGL_SET_ERROR(S_OK);
 		return GL_FALSE;
 	}
 
-	return D3DBuffer_GetObject( buffer, false ) ? GL_TRUE : GL_FALSE;
+	const GLboolean result = D3DBuffer_GetObject(buffer, false) ? GL_TRUE : GL_FALSE;
+	QGL_SET_ERROR(S_OK);
+	return result;
 }
 
-OPENGL_API void WINAPI glBufferDataARB( GLenum target, GLsizeiptrARB size, const GLvoid *data, GLenum usage )
+OPENGL_API GLboolean WINAPI glIsBufferARB( GLuint buffer )
 {
-	GLuint binding = D3DBuffer_GetBinding( target );
-	if (D3DGlobal.lastError == E_INVALID_ENUM) {
+	return glIsBuffer(buffer);
+}
+
+OPENGL_API void WINAPI glBufferData( GLenum target, GLsizeiptrARB size, const GLvoid *data, GLenum usage )
+{
+	if (size < 0) {
+		QGL_SET_ERROR(E_INVALIDARG);
 		return;
 	}
-	if (!binding) {
+	if (!D3DBuffer_IsValidUsage(usage)) {
+		QGL_SET_ERROR(E_INVALID_ENUM);
+		return;
+	}
+
+	D3DBufferObject *bufferObject = D3DBuffer_GetBoundObject(target);
+	if (!bufferObject) return;
+	if (bufferObject->mapped) {
 		QGL_SET_ERROR(E_INVALID_OPERATION);
 		return;
 	}
 
-	D3DBufferObject *bufferObject = D3DBuffer_GetObject( binding, true );
-	if (!bufferObject) {
-		QGL_SET_ERROR(E_OUTOFMEMORY);
-		return;
+	void *newStorage = nullptr;
+	if (size > 0) {
+		if (size > std::numeric_limits<int>::max()) {
+			QGL_SET_ERROR(E_OUTOFMEMORY);
+			return;
+		}
+		newStorage = UTIL_Alloc(static_cast<int>(size));
+		if (!newStorage) {
+			QGL_SET_ERROR(E_OUTOFMEMORY);
+			return;
+		}
+		if (data) {
+			memcpy(newStorage, data, static_cast<size_t>(size));
+		}
 	}
 
 	if (bufferObject->storage) {
 		QGL_DiagnosticsRecordVBOBytes(-static_cast<int64_t>(bufferObject->size));
-		UTIL_Free( bufferObject->storage );
-		bufferObject->storage = nullptr;
+		UTIL_Free(bufferObject->storage);
 	}
-
+	bufferObject->storage = newStorage;
 	bufferObject->size = size;
 	bufferObject->usage = usage;
-
-	if (size > 0) {
-		bufferObject->storage = UTIL_Alloc( static_cast<int>(size) );
-		if (!bufferObject->storage) {
-			QGL_SET_ERROR(E_OUTOFMEMORY);
-			return;
-		}
+	bufferObject->mapped = false;
+	if (newStorage)
 		QGL_DiagnosticsRecordVBOBytes(static_cast<int64_t>(size));
 
-		// TODO: replace CPU storage with D3D buffer when VBO manager is ready
-		if (data) {
-			memcpy( bufferObject->storage, data, static_cast<size_t>(size) );
-		}
+	QGL_SET_ERROR(S_OK);
+}
+
+OPENGL_API void WINAPI glBufferDataARB( GLenum target, GLsizeiptrARB size, const GLvoid *data, GLenum usage )
+{
+	glBufferData(target, size, data, usage);
+}
+
+OPENGL_API void WINAPI glBufferSubData( GLenum target, GLintptrARB offset,
+	GLsizeiptrARB size, const GLvoid *data )
+{
+	D3DBufferObject *bufferObject = D3DBuffer_GetBoundObject(target);
+	if (!bufferObject) return;
+	if (bufferObject->mapped) {
+		QGL_SET_ERROR(E_INVALID_OPERATION);
+		return;
+	}
+	if (!D3DBuffer_ValidateRange(bufferObject, offset, size)) return;
+	if (size > 0 && (!data || !bufferObject->storage)) {
+		QGL_SET_ERROR(data ? E_INVALID_OPERATION : E_INVALIDARG);
+		return;
+	}
+
+	if (size > 0) {
+		auto *destination = static_cast<unsigned char *>(bufferObject->storage);
+		memcpy(destination + static_cast<size_t>(offset), data, static_cast<size_t>(size));
 	}
 
 	QGL_SET_ERROR(S_OK);
 }
 
-OPENGL_API void WINAPI glGetBufferSubDataARB( GLenum target, GLintptrARB offset, GLsizeiptrARB size, GLvoid *data )
+OPENGL_API void WINAPI glBufferSubDataARB( GLenum target, GLintptrARB offset,
+	GLsizeiptrARB size, const GLvoid *data )
 {
-	GLuint binding = D3DBuffer_GetBinding( target );
-	if (D3DGlobal.lastError == E_INVALID_ENUM) {
-		return;
-	}
-	if (!binding) {
-		QGL_SET_ERROR(E_INVALID_OPERATION);
-		return;
-	}
-	if (!data || size < 0 || offset < 0) {
-		QGL_SET_ERROR(E_INVALID_OPERATION);
-		return;
-	}
+	glBufferSubData(target, offset, size, data);
+}
 
-	D3DBufferObject *bufferObject = D3DBuffer_GetObject( binding, false );
-	if (!bufferObject || !bufferObject->storage) {
+OPENGL_API void WINAPI glGetBufferSubData( GLenum target, GLintptrARB offset,
+	GLsizeiptrARB size, GLvoid *data )
+{
+	D3DBufferObject *bufferObject = D3DBuffer_GetBoundObject(target);
+	if (!bufferObject) return;
+	if (bufferObject->mapped) {
 		QGL_SET_ERROR(E_INVALID_OPERATION);
 		return;
 	}
-	if (offset + size > bufferObject->size) {
-		QGL_SET_ERROR(E_INVALID_OPERATION);
+	if (!D3DBuffer_ValidateRange(bufferObject, offset, size)) return;
+	if (size > 0 && (!data || !bufferObject->storage)) {
+		QGL_SET_ERROR(data ? E_INVALID_OPERATION : E_INVALIDARG);
 		return;
 	}
 
@@ -329,4 +463,67 @@ OPENGL_API void WINAPI glGetBufferSubDataARB( GLenum target, GLintptrARB offset,
 	}
 
 	QGL_SET_ERROR(S_OK);
+}
+
+OPENGL_API void WINAPI glGetBufferSubDataARB( GLenum target, GLintptrARB offset,
+	GLsizeiptrARB size, GLvoid *data )
+{
+	glGetBufferSubData(target, offset, size, data);
+}
+
+OPENGL_API void WINAPI glGetBufferParameteriv( GLenum target, GLenum pname, GLint *params )
+{
+	D3DBufferObject *bufferObject = D3DBuffer_GetBoundObject(target);
+	if (!bufferObject) return;
+	if (!params) {
+		QGL_SET_ERROR(E_INVALIDARG);
+		return;
+	}
+
+	switch (pname) {
+	case GL_BUFFER_SIZE_ARB:
+		*params = static_cast<GLint>(bufferObject->size);
+		break;
+	case GL_BUFFER_USAGE_ARB:
+		*params = static_cast<GLint>(bufferObject->usage);
+		break;
+	case GL_BUFFER_ACCESS_ARB:
+		*params = static_cast<GLint>(bufferObject->mapAccess);
+		break;
+	case GL_BUFFER_MAPPED_ARB:
+		*params = bufferObject->mapped ? GL_TRUE : GL_FALSE;
+		break;
+	default:
+		QGL_SET_ERROR(E_INVALID_ENUM);
+		return;
+	}
+
+	QGL_SET_ERROR(S_OK);
+}
+
+OPENGL_API void WINAPI glGetBufferParameterivARB( GLenum target, GLenum pname, GLint *params )
+{
+	glGetBufferParameteriv(target, pname, params);
+}
+
+OPENGL_API void WINAPI glGetBufferPointerv( GLenum target, GLenum pname, GLvoid **params )
+{
+	D3DBufferObject *bufferObject = D3DBuffer_GetBoundObject(target);
+	if (!bufferObject) return;
+	if (pname != GL_BUFFER_MAP_POINTER_ARB) {
+		QGL_SET_ERROR(E_INVALID_ENUM);
+		return;
+	}
+	if (!params) {
+		QGL_SET_ERROR(E_INVALIDARG);
+		return;
+	}
+
+	*params = bufferObject->mapped ? bufferObject->storage : nullptr;
+	QGL_SET_ERROR(S_OK);
+}
+
+OPENGL_API void WINAPI glGetBufferPointervARB( GLenum target, GLenum pname, GLvoid **params )
+{
+	glGetBufferPointerv(target, pname, params);
 }

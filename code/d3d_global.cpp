@@ -24,6 +24,7 @@
 #include "d3d_utils.hpp"
 #include "d3d_immediate.hpp"
 #include "d3d_array.hpp"
+#include "d3d_buffer.hpp"
 #include "d3d_object.hpp"
 #include "d3d_extension.hpp"
 #include "d3d_texture.hpp"
@@ -198,6 +199,8 @@ void D3DGlobal_Cleanup( bool cleanupAll )
 	logPrintf("--- Cleanup( %s ) ---\n", cleanupAll ? "all" : "partial" );
 	if (cleanupAll)
 		QGL_DiagnosticsDumpSessionSummary();
+	if (cleanupAll)
+		D3DBuffer_Cleanup();
 
 	D3DDisplayList_Cleanup();
 	ARB_Cleanup();
