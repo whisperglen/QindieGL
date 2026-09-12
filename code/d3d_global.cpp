@@ -1215,6 +1215,7 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 		do {
 			if ( resource_load_shader( RES_ID_ORTHO_VS, &data, &size, D3DGlobal.hModule ) )
 			{
+#if SHADERS_FROM_SOURCE
 				ID3DXBuffer* vertexShaderBuffer;
 
 				res = D3DXCompileShader( (LPCSTR)data, size, NULL, NULL, "main", "vs_2_0", 0, &vertexShaderBuffer, 0, &D3DGlobal.orthoShaders.constants );
@@ -1223,12 +1224,16 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 				res = D3DGlobal.pDevice->CreateVertexShader( (DWORD*)vertexShaderBuffer->GetBufferPointer(), &D3DGlobal.orthoShaders.vs );
 
 				vertexShaderBuffer->Release();
+#else
+				res = D3DGlobal.pDevice->CreateVertexShader((DWORD*)data, &D3DGlobal.orthoShaders.vs);
+#endif
 				if ( FAILED( res ) ) break;
 			}
 			else break;
 
 			if ( resource_load_shader( RES_ID_ORTHO_PS, &data, &size, D3DGlobal.hModule ) )
 			{
+#if SHADERS_FROM_SOURCE
 				ID3DXBuffer* pixelShaderBuffer;
 
 				res = D3DXCompileShader( (LPCSTR)data, size, NULL, NULL, "main", "ps_2_0", 0, &pixelShaderBuffer, 0, 0 );
@@ -1237,6 +1242,9 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 				res = D3DGlobal.pDevice->CreatePixelShader( (DWORD*)pixelShaderBuffer->GetBufferPointer(), &D3DGlobal.orthoShaders.ps );
 
 				pixelShaderBuffer->Release();
+#else
+				res = D3DGlobal.pDevice->CreatePixelShader((DWORD*)data, &D3DGlobal.orthoShaders.ps);
+#endif
 				if ( FAILED( res ) ) break;
 			}
 			else break;

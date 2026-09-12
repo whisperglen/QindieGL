@@ -251,19 +251,25 @@ static void D3DState_SetTransform()
 			if ( D3DGlobal_IsOrthoProjection() )
 			{
 				D3DGlobal.pDevice->SetVertexShader( D3DGlobal.orthoShaders.vs );
-				//D3DGlobal.pDevice->SetPixelShader( D3DGlobal.orthoShaders.ps );
+				D3DGlobal.pDevice->SetPixelShader( D3DGlobal.orthoShaders.ps );
 
+#if SHADERS_FROM_SOURCE
 				D3DGlobal.orthoShaders.constants->SetMatrix(D3DGlobal.pDevice, "projectionMatrix", D3DGlobal.projectionMatrixStack->top());
 				D3DGlobal.orthoShaders.constants->SetMatrix(D3DGlobal.pDevice, "worldMatrix", D3DGlobal.modelMatrixStack->top());
 				D3DGlobal.orthoShaders.constants->SetMatrix(D3DGlobal.pDevice, "viewMatrix", D3DGlobal.viewMatrixStack->top());
+#else
+				D3DGlobal.pDevice->SetVertexShaderConstantF(0, (*D3DGlobal.projectionMatrixStack->top()), 4);
+				D3DGlobal.pDevice->SetVertexShaderConstantF(4, (*D3DGlobal.viewMatrixStack->top()), 4);
+				D3DGlobal.pDevice->SetVertexShaderConstantF(8, (*D3DGlobal.modelMatrixStack->top()), 4);
+#endif
 
 				float texelOffset[4] = { -1.0f/D3DState.viewport.Width, 1.0f/D3DState.viewport.Height, 0.0f, 0.0f };
-				D3DGlobal.pDevice->SetVertexShaderConstantF(0, texelOffset, 1);
+				D3DGlobal.pDevice->SetVertexShaderConstantF(12, texelOffset, 1);
 			}
 			else
 			{
 				D3DGlobal.pDevice->SetVertexShader( NULL );
-				//D3DGlobal.pDevice->SetPixelShader( NULL );
+				D3DGlobal.pDevice->SetPixelShader( NULL );
 			}
 		}
 	}

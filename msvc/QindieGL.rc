@@ -79,9 +79,15 @@ END
 // 260
 //
 
-RES_ID_ORTHO_VS         RES_TYPE_SHADER_FILE                     "..\\code\\shaders\\ortho_vs.hlsl"
+#if SHADERS_FROM_SOURCE
+RES_ID_ORTHO_VS         RES_TYPE_SHADER_FILE                     "ortho_vs.hlsl"
 
-RES_ID_ORTHO_PS         RES_TYPE_SHADER_FILE                     "..\\code\\shaders\\ortho_ps.hlsl"
+RES_ID_ORTHO_PS         RES_TYPE_SHADER_FILE                     "ortho_ps.hlsl"
+#else
+RES_ID_ORTHO_VS         RES_TYPE_SHADER_FILE                     "ortho_vs.cso"
+
+RES_ID_ORTHO_PS         RES_TYPE_SHADER_FILE                     "ortho_ps.cso"
+#endif
 
 #endif    // English (United States) resources
 /////////////////////////////////////////////////////////////////////////////
