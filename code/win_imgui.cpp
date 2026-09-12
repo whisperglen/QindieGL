@@ -840,7 +840,10 @@ static void exchange_wndproc_and_mouse( enum exc_wprocnmouse_e action )
 		g_game_wndproc = (WNDPROC)(SetWindowLongPtr(HWND(g_hwnd), GWLP_WNDPROC, LONG_PTR(wnd_proc_hk)));
 		g_in_mouse_val = rmx_gamevar_get("in_mouse");
 		if ( g_in_mouse_val )
+		{
 			rmx_gamevar_set( "in_mouse", "0" );
+			rmx_gamevar_get( "in_mouse" ); //cvar is latched, but will update on cvar-get
+		}
 		rmx_deactivate_mouse();
 		break;
 	case WNDPROC_RESTORE_GAME:{
@@ -852,6 +855,7 @@ static void exchange_wndproc_and_mouse( enum exc_wprocnmouse_e action )
 			char value[4] = { 0 };
 			snprintf(value, sizeof(value), "%d", g_in_mouse_val);
 			rmx_gamevar_set( "in_mouse", value );
+			rmx_gamevar_get( "in_mouse" ); //cvar is latched, but will update on cvar-get
 		}
 		g_in_mouse_val = 0;
 		break;}

@@ -115,6 +115,7 @@ typedef struct cvar_s {
 
 typedef cvar_t* (*cvarGet)(const char* name, const char* value, int flags);
 typedef void (*cvarSet)(const char*, const char*);
+typedef void (*riPrintf)(int printLevel, const char* format, ...);
 
 typedef struct jmp_helper_s
 {
@@ -129,6 +130,10 @@ static const void* fp_qsortFast_uc0 = 0;
 static const void* fp_markLeaves = 0;
 static const void* fp_cvarGet = 0;
 static const void* fp_cvarSet = 0;
+static const void* fp_printf = 0;
+static const void* fp_deactMouse = 0;
+static const void* fp_mouseMove = 0;
+static const int* dp_mouseActive = 0;
 static const cvar_t* cvar_novis = 0;
 static const int* tr_dp_skyportal = 0;
 static byte* jmp_skyOnscreen = 0;
@@ -463,6 +468,14 @@ static void intercept_R_RenderView( /*viewParms_t*/int* parms)
 	fp_renderview(parms);
 }
 
+static void hook_IN_MouseMove()
+{
+	if (*dp_mouseActive)
+	{
+		((void(*)())fp_mouseMove)();
+	}
+}
+
 static void hook_retvoid()
 {
 	HOOK_ONLINE_NOTICE();
@@ -498,7 +511,12 @@ static gameparamret_t __cdecl surface_sorting_implement_api(gameops_t op, gamepa
 	switch (op)
 	{
 	case OP_GETVAR: {
-		ret.intval = fp_cvarGet ? (cvarGet(fp_cvarGet))(p0.strval, "0", 0)->integer : -1;
+		ret.intval = -1;
+		if (fp_cvarGet)
+		{
+			cvar_t* v = (cvarGet(fp_cvarGet))(p0.strval, "0", 0);
+			if (v) ret.intval = v->integer;
+		}
 		break; }
 	case OP_SETVAR:
 		if (fp_cvarSet) (cvarSet(fp_cvarSet))(p0.strval, p1.strval);
@@ -507,15 +525,17 @@ static gameparamret_t __cdecl surface_sorting_implement_api(gameops_t op, gamepa
 		//if(fp_ExecCmd) fp_ExecCmd(EXEC_APPEND, p0.strval);
 		break;
 	case OP_CONPRINT: {
-		//if(fp_printf) fp_printf(PRINT_ALL, "%s", p1.strval);
+		if(fp_printf) (riPrintf(fp_printf)(PRINT_ALL, "%s", p1.strval));
 		break; }
 	case OP_DEACTMOUSE:
-		//fp_IN_DeactivateMouse();
+		if (fp_deactMouse) ((void (*)())fp_deactMouse)();
+		break;
+	case OP_GETNORMALSTHRESHVAL:
 		break;
 	default:
-		//if (fp_printf)
-		//  fp_printf(PRINT_WARNING, "Unsupported OP:%d\n", op);
-		//else
+		if (fp_printf)
+			(riPrintf(fp_printf)(PRINT_ALL, "Unsupported OP:%d\n", op));
+		else
 			logPrintf("Unsupported OP:%d\n", op);
 		break;
 	}
@@ -702,6 +722,13 @@ static bool read_conf()
 
 	fp_cvarSet = (const void**)config_codeptr("fp_cvarSet", false);
 	fp_cvarGet = (const void**)config_codeptr("fp_cvarGet", false);
+	fp_printf = (const void**)config_codeptr("fp_printf", false);
+	fp_deactMouse = (const void**)config_codeptr("fp_deactMouse", false);
+	dp_mouseActive = (const int*)config_codeptr("dp_mouseActive", false);
+	if(dp_mouseActive)
+	{
+		fp_mouseMove = (const void**)config_codeptr("fp_mouseMove", true, &not_found);
+	}
 
 	fp_markLeaves = config_codeptr( "markLeaves", false );
 	if ( fp_markLeaves )
@@ -831,6 +858,11 @@ static void do_detour_action( DetourAction_FP detourAction )
 		if (fp_surfacemodelcached)
 		{
 			error = detourAction(&(PVOID&)fp_surfacemodelcached, hook_surfacemodelcached);
+			BREAK_ON_DETOUR_ERROR(error, errhint);
+		}
+		if (fp_mouseMove)
+		{
+			error = detourAction(&(PVOID&)fp_mouseMove, hook_IN_MouseMove);
 			BREAK_ON_DETOUR_ERROR(error, errhint);
 		}
 		if ( fp_retvoid )
