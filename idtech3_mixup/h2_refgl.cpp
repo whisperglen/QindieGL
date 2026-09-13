@@ -359,6 +359,7 @@ typedef struct cvar_s
 #define RI_CVAR_GET 5
 #define RI_CVAR_SET 7
 #define RI_ADDCMD 9
+#define RI_REMCMD 10
 #define RI_EXECTXT 0xd
 
 #define riPRINTF(LVL,...) ((ri_Printf)dp_ri[RI_PRINTF_OFF])( LVL, __VA_ARGS__ )
@@ -367,6 +368,7 @@ typedef struct cvar_s
 #define riCVAR_SET(NAME,VAL) ((ri_Cvar_Set)dp_ri[RI_CVAR_SET] )(NAME,VAL)
 #define riEXEC_TEXT(WHEN,TEXT) ((ri_Cbuf_ExecuteText)dp_ri[RI_EXECTXT])(WHEN,TEXT)
 #define riADD_CMD(NAME,FN) ((ri_AddCommand)dp_ri[RI_ADDCMD])(NAME,FN)
+#define riREM_CMD(NAME) ((ri_RemoveCommand)dp_ri[RI_REMCMD])(NAME)
 
 #define vecmax(a,m)             ((a) > m ? m : (a))
 
@@ -419,6 +421,7 @@ typedef cvarq2_t* (*ri_Cvar_Get) (const char *name, const char *value, int flags
 typedef cvarq2_t* (*ri_Cvar_Set)( const char *name, const char *value );
 typedef void (*ri_Cbuf_ExecuteText)( int exec_when, const char *text );
 typedef void (*ri_AddCommand)(const char* name, void (*cmd)(void));
+typedef void (*ri_RemoveCommand) (const char* name);
 
 static intptr_t* dp_ri;// = 0x5fd60
 
@@ -834,6 +837,8 @@ void h2_refgl_deinit()
 		//GL_DrawFlexFrameLerp draws the vertices
 		//8b 2f 83 c7 this is where the draw loop starts
 		//we can't restore it unless we save the bytes
+
+		riREM_CMD( "rmx_flashlight_toggle" );
 	}
 
 	h2_generic_fixes_deinit();
