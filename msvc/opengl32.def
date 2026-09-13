@@ -374,6 +374,7 @@ EXPORTS
 	wglUseFontOutlinesA = wrap_wglUseFontOutlinesA
 	wglUseFontOutlinesW = wrap_wglUseFontOutlinesW
 	matrix_print_s
+	matrix_camera_updated = matrix_accept_camera_update
 	DXGetErrorStringA
 	logPrintf
 	rmx_begin_loading_map = qdx_begin_loading_map

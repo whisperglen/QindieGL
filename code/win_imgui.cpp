@@ -11,6 +11,7 @@
 #include "d3d_matrix_stack.hpp"
 #include "d3d_state.hpp"
 #include "d3d_helpers.hpp"
+#include "d3d_matrix_detection.hpp"
 //#include "camera_search.h"
 #include <string>
 
@@ -53,7 +54,7 @@ static void do_draw()
 {
 	static float f = 0.0f;
 	static int counter = 0;
-	static bool no_background = 0;
+	static bool no_background = 1;
 	static bool no_scrollbar = 1;
 	ImGuiWindowFlags flags = 0;
 	if ( no_background ) flags = flags | ImGuiWindowFlags_NoBackground;
@@ -510,14 +511,105 @@ static void do_draw()
 	}
 #endif
 
+	matrix_detect_t* md = NULL;
+	matrix_detect_get_display(&md);
+	if (md)
+	{
+		if (ImGui::CollapsingHeader("Cameras"))
+		{
+			md->disp_enabled = true;
+
+			char headerText[128];
+			snprintf(headerText, sizeof(headerText), "DETECTION enable:%d mode:%d selection:%d(%d)", md->det_enabled, md->det_mode, md->addr_selected, md->addr_count);
+			ImGui::Text(headerText);
+
+			ImVec2 tableSize = ImVec2(125.0f, 0.0f);
+			if (ImGui::BeginTable("AddressTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit, tableSize)) {
+				ImGui::TableSetupColumn("Index");
+				ImGui::TableSetupColumn("Address");
+				ImGui::TableHeadersRow();
+
+				for (int i = 0; i < md->addr_count; ++i) {
+					ImGui::TableNextRow();
+
+					// Column 0: Index
+					ImGui::TableSetColumnIndex(0);
+					ImGui::Text("%d", i);
+
+					// Column 1: Hex Address
+					ImGui::TableSetColumnIndex(1);
+					ImGui::Text("%p", md->addrs[i]);
+				}
+				ImGui::EndTable();
+			}
+
+			ImGui::SliderFloat("Detect dist", &md->disp_threshold, 0, 500.f);
+
+			bool foundOne = false;
+			matrix_detect_t::mat_slot_s* slot = md->disp_slot;
+			for (int i = 0; i < MAT_DISP_NUMSLOTS; i++, slot++)
+			{
+				if (slot->count)
+				{
+					foundOne = true;
+
+					int key = i + 2240U;
+					ImGui::PushID(key);
+
+					// Display the key (e.g., texture ID or generated slot ID)
+					snprintf(headerText, sizeof(headerText), "Matrix ID: %d cnt(%d)", i, slot->count);
+					if (ImGui::CollapsingHeader(headerText, ImGuiTreeNodeFlags_DefaultOpen)) {
+
+						// 4-column table for the 4x4 matrix
+						if (ImGui::BeginTable("MatrixTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+
+							// Print row by row for readability.
+							// OpenGL matrices are column-major in memory:
+							// m[0..3] is column 0, m[4..7] is column 1, etc.
+							for (int row = 0; row < 4; ++row) {
+								ImGui::TableNextRow();
+								for (int col = 0; col < 4; ++col) {
+									ImGui::TableSetColumnIndex(col);
+
+									// Calculate index to fetch data row-by-row from column-major array
+									//int index = (col * 4) + row;
+									int index = (row * 4) + col;
+
+									// Highlight the translation vector (last column in row-major view)
+									if (row == 3 && col < 3) {
+										ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%10.3f", slot->matrix[index]);
+									}
+									else {
+										ImGui::Text("%10.3f", slot->matrix[index]);
+									}
+								}
+							}
+							ImGui::EndTable();
+						}
+					}
+					ImGui::PopID();
+				}
+			}
+			md->disp_rejects = 0;
+			if (!foundOne)
+			{
+				ImGui::Text("No matrices detected.");
+			}
+		}
+		else
+		{
+			md->disp_enabled = false;
+		}
+	}
+
 	float* normals_thresh = rmx_4imgui_getnormalsthresh();
 	if (normals_thresh)
 	{
 		if (ImGui::CollapsingHeader("Normals Generation"))
-		{
-			ImGui::SliderFloat("Limit", normals_thresh, -1.0, 1.0);
-			ImGui::Text("Angle value %.3f", (180.0 / M_PI) * acosf(*normals_thresh));
-		}
+	{
+		ImGui::SliderFloat("Limit", normals_thresh, -1.0, 1.0);
+		ImGui::Text("Angle value %.3f", (180.0 / M_PI) * acosf(*normals_thresh));
+	}
 	}
 	
 	ImGui::NewLine(); ImVec2 toggle_sz( 150, 0 );

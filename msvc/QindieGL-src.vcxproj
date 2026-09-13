@@ -137,7 +137,7 @@
       </PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;SHADERS_FROM_SOURCE=0;_DEBUG;_WINDOWS;_USRDLL;QINDIEGLSRC_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;SHADERS_FROM_SOURCE=0;_WINDOWS;_USRDLL;QINDIEGLSRC_EXPORTS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <AdditionalIncludeDirectories>$(ProjectDir)..\extern\dx9sdk\include;$(ProjectDir)..\extern\dxut;$(ProjectDir)..\extern\remix;$(ProjectDir)..\extern\fnvhash;$(ProjectDir)..\extern\imgui;$(ProjectDir)..\extern;$(ProjectDir)..\idtech3_mixup;$(ProjectDir)..\extern\mINI;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
@@ -176,7 +176,7 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration)\$(Proje
       </PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;SHADERS_FROM_SOURCE=0;_DEBUG;_WINDOWS;_USRDLL;QINDIEGLSRC_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;SHADERS_FROM_SOURCE=0;_WINDOWS;_USRDLL;QINDIEGLSRC_EXPORTS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <AdditionalIncludeDirectories>$(ProjectDir)..\extern\dx9sdk\include;$(ProjectDir)..\extern\dxut;$(ProjectDir)..\extern\remix;$(ProjectDir)..\extern\fnvhash;$(ProjectDir)..\extern\imgui;$(ProjectDir)..\extern;$(ProjectDir)..\idtech3_mixup;$(ProjectDir)..\extern\mINI;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
@@ -217,7 +217,7 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration).$(Platf
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;SHADERS_FROM_SOURCE=0;NDEBUG;_WINDOWS;_USRDLL;QINDIEGLSRC_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;SHADERS_FROM_SOURCE=0;_WINDOWS;_USRDLL;QINDIEGLSRC_EXPORTS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -263,7 +263,7 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration)\$(Proje
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;SHADERS_FROM_SOURCE=0;NDEBUG;_WINDOWS;_USRDLL;QINDIEGLSRC_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;SHADERS_FROM_SOURCE=0;_WINDOWS;_USRDLL;QINDIEGLSRC_EXPORTS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -309,7 +309,7 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration).$(Platf
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;SHADERS_FROM_SOURCE=0;NDEBUG;_WINDOWS;_USRDLL;QINDIEGLSRC_EXPORTS;QINDIEGLSRC_NO_REMIX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;SHADERS_FROM_SOURCE=0;_WINDOWS;_USRDLL;QINDIEGLSRC_EXPORTS;QINDIEGLSRC_NO_REMIX;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -355,7 +355,7 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration)\$(Proje
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;SHADERS_FROM_SOURCE=0;NDEBUG;_WINDOWS;_USRDLL;QINDIEGLSRC_EXPORTS;QINDIEGLSRC_NO_REMIX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;SHADERS_FROM_SOURCE=0;_WINDOWS;_USRDLL;QINDIEGLSRC_EXPORTS;QINDIEGLSRC_NO_REMIX;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>

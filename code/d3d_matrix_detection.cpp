@@ -63,6 +63,7 @@ mat_detection_t g_mat_camera;
 #endif
 
 static bool matrix_is_flippingmat(const float* mat);
+static void process_camera_mat(const float* camera);
 
 static struct matrix_log_data g_mat_log_data[100];
 static int g_mat_log_idx = 0;
@@ -70,11 +71,7 @@ static int g_mat_log_global_count = 0;
 
 static int g_mat_log_print_one_round = 0;
 
-void* g_mat_addrs[3];
-int g_mat_addr_count = 0;
-int g_mat_addr_selected = 0;
-
-static float g_mat_identity[16] =
+static const float g_mat_identity[16] =
 {
 	1.0, 0.0, 0.0, 0.0,
 	0.0, 1.0, 0.0, 0.0,
@@ -92,12 +89,13 @@ enum detection_mode_e
 	DETECTION_IDTECH3 = 2
 };
 
-bool g_mat_detection_enabled = false;
-int g_mat_detection_mode = 0;
+matrix_detect_t g_md = { false, DETECTION_NONE, {}, 0, 0, false, 0, 175.f, {} };
+
+#define PROCESS_CAMERA_MAT(CAMERA)  do { if (g_md.disp_enabled) process_camera_mat(CAMERA); } while(0)
 
 bool matrix_detect_is_detection_enabled()
 {
-	return g_mat_detection_enabled;
+	return g_md.det_enabled;
 }
 
 inline bool matrix_is_identity(const float* mat)
@@ -136,7 +134,7 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 {
 	unsigned int flags = 0;
 #if 1
-	if (g_mat_detection_enabled == FALSE || g_mat_detection_mode == DETECTION_NONE)
+	if (g_md.det_enabled == FALSE || g_md.det_mode == DETECTION_NONE)
 	{
 		memcpy(&detected_model->m[0][0], mat, 16*sizeof(float));
 		D3DXMatrixIdentity(detected_view);
@@ -146,22 +144,22 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 			//matrix_print_s(&detected_view->m[0][0], "detected view N");
 		}
 	}
-	else if (g_mat_addr_count == 0 || g_mat_detection_mode == DETECTION_IDTECH2)
+	else if (g_md.addr_count == 0 || g_md.det_mode == DETECTION_IDTECH2)
 	{
 		D3DXMatrixIdentity(detected_model);
-		memcpy(&detected_view->m[0][0], mat, 16*sizeof(float));
+		memcpy(&detected_view->m[0][0], mat, 16 * sizeof(float)); PROCESS_CAMERA_MAT(mat);
 		if (g_mat_log_print_one_round & 2)
 		{
 			//matrix_print_s(&detected_model->m[0][0], "detected model ID2");
 			matrix_print_s(&detected_view->m[0][0], "detected view ID2");
 		}
 	}
-	else if(g_mat_detection_mode == DETECTION_IDTECH3)
+	else if(g_md.det_mode == DETECTION_IDTECH3)
 	{
 		if (matrix_is_identity(mat))
 		{
 			D3DXMatrixIdentity(detected_model);
-			D3DXMatrixIdentity(detected_view);
+			D3DXMatrixIdentity(detected_view); PROCESS_CAMERA_MAT(g_mat_identity);
 			if ( g_mat_log_print_one_round & 2 )
 			{
 				logPrintf( "matrix simple (detected identity)\n" );
@@ -170,7 +168,7 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 		else if (matrix_is_flippingmat(mat))
 		{
 			D3DXMatrixIdentity(detected_model);
-			memcpy(&detected_view->m[0][0], mat, 16*sizeof(float));
+			memcpy(&detected_view->m[0][0], mat, 16*sizeof(float)); PROCESS_CAMERA_MAT(mat);
 			//memcpy(&detected_model->m[0][0], mat, 16*sizeof(float));
 			//D3DXMatrixIdentity(detected_view);
 			if ( g_mat_log_print_one_round & 2 )
@@ -178,10 +176,10 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 				logPrintf( "matrix simple (detected flipping)\n" );
 			}
 		}
-		else if (mat == g_mat_addrs[g_mat_addr_selected])
+		else if (mat == g_md.addrs[g_md.addr_selected])
 		{
 			D3DXMatrixIdentity(detected_model);
-			memcpy(&detected_view->m[0][0], mat, 16*sizeof(float));
+			memcpy(&detected_view->m[0][0], mat, 16*sizeof(float)); PROCESS_CAMERA_MAT(&matrix_get_inverse(mat)->m[0][0]);
 
 			if (g_mat_log_print_one_round & 2)
 			{
@@ -189,11 +187,12 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 				matrix_print_s(&detected_view->m[0][0], "detected view ID3");
 			}
 		}
-		else if (mat != g_mat_addrs[g_mat_addr_selected])
+		else if (mat != g_md.addrs[g_md.addr_selected])
 		{
 			D3DXMATRIX local = D3DXMATRIX(mat);
-			D3DXMatrixMultiply(detected_model, &local, matrix_get_inverse((const float*)(g_mat_addrs[g_mat_addr_selected])));
-			memcpy(&detected_view->m[0][0], g_mat_addrs[g_mat_addr_selected], sizeof(detected_view->m));
+			D3DXMATRIX* caminv = matrix_get_inverse((const float*)(g_md.addrs[g_md.addr_selected]));
+			D3DXMatrixMultiply(detected_model, &local, caminv);
+			memcpy(&detected_view->m[0][0], g_md.addrs[g_md.addr_selected], sizeof(detected_view->m)); PROCESS_CAMERA_MAT(&caminv->m[0][0]);
 
 			if (g_mat_log_print_one_round & 2)
 			{
@@ -263,25 +262,25 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 	}
 #endif
 	bool mat_already_stored = false;
-	for (int i = 0; i < g_mat_addr_count; i++)
+	for (int i = 0; i < g_md.addr_count; i++)
 	{
-		if (g_mat_addrs[i] == mat)
+		if (g_md.addrs[i] == mat)
 		{
 			mat_already_stored = true;
 			break;
 		}
 	}
-	if (!mat_already_stored && g_mat_addr_count < ARRAYSIZE(g_mat_addrs))
+	if (!mat_already_stored && g_md.addr_count < ARRAYSIZE(g_md.addrs))
 	{
 		bool msg_newDefault = false;
-		g_mat_addrs[g_mat_addr_count] = (void*)mat;
-		if (mat < g_mat_addrs[g_mat_addr_selected])
+		g_md.addrs[g_md.addr_count] = (void*)mat;
+		if (mat < g_md.addrs[g_md.addr_selected])
 		{
-			g_mat_addr_selected = g_mat_addr_count;
+			g_md.addr_selected = g_md.addr_count;
 			msg_newDefault = true;
 		}
-		logPrintf("MatrixDetection new pointer stored[%d]: %p. %s\n", g_mat_addr_count, mat, (msg_newDefault ? "Marked as active camera." : ""));
-		g_mat_addr_count++;
+		logPrintf("MatrixDetection new pointer stored[%d]: %p. %s\n", g_md.addr_count, mat, (msg_newDefault ? "Marked as active camera." : ""));
+		g_md.addr_count++;
 	}
 	if ( g_mat_log_print_one_round )
 	{
@@ -314,7 +313,7 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 
 void matrix_detect_on_world_retrieve(const float* mat, D3DXMATRIX* detected_model, D3DXMATRIX* detected_view)
 {
-	if (g_mat_detection_mode == DETECTION_IDTECH2)
+	if (g_md.det_mode == DETECTION_IDTECH2)
 	{
 		//store modelview in view matrix
 		D3DXMatrixIdentity(detected_model);
@@ -328,24 +327,24 @@ void matrix_detect_frame_ended()
 
 	if (keys.o && (keys.ctrl || keys.alt))
 	{
-		g_mat_detection_enabled = !g_mat_detection_enabled;
-		logPrintf( "MatrixDetection changed:%d mode:%d\n", g_mat_detection_enabled, g_mat_detection_mode );
+		g_md.det_enabled = !g_md.det_enabled;
+		logPrintf( "MatrixDetection changed:%d mode:%d\n", g_md.det_enabled, g_md.det_mode );
 	}
 
 	if (keys.pgdwn && (keys.ctrl || keys.alt))
 	{
-		g_mat_addr_selected++;
-		if (g_mat_addr_selected >= g_mat_addr_count)
+		g_md.addr_selected++;
+		if (g_md.addr_selected >= g_md.addr_count)
 		{
-			g_mat_addr_selected = 0;
+			g_md.addr_selected = 0;
 		}
 	}
 	if (keys.pgup && (keys.ctrl || keys.alt))
 	{
-		g_mat_addr_selected--;
-		if (g_mat_addr_selected < 0)
+		g_md.addr_selected--;
+		if (g_md.addr_selected < 0)
 		{
-			g_mat_addr_selected = g_mat_addr_count > 0 ? g_mat_addr_count - 1 : 0;
+			g_md.addr_selected = g_md.addr_count > 0 ? g_md.addr_count - 1 : 0;
 		}
 	}
 
@@ -399,14 +398,14 @@ static int read_confval(const char* valname, mINI::INIStructure &ini)
 void matrix_detect_configuration_reset()
 {
 	matrix_detect_frame_ended();
-	g_mat_addr_count = 0;
-	g_mat_addr_selected = 0;
+	g_md.addr_count = 0;
+	g_md.addr_selected = 0;
 
 	mINI::INIStructure &ini = *((mINI::INIStructure *)D3DGlobal_GetIniHandler());
-	g_mat_detection_enabled = read_confval("enable_camera_detection", ini);
-	g_mat_detection_mode = read_confval("camera_detection_mode", ini);
+	g_md.det_enabled = read_confval("enable_camera_detection", ini);
+	g_md.det_mode = read_confval("camera_detection_mode", ini);
 
-	logPrintf("MatrixDetection enabled:%d mode:%d\n", g_mat_detection_enabled, g_mat_detection_mode);
+	logPrintf("MatrixDetection enabled:%d mode:%d\n", g_md.det_enabled, g_md.det_mode);
 }
 
 bool matrix_detect_are_equal(const float *a, const float *b, int count)
@@ -468,5 +467,125 @@ OPENGL_API void WINAPI matrix_print_s(const float* mat, const char *info)
 			mat[4], mat[5], mat[6], mat[7],
 			mat[8], mat[9], mat[10], mat[11],
 			mat[12], mat[13], mat[14], mat[15]);
+	}
+}
+
+#include "rmx_gen.h"
+OPENGL_API void WINAPI matrix_accept_camera_update(const float* mat)
+{
+	g_md.det_mode = DETECTION_NONE;
+
+	_CRT_UNUSED(mat);
+}
+
+// This should be called one per frame so we update the display counter
+bool matrix_detect_get_display(matrix_detect_t** out)
+{
+	matrix_detect_t::mat_slot_s* slot = g_md.disp_slot;
+	for (int i = 0; i < MAT_DISP_NUMSLOTS; ++i, ++slot)
+	{
+		if (slot->count)
+			slot->count--;
+	}
+	if (out) *out = &g_md;
+	return g_md.disp_enabled;
+}
+
+int findBestSlot(const float* newMat, matrix_detect_t::mat_slot_s* slots, float thresholdSq) {
+	int bestIndex = -1;
+	float bestDistSq = thresholdSq;
+
+	// Initialize with a large number for the scale difference tie-breaker
+	float bestScaleDiff = 999999.0f;
+
+	// Tolerance to consider translations "identical" (avoids float precision issues)
+	const float tieThresholdSq = 0.001f;
+
+	// Calculate the sum of the scale diagonal for the incoming matrix
+	float newScale = newMat[0] + newMat[5] + newMat[10];
+
+	for (int i = 0; i < MAT_DISP_NUMSLOTS; ++i) {
+		// Assuming 'count > 0' means the slot is currently active and occupied
+		if (slots[i].count == 0) continue;
+
+		float dx = newMat[12] - slots[i].matrix[12];
+		float dy = newMat[13] - slots[i].matrix[13];
+		float dz = newMat[14] - slots[i].matrix[14];
+		float distSq = (dx * dx) + (dy * dy) + (dz * dz);
+
+		// If it's completely out of bounds, skip immediately
+		if (distSq > thresholdSq) continue;
+
+		// Calculate scale difference for the fallback check
+		float slotScale = slots[i].matrix[0] +
+			slots[i].matrix[5] +
+			slots[i].matrix[10];
+		float scaleDiff = std::abs(newScale - slotScale);
+
+		bool isBetterMatch = false;
+
+		if (bestIndex == -1) {
+			// First valid slot found
+			isBetterMatch = true;
+		}
+		else {
+			// If both the current candidate and the previously found best slot 
+			// share the exact same origin location...
+			if (distSq < tieThresholdSq && bestDistSq < tieThresholdSq) {
+				// ...break the tie by picking the one with the most similar scale.
+				if (scaleDiff < bestScaleDiff) {
+					isBetterMatch = true;
+				}
+			}
+			// Otherwise, strictly prefer the physically closer matrix.
+			else if (distSq < bestDistSq) {
+				isBetterMatch = true;
+			}
+		}
+
+		if (isBetterMatch) {
+			bestDistSq = distSq;
+			bestScaleDiff = scaleDiff;
+			bestIndex = i;
+		}
+	}
+
+	return bestIndex;
+}
+
+#define MAT_DET_FRAME_DELAY 5
+static void process_camera_mat(const float* camera)
+{
+	int bestSlot = findBestSlot(camera, g_md.disp_slot, g_md.disp_threshold);
+
+	matrix_detect_t::mat_slot_s* slot;
+	if (bestSlot < 0)
+	{
+		slot = g_md.disp_slot;
+		int lowcount = 999;
+		for (int i = 0; i < MAT_DISP_NUMSLOTS; i++, slot++)
+		{
+			if (slot->count == 0)
+			{
+				bestSlot = i;
+				break;
+			}
+			//if (slot->count < lowcount)
+			//{
+			//	bestSlot = i;
+			//	lowcount = slot->count;
+			//}
+		}
+	}
+
+	if (bestSlot >= 0)
+	{
+		slot = &g_md.disp_slot[bestSlot];
+		slot->count = MAT_DET_FRAME_DELAY;
+		memcpy(slot->matrix, camera, sizeof(float[16]));
+	}
+	else
+	{
+		g_md.disp_rejects++;
 	}
 }
