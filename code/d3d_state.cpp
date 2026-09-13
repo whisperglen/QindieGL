@@ -280,7 +280,20 @@ static void D3DState_SetTransform()
 		for (int i = 0; i < IMPL_MAX_CLIP_PLANES; ++i) {
 			if (D3DState.TransformState.clipPlaneModified[i]) {
 				D3DState.TransformState.clipPlaneModified[i] = FALSE;
-				hr = D3DGlobal.pDevice->SetClipPlane( i, D3DState.TransformState.clipPlane[i] );
+				if (!matrix_detect_is_detection_enabled())
+				{
+					hr = D3DGlobal.pDevice->SetClipPlane( i, D3DState.TransformState.clipPlane[i] );
+				}
+				else
+				{
+					D3DXMATRIX viewTranspose;
+					D3DXMatrixTranspose(&viewTranspose, D3DGlobal.viewMatrixStack->top());
+
+					D3DXPLANE worldSpacePlane, eyeSpacePlane(D3DState.TransformState.clipPlane[i]);
+					D3DXPlaneTransform(&worldSpacePlane, &eyeSpacePlane, &viewTranspose);
+
+					hr = D3DGlobal.pDevice->SetClipPlane(i, worldSpacePlane);
+				}
 				if (FAILED(hr)) {
 					D3DGlobal.lastError = hr;
 					return;
