@@ -55,12 +55,19 @@ enum light_type_e
 typedef int  (*fn_rmx_light_add)(int light_type_e, int ord, const float* position, const float* direction, const float* color, float radius);
 typedef void (*fn_rmx_lights_clear)(unsigned int light_types);
 
+typedef void (*fn_matrix_print_s)(const float* mat, const char* info);
+typedef void (*fn_matrix_update_camera)(const float* mat);
+typedef void (*fn_matrix_preferred_address)(const void* addr);
+
 extern fn_rmx_begin_loading_map rmx_begin_loading_map;
 extern fn_rmx_setplayerpos rmx_setplayerpos;
 extern fn_rmx_set_game_api rmx_set_game_api;
 extern fn_rmx_flashlight_enable rmx_flashlight_enable;
 extern fn_rmx_light_add rmx_light_add;
 extern fn_rmx_lights_clear rmx_lights_clear;
+extern fn_matrix_print_s qind_mat_print;
+extern fn_matrix_update_camera qind_mat_update_camera;
+extern fn_matrix_preferred_address qind_mat_preferred_address;
 
 void rmx_interface_init(void *opengl32_hnd);
 
@@ -86,6 +93,9 @@ fn_rmx_set_game_api rmx_set_game_api;
 fn_rmx_flashlight_enable rmx_flashlight_enable;
 fn_rmx_light_add rmx_light_add;
 fn_rmx_lights_clear rmx_lights_clear;
+fn_matrix_print_s qind_mat_print;
+fn_matrix_update_camera qind_mat_update_camera;
+fn_matrix_preferred_address qind_mat_preferred_address;
 
 void rmx_interface_init(void *opengl32_hnd)
 {
@@ -96,6 +106,9 @@ void rmx_interface_init(void *opengl32_hnd)
 	rmx_flashlight_enable = (fn_rmx_flashlight_enable)rmx_assign_func(opengl32_, "rmx_flashlight_enable");
 	rmx_light_add = (fn_rmx_light_add)rmx_assign_func(opengl32_, "rmx_light_add");
 	rmx_lights_clear = (fn_rmx_lights_clear)rmx_assign_func(opengl32_, "rmx_lights_clear");
+	qind_mat_print = (fn_matrix_print_s)rmx_assign_func(opengl32_, "matrix_print_s");
+	qind_mat_update_camera = (fn_matrix_update_camera)rmx_assign_func(opengl32_, "matrix_update_camera");
+	qind_mat_preferred_address = (fn_matrix_preferred_address)rmx_assign_func(opengl32_, "matrix_preferred_address");
 }
 #endif
 
@@ -103,4 +116,3 @@ void rmx_interface_init(void *opengl32_hnd)
 }
 #endif
 #endif
-

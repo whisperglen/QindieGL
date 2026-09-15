@@ -15,6 +15,8 @@
 
 #include "rmx_gen.h"
 
+#define EXEC_APPEND 2
+
 static int g_dump_data = false;
 
 typedef enum {
@@ -116,6 +118,7 @@ typedef struct cvar_s {
 typedef cvar_t* (*cvarGet)(const char* name, const char* value, int flags);
 typedef void (*cvarSet)(const char*, const char*);
 typedef void (*riPrintf)(int printLevel, const char* format, ...);
+typedef void (*execCmd)(int exec_when, const char* text);
 
 typedef struct jmp_helper_s
 {
@@ -129,6 +132,7 @@ static const void* fp_qsortFast = 0;
 static const void* fp_qsortFast_uc0 = 0;
 static const void* fp_markLeaves = 0;
 static const void* fp_cvarGet = 0;
+static const void* fp_execCmd = 0;
 static const void* fp_cvarSet = 0;
 static const void* fp_printf = 0;
 static const void* fp_deactMouse = 0;
@@ -522,7 +526,7 @@ static gameparamret_t __cdecl surface_sorting_implement_api(gameops_t op, gamepa
 		if (fp_cvarSet) (cvarSet(fp_cvarSet))(p0.strval, p1.strval);
 		break;
 	case OP_EXECMD:
-		//if(fp_ExecCmd) fp_ExecCmd(EXEC_APPEND, p0.strval);
+		if(fp_execCmd) (execCmd(fp_execCmd))(EXEC_APPEND, p0.strval);
 		break;
 	case OP_CONPRINT: {
 		if(fp_printf) (riPrintf(fp_printf)(PRINT_ALL, "%s", p1.strval));
@@ -723,6 +727,7 @@ static bool read_conf()
 	fp_cvarSet = (const void**)config_codeptr("fp_cvarSet", false);
 	fp_cvarGet = (const void**)config_codeptr("fp_cvarGet", false);
 	fp_printf = (const void**)config_codeptr("fp_printf", false);
+	fp_execCmd = (const void**)config_codeptr("fp_execCmd", false);
 	fp_deactMouse = (const void**)config_codeptr("fp_deactMouse", false);
 	dp_mouseActive = (const int*)config_codeptr("dp_mouseActive", false);
 	if(dp_mouseActive)

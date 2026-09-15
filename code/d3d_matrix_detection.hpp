@@ -12,9 +12,10 @@ typedef struct matrix_display_s
 {
 	bool det_enabled;
 	int det_mode;
-	void *addrs[MAT_DET_NUMADDR];
+	const void *addrs[MAT_DET_NUMADDR];
 	int addr_count;
 	int addr_selected;
+	const void* addr_preferred;
 	bool disp_enabled;
 	int disp_rejects;
 	float disp_threshold;
@@ -32,7 +33,9 @@ void matrix_detect_on_world_retrieve(const float* mat, D3DXMATRIX *detected_mode
 bool matrix_detect_get_display(matrix_detect_t** out);
 bool matrix_detect_are_equal(const float* a, const float* b, int count);
 void matrix_print(const float* mat, int ordinal, int usage_count, unsigned int flags, const unsigned int * seq_nums, const void * const * seq_ptrs);
-OPENGL_API void WINAPI matrix_print_s(const float* mat, const char* info);
-OPENGL_API void WINAPI matrix_accept_camera_update(const float* mat);
+
+void matrix_print_s(const float* mat, const char* info);
+void matrix_update_camera(const float* mat);
+void matrix_preferred_address(const void* addr);
 
 #endif
