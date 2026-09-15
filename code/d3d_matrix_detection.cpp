@@ -13,8 +13,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "ini.h"
-
 struct matrix_log_data
 {
 	float mat[16];
@@ -79,9 +77,6 @@ static const float g_mat_identity[16] =
 	0.0, 0.0, 0.0, 1.0
 };
 
-static D3DXMATRIX g_mat_cache;
-static D3DXMATRIX g_mat_cache_inverse;
-
 enum detection_mode_e
 {
 	DETECTION_NONE = 0,
@@ -89,7 +84,7 @@ enum detection_mode_e
 	DETECTION_IDTECH3 = 2
 };
 
-matrix_detect_t g_md = { false, DETECTION_NONE, {}, 0, 0, false, 0, 175.f, {} };
+matrix_detect_t g_md = { false, DETECTION_NONE, {}, 0, 0, 0, false, 0, 175.f, {} };
 
 #define PROCESS_CAMERA_MAT(CAMERA)  do { if (g_md.disp_enabled) process_camera_mat(CAMERA); } while(0)
 
@@ -103,13 +98,11 @@ inline bool matrix_is_identity(const float* mat)
 	return matrix_detect_are_equal(g_mat_identity, mat, 0);
 }
 
-inline bool matrix_is_transposed(const float* a, const float* b)
-{
-	return matrix_detect_are_equal(a, b, 12);
-}
-
 D3DXMATRIX *matrix_get_inverse( const float* mat )
 {
+	static D3DXMATRIX g_mat_cache;
+	static D3DXMATRIX g_mat_cache_inverse;
+
 	if ( 0 == memcmp( &g_mat_cache.m[0][0], mat, sizeof( g_mat_cache.m ) ) )
 	{
 		return &g_mat_cache_inverse;
@@ -272,14 +265,14 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 	}
 	if (!mat_already_stored && g_md.addr_count < ARRAYSIZE(g_md.addrs))
 	{
-		bool msg_newDefault = false;
+		const char *msg = "";
 		g_md.addrs[g_md.addr_count] = (void*)mat;
-		if (mat < g_md.addrs[g_md.addr_selected])
+		if (!g_md.addr_preferred && mat < g_md.addrs[g_md.addr_selected])
 		{
 			g_md.addr_selected = g_md.addr_count;
-			msg_newDefault = true;
+			msg = "Marked as active camera.";
 		}
-		logPrintf("MatrixDetection new pointer stored[%d]: %p. %s\n", g_md.addr_count, mat, (msg_newDefault ? "Marked as active camera." : ""));
+		logPrintf("MatrixDetection new pointer stored[%d]: %p. %s\n", g_md.addr_count, mat, msg);
 		g_md.addr_count++;
 	}
 	if ( g_mat_log_print_one_round )
@@ -373,39 +366,25 @@ void matrix_detect_frame_ended()
 	}
 }
 
-static int read_confval(const char* valname, mINI::INIStructure &ini)
-{
-	int ret = 0;
-	const char* gamename = D3DGlobal_GetGameName();
-	for(int tries = 0; tries < 2; tries++)
-	{
-		if (gamename && ini.has(gamename) && ini[gamename].has(valname))
-		{
-			try {
-				ret = std::stoi(ini[gamename][valname]);
-			} catch (const std::exception &e) {
-				logPrintf("MatrixDetection: EXCEPTION %s\n", e.what());
-			}
-		}
-		else
-		{
-			gamename = GLOBAL_GAMENAME;
-		}
-	}
-	return ret;
-}
-
 void matrix_detect_configuration_reset()
 {
 	matrix_detect_frame_ended();
 	g_md.addr_count = 0;
 	g_md.addr_selected = 0;
 
-	mINI::INIStructure &ini = *((mINI::INIStructure *)D3DGlobal_GetIniHandler());
-	g_md.det_enabled = read_confval("enable_camera_detection", ini);
-	g_md.det_mode = read_confval("camera_detection_mode", ini);
+	g_md.det_enabled = D3DGlobal_ReadGameConf("enable_camera_detection");
+	g_md.det_mode = D3DGlobal_ReadGameConf("camera_detection_mode");
+	g_md.addr_preferred = D3DGlobal_ReadGameConfPtr("camera_detection_preferred");
 
 	logPrintf("MatrixDetection enabled:%d mode:%d\n", g_md.det_enabled, g_md.det_mode);
+
+	if (g_md.addr_preferred)
+	{
+		g_md.addr_selected = 0;
+		g_md.addrs[0] = g_md.addr_preferred;
+		g_md.addr_count = 1;
+		logPrintf("MatrixDetection has preferred address:%p\n", g_md.addr_preferred);
+	}
 }
 
 bool matrix_detect_are_equal(const float *a, const float *b, int count)
@@ -470,12 +449,40 @@ OPENGL_API void WINAPI matrix_print_s(const float* mat, const char *info)
 	}
 }
 
-#include "rmx_gen.h"
-OPENGL_API void WINAPI matrix_accept_camera_update(const float* mat)
+OPENGL_API void WINAPI matrix_update_camera(const float* mat)
 {
 	g_md.det_mode = DETECTION_NONE;
 
 	_CRT_UNUSED(mat);
+}
+
+OPENGL_API void WINAPI matrix_preferred_address(const void* addr)
+{
+	g_md.addr_preferred = addr;
+	bool mat_already_stored = false;
+	for (int i = 0; i < g_md.addr_count; i++)
+	{
+		if (g_md.addrs[i] == addr)
+		{
+			g_md.addr_selected = i;
+			mat_already_stored = true;
+			break;
+		}
+	}
+	if (!mat_already_stored)
+	{
+		if (g_md.addr_count < ARRAYSIZE(g_md.addrs))
+		{
+			g_md.addrs[g_md.addr_count] = addr;
+			g_md.addr_selected = g_md.addr_count;
+			g_md.addr_count++;
+		}
+		else
+		{
+			g_md.addrs[0] = addr;
+			g_md.addr_selected = 0;
+		}
+	}
 }
 
 // This should be called one per frame so we update the display counter
@@ -562,7 +569,7 @@ static void process_camera_mat(const float* camera)
 	if (bestSlot < 0)
 	{
 		slot = g_md.disp_slot;
-		int lowcount = 999;
+		//int lowcount = 999;
 		for (int i = 0; i < MAT_DISP_NUMSLOTS; i++, slot++)
 		{
 			if (slot->count == 0)
