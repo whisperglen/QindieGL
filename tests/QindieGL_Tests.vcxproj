@@ -137,6 +137,7 @@
   <ItemGroup>
     <ClCompile Include="flashl.cpp" />
     <ClCompile Include="homogenous.cpp" />
+    <ClCompile Include="normals.cpp" />
     <ClCompile Include="texgen.cpp" />
     <ClCompile Include="_main.cpp" />
   </ItemGroup>

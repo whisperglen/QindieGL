@@ -27,6 +27,9 @@
     <ClCompile Include="homogenous.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="normals.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="tests.h">
