@@ -28,6 +28,7 @@
 #include "d3d_matrix_stack.hpp"
 #include "d3d_helpers.hpp"
 #include "d3d_arb_program.hpp"
+#include "d3d_extension.hpp"
 #include "d3d_texture.hpp"
 
 //!DO NOT UNCOMMENT THIS UNLESS YOU MAKE PERFORMANCE TESTS!
@@ -80,6 +81,22 @@ static const GLubyte *D3DVA_ResolveData( const D3DVAInfo *pVAInfo, int lastIndex
 	return D3DBuffer_ResolvePointer(pVAInfo->bufferBinding, pVAInfo->data, requiredBytes);
 }
 
+static bool D3DVA_UsePrimaryColorArray()
+{
+	if (!(D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_COLOR_BIT))
+		return false;
+	if (!D3DState.EnableState.vertexProgramEnabled)
+		return true;
+
+	ARBCompiledProgram *program = ARB_GetCompiledProgram(ARB_GetBoundVertexProgram());
+	// A translated ARB vertex program consumes only the attributes referenced by
+	// its source. YAE enables a transient, invalid conventional color array for
+	// its firing animation, but the skinned VP does not read vertex.color. Native
+	// OpenGL therefore never has to fetch it. Validating or copying that unused
+	// array made the entire viewmodel draw disappear until the animation ended.
+	return !program || !program->vs || program->parsed.usesColor;
+}
+
 static bool D3DVA_ValidateEnabledBufferRanges( GLint lastIndex )
 {
 	const DWORD enabled = D3DState.ClientVertexArrayState.vertexArrayEnable;
@@ -90,7 +107,7 @@ static bool D3DVA_ValidateEnabledBufferRanges( GLint lastIndex )
 		info = &D3DState.ClientVertexArrayState.normalInfo;
 		if (info->bufferBinding && !D3DVA_ResolveData(info, lastIndex)) return false;
 	}
-	if (enabled & VA_ENABLE_COLOR_BIT) {
+	if (D3DVA_UsePrimaryColorArray()) {
 		info = &D3DState.ClientVertexArrayState.colorInfo;
 		if (info->bufferBinding && !D3DVA_ResolveData(info, lastIndex)) return false;
 	}
@@ -112,15 +129,27 @@ static bool D3DVA_ValidateEnabledBufferRanges( GLint lastIndex )
 }
 
 template<typename T> 
-static void D3DVA_CopyArrayToFloatsInternal( const D3DVAInfo *pVAInfo, int index, GLfloat *out )
+static void D3DVA_CopyArrayToFloatsInternal( const D3DVAInfo *pVAInfo, int index,
+	GLfloat *out, bool normalizeIntegers )
 {
 	GLsizei stride = pVAInfo->stride;
 	if (!stride) stride = sizeof(T) * pVAInfo->elementCount;
 	const GLubyte *base = D3DVA_ResolveData(pVAInfo, index);
 	if (!base) { memset(out, 0, sizeof(GLfloat) * pVAInfo->elementCount); return; }
 	const T *data = reinterpret_cast<const T*>(base + index * stride);
-	for (int i = 0; i < pVAInfo->elementCount; ++i)
-		out[i] = (GLfloat)data[i] / std::numeric_limits<T>::max();
+	for (int i = 0; i < pVAInfo->elementCount; ++i) {
+		if ( normalizeIntegers ) {
+			// Normal arrays use normalized fixed-point conversion. Position and
+			// texture-coordinate arrays do not. YAE stores its bone indices in a
+			// GL_SHORT texcoord array, where 1 must remain 1 rather than 1/32767.
+			if ( std::numeric_limits<T>::is_signed && data[i] == std::numeric_limits<T>::min() )
+				out[i] = -1.0f;
+			else
+				out[i] = (GLfloat)data[i] / (GLfloat)std::numeric_limits<T>::max();
+		} else {
+			out[i] = (GLfloat)data[i];
+		}
+	}
 }
 static void D3DVA_CopyArrayToFloatsInternalFloat( const D3DVAInfo *pVAInfo, int index, GLfloat *out )
 {
@@ -142,27 +171,28 @@ static void D3DVA_CopyArrayToFloatsInternalDouble( const D3DVAInfo *pVAInfo, int
 		out[i] = static_cast<GLfloat>( data[i] );
 }
 
-static void D3DVA_CopyArrayToFloats( const D3DVAInfo *pVAInfo, int index, GLfloat *out )
+static void D3DVA_CopyArrayToFloats( const D3DVAInfo *pVAInfo, int index, GLfloat *out,
+	bool normalizeIntegers = false )
 {
 	switch (pVAInfo->elementType)
 	{
 	case GL_BYTE:
-		D3DVA_CopyArrayToFloatsInternal<GLbyte>(pVAInfo, index, out);
+		D3DVA_CopyArrayToFloatsInternal<GLbyte>(pVAInfo, index, out, normalizeIntegers);
 		break;
 	case GL_UNSIGNED_BYTE:
-		D3DVA_CopyArrayToFloatsInternal<GLubyte>(pVAInfo, index, out);
+		D3DVA_CopyArrayToFloatsInternal<GLubyte>(pVAInfo, index, out, normalizeIntegers);
 		break;
 	case GL_SHORT:
-		D3DVA_CopyArrayToFloatsInternal<GLshort>(pVAInfo, index, out);
+		D3DVA_CopyArrayToFloatsInternal<GLshort>(pVAInfo, index, out, normalizeIntegers);
 		break;
 	case GL_UNSIGNED_SHORT:
-		D3DVA_CopyArrayToFloatsInternal<GLushort>(pVAInfo, index, out);
+		D3DVA_CopyArrayToFloatsInternal<GLushort>(pVAInfo, index, out, normalizeIntegers);
 		break;
 	case GL_INT:
-		D3DVA_CopyArrayToFloatsInternal<GLint>(pVAInfo, index, out);
+		D3DVA_CopyArrayToFloatsInternal<GLint>(pVAInfo, index, out, normalizeIntegers);
 		break;
 	case GL_UNSIGNED_INT:
-		D3DVA_CopyArrayToFloatsInternal<GLuint>(pVAInfo, index, out);
+		D3DVA_CopyArrayToFloatsInternal<GLuint>(pVAInfo, index, out, normalizeIntegers);
 		break;
 	case GL_DOUBLE:
 		D3DVA_CopyArrayToFloatsInternalDouble(pVAInfo, index, out);
@@ -436,6 +466,7 @@ void D3DVABuffer :: Lock( GLint first, GLint last )
 		return;
 
 	GLsizei count = last - first + 1;
+	const bool usePrimaryColorArray = D3DVA_UsePrimaryColorArray();
 
 	//Compute vertex size and FVF
 	// WG: D3DFVF_XYZW requires shader processing according to docs
@@ -548,7 +579,7 @@ void D3DVABuffer :: Lock( GLint first, GLint last )
 			}
 		}
 		pVAInfo = &D3DState.ClientVertexArrayState.colorInfo;
-		if (((D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_COLOR_BIT) != 0) &&
+		if (usePrimaryColorArray &&
 			(pVAInfo->elementType != GL_BYTE) && (pVAInfo->elementType != GL_UNSIGNED_BYTE))
 		{
 			fast_path_abort_reason = __LINE__;
@@ -616,9 +647,9 @@ FAST_PATH_CHECK_ABORT:
 		if (norms) norms += first * norms_inc;
 
 		pVAInfo = &D3DState.ClientVertexArrayState.colorInfo;
-		const unsigned char* cols = (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_COLOR_BIT)
+		const unsigned char* cols = usePrimaryColorArray
 			? D3DVA_ResolveData(pVAInfo, lastVertex) : nullptr;
-		if ((D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_COLOR_BIT) && !cols)
+		if (usePrimaryColorArray && !cols)
 			qualify_for_fast_path = false;
 		const int cols_inc = pVAInfo->stride ? pVAInfo->stride : pVAInfo->elementCount;
 		if (cols) cols += first * cols_inc;
@@ -657,7 +688,7 @@ FAST_PATH_CHECK_ABORT:
 			}
 
 			//copy color
-			if (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_COLOR_BIT)
+			if (usePrimaryColorArray)
 			{
 				*(DWORD*)dest = D3DCOLOR_ARGB(cols[3], cols[0], cols[1], cols[2]);
 				cols += cols_inc;
@@ -745,7 +776,7 @@ FAST_PATH_CHECK_ABORT:
 					elemIndex <= D3DState.ClientVertexArrayState.normalInfo._internal.compiledLast) {
 					memcpy( normalData, D3DGlobal.compiledVertexArray.compiledNormalData + elemIndex*3, sizeof(GLfloat)*3 );
 				} else {
-					D3DVA_CopyArrayToFloats( &D3DState.ClientVertexArrayState.normalInfo, elemIndex, normalData );
+					D3DVA_CopyArrayToFloats( &D3DState.ClientVertexArrayState.normalInfo, elemIndex, normalData, true );
 				}
 				memcpy(pLockedVertices, normalData, sizeof(normalData));
 				pLockedVertices += 3;
@@ -753,7 +784,7 @@ FAST_PATH_CHECK_ABORT:
 				memcpy(normalData, defaultNormal, sizeof(defaultNormal));
 			}
 
-			if (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_COLOR_BIT) {
+			if (usePrimaryColorArray) {
 				if (elemIndex >= D3DState.ClientVertexArrayState.colorInfo._internal.compiledFirst &&
 					elemIndex <= D3DState.ClientVertexArrayState.colorInfo._internal.compiledLast) {
 					*(DWORD*)pLockedVertices = D3DGlobal.compiledVertexArray.compiledColorData[elemIndex];
@@ -1411,7 +1442,7 @@ OPENGL_API void WINAPI glArrayElement( GLint i )
 	}
 
 	if (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_NORMAL_BIT) {
-		D3DVA_CopyArrayToFloats( &D3DState.ClientVertexArrayState.normalInfo, i, D3DState.CurrentState.currentNormal );
+		D3DVA_CopyArrayToFloats( &D3DState.ClientVertexArrayState.normalInfo, i, D3DState.CurrentState.currentNormal, true );
 	}
 	if (D3DState.ClientVertexArrayState.vertexArrayEnable & VA_ENABLE_COLOR_BIT) {
 		GLubyte color[4] = { 255, 255, 255, 255 };
@@ -1749,7 +1780,7 @@ OPENGL_API void WINAPI glLockArrays( GLint first, GLsizei count )
 
 			GLfloat *pdata = *ppdata;
 			for (int i = 0; i < count; ++i) {
-				D3DVA_CopyArrayToFloats( &D3DState.ClientVertexArrayState.normalInfo, first + i, pdata );
+				D3DVA_CopyArrayToFloats( &D3DState.ClientVertexArrayState.normalInfo, first + i, pdata, true );
 				pdata += 3;
 			}
 

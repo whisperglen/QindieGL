@@ -44,8 +44,12 @@ struct ARBOperand {
 	bool			absValue;		// |...|
 	int				arrayIndex;		// for env/local/texcoord/attrib/matrix row, -1 if none
 	int				arrayIndex2;	// secondary index (e.g. state.matrix.texture[n].row[m])
+	bool			relativeIndex;	// array index uses ADDRESS, e.g. c[A0.x + 11]
+	std::string		relativeRegister;
+	int				relativeOffset;
 
-	ARBOperand() : negate( false ), absValue( false ), arrayIndex( -1 ), arrayIndex2( -1 ) {}
+	ARBOperand() : negate( false ), absValue( false ), arrayIndex( -1 ), arrayIndex2( -1 ),
+		relativeIndex( false ), relativeOffset( 0 ) {}
 };
 
 //----------------------------------------------------------

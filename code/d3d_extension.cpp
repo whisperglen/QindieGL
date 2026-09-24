@@ -59,25 +59,41 @@ namespace {
 	static GLuint gARBBoundFragmentProgram = 0;
 	static DWORD gARBVertexProgramEnabled = 0;
 	static DWORD gARBFragmentProgramEnabled = 0;
+	static const int ARB_MAX_ENV_PARAMS = 256;
+	static const int ARB_MAX_LOCAL_PARAMS = 256;
 
-	// Per-program stored source (for future compilation)
+	// Program local parameters are object state in ARB_program, not global state
+	// for the vertex/fragment target.  YAE relies on this when alternating its
+	// rigid and skinned material programs: bone palettes, camera position and
+	// material constants must survive a bind to another program.
 	struct ARBProgramData {
 		GLenum target; // GL_VERTEX_PROGRAM_ARB or GL_FRAGMENT_PROGRAM_ARB
 		std::string source;
+		GLfloat localParams[ARB_MAX_LOCAL_PARAMS][4];
+
+		ARBProgramData() : target( 0 ) {
+			memset( localParams, 0, sizeof( localParams ) );
+		}
 	};
 	static std::map<GLuint, ARBProgramData> gARBProgramStore;
 
 	// Parameter storage
-	static const int ARB_MAX_ENV_PARAMS = 256;
-	static const int ARB_MAX_LOCAL_PARAMS = 256;
 	static GLfloat gARBEnvParamsVP[ARB_MAX_ENV_PARAMS][4];
 	static GLfloat gARBEnvParamsFP[ARB_MAX_ENV_PARAMS][4];
-	static GLfloat gARBLocalParamsVP[ARB_MAX_LOCAL_PARAMS][4];
-	static GLfloat gARBLocalParamsFP[ARB_MAX_LOCAL_PARAMS][4];
+	static GLfloat gARBDefaultLocalParamsVP[ARB_MAX_LOCAL_PARAMS][4];
+	static GLfloat gARBDefaultLocalParamsFP[ARB_MAX_LOCAL_PARAMS][4];
 
 
 	GLfloat (*ARB_LocalParams_Internal( GLenum target ))[4] {
-		return (target == GL_VERTEX_PROGRAM_ARB) ? gARBLocalParamsVP : gARBLocalParamsFP;
+		GLuint bound = ( target == GL_VERTEX_PROGRAM_ARB ) ?
+			gARBBoundVertexProgram : gARBBoundFragmentProgram;
+		if ( bound ) {
+			ARBProgramData& data = gARBProgramStore[bound];
+			if ( !data.target ) data.target = target;
+			return data.localParams;
+		}
+		return ( target == GL_VERTEX_PROGRAM_ARB ) ?
+			gARBDefaultLocalParamsVP : gARBDefaultLocalParamsFP;
 	}
 	GLfloat (*ARB_EnvParams_Internal( GLenum target ))[4] {
 		return (target == GL_VERTEX_PROGRAM_ARB) ? gARBEnvParamsVP : gARBEnvParamsFP;

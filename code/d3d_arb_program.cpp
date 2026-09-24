@@ -188,13 +188,36 @@ static ARBOperand ParseOperand( const std::string& token )
 		}
 	}
 
-	// Parse array index: name[n]
+	// Parse array index: name[n] or name[A0.x + n].  ARB vertex programs use
+	// relative constant addressing for matrix-palette skinning.  atoi() used to
+	// turn the latter into index zero, which silently replaced every bone row
+	// with the first literal PARAM binding.
 	size_t bracket = t.find( '[' );
 	if ( bracket != std::string::npos ) {
 		size_t close = t.find( ']', bracket );
 		if ( close != std::string::npos ) {
-			std::string idxStr = t.substr( bracket + 1, close - bracket - 1 );
-			op.arrayIndex = atoi( idxStr.c_str() );
+			std::string idxStr = TrimString( t.substr( bracket + 1, close - bracket - 1 ) );
+			size_t registerEnd = 0;
+			if ( !idxStr.empty() && ( isalpha( (unsigned char)idxStr[0] ) || idxStr[0] == '_' ) ) {
+				while ( registerEnd < idxStr.size() &&
+					( isalnum( (unsigned char)idxStr[registerEnd] ) || idxStr[registerEnd] == '_' ) )
+					++registerEnd;
+				op.relativeRegister = idxStr.substr( 0, registerEnd );
+				if ( registerEnd + 1 < idxStr.size() && idxStr[registerEnd] == '.' &&
+					idxStr[registerEnd + 1] == 'x' )
+					registerEnd += 2;
+				std::string offset = TrimString( idxStr.substr( registerEnd ) );
+				int sign = 1;
+				if ( !offset.empty() && ( offset[0] == '+' || offset[0] == '-' ) ) {
+					if ( offset[0] == '-' ) sign = -1;
+					offset = TrimString( offset.substr( 1 ) );
+				}
+				op.relativeOffset = offset.empty() ? 0 : sign * atoi( offset.c_str() );
+				op.relativeIndex = !op.relativeRegister.empty();
+				op.arrayIndex = op.relativeOffset;
+			} else {
+				op.arrayIndex = atoi( idxStr.c_str() );
+			}
 			std::string rest = ( close + 1 < t.size() ) ? t.substr( close + 1 ) : "";
 			t = t.substr( 0, bracket ) + rest;
 			// Check for second array index (e.g. after ".row" or ".texture")
@@ -857,6 +880,21 @@ static std::string ResolveOperandHLSL( const ARBOperand& op, const ARBParsedProg
 	auto pit = p.paramMap.find( op.name );
 	if ( pit != p.paramMap.end() ) {
 		const auto& bindings = pit->second;
+		if ( op.relativeIndex ) {
+			int offset = op.relativeOffset;
+			if ( offset >= 0 && offset < (int)bindings.size() ) {
+				const ARBParamBinding& pb = bindings[offset];
+				const char* arrayName = nullptr;
+				if ( pb.type == PARAM_ENV ) arrayName = "_env";
+				else if ( pb.type == PARAM_LOCAL ) arrayName = "_local";
+				if ( arrayName ) {
+					char buf[96];
+					sprintf( buf, "%s[%s + %d]", arrayName,
+						op.relativeRegister.c_str(), pb.index );
+					return buf;
+				}
+			}
+		}
 		int idx = ( op.arrayIndex >= 0 ) ? op.arrayIndex : 0;
 		if ( idx < (int)bindings.size() ) {
 			const ARBParamBinding& pb = bindings[idx];
@@ -1719,16 +1757,28 @@ extern GLuint ARB_GetBoundFragmentProgram();
 
 int ARB_GetRequiredVertexTexCoordCount()
 {
-	int required = 0;
+	// A programmable vertex shader consumes only its own declared inputs.  A
+	// fragment shader's texcoord usage describes vertex-shader outputs, not extra
+	// entries in the source vertex declaration.  Folding both sets together made
+	// YAE's skinned viewmodels use TEXCOORD0..5 even though their vertex program
+	// reads only TEXCOORD0..2.  Apart from wasting bandwidth, that produces a
+	// source declaration containing inputs which do not belong to the translated
+	// vertex program.
 	if ( D3DState.EnableState.vertexProgramEnabled ) {
 		ARBCompiledProgram* vp = ARB_GetCompiledProgram( ARB_GetBoundVertexProgram() );
-		if ( vp && vp->target == GL_VERTEX_PROGRAM_ARB && !vp->parsed.usedTexCoords.empty() )
-			required = *vp->parsed.usedTexCoords.rbegin() + 1;
+		if ( vp && vp->target == GL_VERTEX_PROGRAM_ARB && vp->vs ) {
+			if ( vp->parsed.usedTexCoords.empty() ) return 0;
+			return *vp->parsed.usedTexCoords.rbegin() + 1;
+		}
 	}
+
+	// With the fixed-function vertex pipeline, make enough source coordinates
+	// available for the programmable fragment stage.
+	int required = 0;
 	if ( D3DState.EnableState.fragmentProgramEnabled ) {
 		ARBCompiledProgram* fp = ARB_GetCompiledProgram( ARB_GetBoundFragmentProgram() );
 		if ( fp && fp->target == GL_FRAGMENT_PROGRAM_ARB && !fp->parsed.usedTexCoords.empty() )
-			required = std::max( required, *fp->parsed.usedTexCoords.rbegin() + 1 );
+			required = *fp->parsed.usedTexCoords.rbegin() + 1;
 	}
 	return required;
 }
