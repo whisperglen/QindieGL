@@ -617,3 +617,98 @@ VBO range failures: none
 This satisfies Phase E acceptance: YAE reaches and renders its gameplay scenes
 correctly with VBO enabled. The next task in the supplied plan is optional
 Phase F, ARB shader support.
+
+## Phase F - ARB shader path
+
+Status: **in progress**. Test configuration:
+`tools/glintercept/ds2engine.phase-f-test.cfg` (`use_shaders=1`, HDR off,
+normal maps off). The observed DS2 corpus compiles completely (58 programs,
+0 failures, in the latest run).
+
+### Blue-green weapons held by enemies
+
+Symptom: with `use_shaders=1`, weapons attached to an enemy's hand rendered in
+the solid blue-green fog colour `(0.32, 0.42, 0.42)`, while the enemy's body and
+world geometry were correct.
+
+Root cause: **a DS2 bug, reproduced on the native NVIDIA OpenGL driver**. DS2's
+rigid (`E2FD5400`) and skinned (`52D29C62`) material VPs write
+`camera_pos_ws - inst_matrix * pos` to `TEXCOORD5`. All five fragment programs
+reading `TEXCOORD5` use only its length, as the linear fog distance
+(`DP3 t5, t5`). For a bone-attached weapon, DS2 multiplies the hand bone
+(including its 0.0688 scale) into the modelview but passes the owner's
+`inst_matrix` without it. The weapon's raw vertices (~5000 units) therefore give
+a fog distance of about 9000 instead of about 250, and the fog saturates. DS2
+also derives the weapon's fragment-program camera by transposing the scaled
+attachment matrix instead of inverting it; the value is off by exactly
+`0.0688^2` in all three components.
+
+Evidence from the `YAE_FOG_PROBE` diagnostics:
+
+- weapon draw (VP 31, FP 32): `fogDist=9008`, true `eyeDist=258`;
+- DS2 wrote every involved local parameter immediately before that draw; the
+  values are not stale per-object state and match the owner's body draw;
+- every consistent draw had `fogDist == eyeDist` to within 0.001;
+- the native reference run (GLIntercept loader and `YOU_ARE_EMPTY.exe.local`
+  temporarily moved aside) showed the same blue weapon.
+
+Fix: YAE-only `yae_eye_distance_fog` in `[game.game]` and
+`[game.YOU_ARE_EMPTY]`. For vertex programs writing `result.texcoord[5]`, the
+generated HLSL recovers the eye-space position as `P^-1 * clip` and rescales
+`TEXCOORD5` to that length while keeping its direction. Consistent draws are
+unchanged; attached weapons and rigid objects submitted with an identity
+`inst_matrix` receive the correct fog. This intentionally deviates from native
+rendering; set the key to 0 for native comparisons.
+
+An earlier unbuilt workaround that replaced the fog range of the whole lit
+dynamic-material family was discarded: it removed legitimate fog from every
+enemy and dynamic object.
+
+Files changed:
+
+- `code/d3d_arb_program.cpp/.hpp`: `eyeDistanceTexCoord5` generation and the
+  `_yaeInvProjection` constant;
+- `code/d3d_global.cpp/.hpp`, `msvc/QindieGL.ini`: `yae_eye_distance_fog`;
+- `code/d3d_diagnostics.cpp/.hpp`, `code/d3d_extension.cpp`,
+  `code/d3d_matrix.cpp`, `code/d3d_state.cpp`: fog probe and call history;
+- `tools/glintercept/gliConfig.native.ini`: reference configuration (see
+  below).
+
+Validation: the user confirmed that enemy weapons are no longer blue and that
+enemies and dynamic objects still fade into distance fog. The session ran 5957
+frames and 1551990 draws; the six DS2 VPs writing `TEXCOORD5` (programs
+7/19/31 and 9/21/33) received the correction; no compilation failures, failed
+D3D calls or unsupported enums occurred. Both patched VS variants were also
+compiled offline with `fxc /T vs_3_0`. Logs are preserved in the game directory
+as `QindieGL.phaseF-fog-probe1.log`, `QindieGL.phaseF-fog-probe2.log` and
+`QindieGL.phaseF-eye-distance-fog.log`.
+
+### Diagnostics added
+
+With `LogLevel = 3`, each unique VP/FP/diffuse/saturation combination using the
+DS2 fog family logs `YAE_FOG_PROBE`: the CPU-evaluated DS2 fog, the fog after
+`yae_eye_distance_fog`, the true eye distance, VP/FP camera consistency against
+the modelview, `inst_matrix`, the modelview and the frame/draw of the last write
+of each relevant local parameter. The first three saturated draws also dump
+`YAE_FOG_HISTORY`: program binds, local writes, program enables, modelview
+operations and draws since four draws earlier. Both are inactive at the default
+INFO level.
+
+### Native reference runs
+
+`YOU_ARE_EMPTY.exe.local` makes Windows resolve even full-path `opengl32.dll`
+loads to the game directory, so GLIntercept cannot forward to the system driver
+(`gliLog.txt`: "OpenGL lib file points to GLIntercept lib"), and the game exits
+immediately. For a native reference, temporarily rename both the game-directory
+`opengl32.dll` loader and `YOU_ARE_EMPTY.exe.local`, launch the executable
+directly and restore both files afterwards. `gliConfig.native.ini` is kept for
+setups without the `.local` redirection.
+
+### Known remaining issues
+
+- Attached weapons still use DS2's incorrectly scaled fragment-program camera
+  for specular/light directions. This matches native rendering and is not
+  corrected.
+- `glLoadTransposeMatrixd` and `glMultTransposeMatrixd` increment `i` instead
+  of `j` in their inner copy loop (out-of-bounds read). Not used by the observed
+  DS2 path; to be fixed separately.
