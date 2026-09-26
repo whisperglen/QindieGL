@@ -123,11 +123,14 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="buffer_multitex.cpp" />
+    <ClCompile Include="gl_harness.cpp" />
+    <ClCompile Include="lighting_tests.cpp" />
     <ClCompile Include="texgen.cpp" />
+    <ClCompile Include="vbo_tests.cpp" />
     <ClCompile Include="_main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="gl_harness.h" />
     <ClInclude Include="tests.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

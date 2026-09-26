@@ -18,14 +18,23 @@
     <ClCompile Include="_main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="buffer_multitex.cpp">
+    <ClCompile Include="gl_harness.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="lighting_tests.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="texgen.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="vbo_tests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="gl_harness.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="tests.h">
       <Filter>Header Files</Filter>
     </ClInclude>
