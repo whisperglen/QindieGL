@@ -1023,6 +1023,9 @@ void D3DVABuffer :: DrawPrimitive()
 {
 	if (!m_primitiveIndexCount || !m_lockCount) 
 		return;
+	QGL_DiagnosticsRecordVertexUpload(static_cast<uint32_t>(m_lockCount),
+		static_cast<uint32_t>(m_lockCount) * static_cast<uint32_t>(m_vertexSize) * static_cast<uint32_t>(sizeof(float)),
+		static_cast<uint32_t>(m_primitiveIndexCount) * static_cast<uint32_t>(m_indexSize));
 
 	HRESULT hr;
 
@@ -1484,6 +1487,7 @@ OPENGL_API void WINAPI glArrayElement( GLint i )
 
 static void internal_DrawArrays( const char *api, GLenum mode, GLint first, GLsizei count )
 {
+	QGLDrawTimer drawTimer;
 	if (first < 0 || count < 0 ||
 		(count > 0 && first > std::numeric_limits<GLint>::max() - (count - 1))) {
 		QGL_SET_ERROR(E_INVALIDARG);
@@ -1528,6 +1532,7 @@ static void internal_DrawArrays( const char *api, GLenum mode, GLint first, GLsi
 }
 static void internal_DrawElements( const char *api, GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type,  const GLvoid *indices )
 {
+	QGLDrawTimer drawTimer;
 	if (count < 0) {
 		QGL_SET_ERROR(E_INVALIDARG);
 		return;

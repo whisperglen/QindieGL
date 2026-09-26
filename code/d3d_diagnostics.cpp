@@ -58,6 +58,106 @@ namespace {
 	};
 
 	static DiagnosticState gDiagnostics = {};
+
+	// Performance counters. Frame statistics only include frames with world
+	// draws; the histogram has 0.1 ms buckets up to 200 ms plus an overflow.
+	static const int kFrameHistogramBuckets = 2001;
+	struct PerformanceState
+	{
+		int64_t frequency;
+		int64_t lastFrameEnd;
+		int64_t presentStart;
+		int drawTimerDepth;
+		int64_t frameDrawTicks;
+		uint64_t frameVertices;
+		uint64_t frameVertexBytes;
+		uint64_t frameIndexBytes;
+		uint64_t frames;
+		double frameMsSum, frameMsMax;
+		double drawMsSum, drawMsMax;
+		double presentMsSum;
+		uint64_t drawsSum, drawsMax;
+		uint64_t verticesSum, vertexBytesSum, indexBytesSum;
+		uint32_t histogram[kFrameHistogramBuckets];
+	};
+	static PerformanceState gPerformance = {};
+
+	int64_t PerformanceNow()
+	{
+		LARGE_INTEGER now;
+		QueryPerformanceCounter(&now);
+		if (!gPerformance.frequency) {
+			LARGE_INTEGER frequency;
+			QueryPerformanceFrequency(&frequency);
+			gPerformance.frequency = frequency.QuadPart;
+		}
+		return now.QuadPart;
+	}
+
+	double TicksToMs( int64_t ticks )
+	{
+		return gPerformance.frequency ? ticks * 1000.0 / static_cast<double>(gPerformance.frequency) : 0.0;
+	}
+
+	void RecordFramePerformance( bool worldFrame, uint64_t draws )
+	{
+		const int64_t now = PerformanceNow();
+		const double presentMs = gPerformance.presentStart ? TicksToMs(now - gPerformance.presentStart) : 0.0;
+		if (worldFrame && gPerformance.lastFrameEnd) {
+			const double frameMs = TicksToMs(now - gPerformance.lastFrameEnd);
+			const double drawMs = TicksToMs(gPerformance.frameDrawTicks);
+			++gPerformance.frames;
+			gPerformance.frameMsSum += frameMs;
+			gPerformance.frameMsMax = std::max(gPerformance.frameMsMax, frameMs);
+			gPerformance.drawMsSum += drawMs;
+			gPerformance.drawMsMax = std::max(gPerformance.drawMsMax, drawMs);
+			gPerformance.presentMsSum += presentMs;
+			gPerformance.drawsSum += draws;
+			gPerformance.drawsMax = std::max(gPerformance.drawsMax, draws);
+			gPerformance.verticesSum += gPerformance.frameVertices;
+			gPerformance.vertexBytesSum += gPerformance.frameVertexBytes;
+			gPerformance.indexBytesSum += gPerformance.frameIndexBytes;
+			++gPerformance.histogram[std::min(static_cast<int>(frameMs * 10.0), kFrameHistogramBuckets - 1)];
+		}
+		gPerformance.lastFrameEnd = now;
+		gPerformance.presentStart = 0;
+		gPerformance.frameDrawTicks = 0;
+		gPerformance.frameVertices = 0;
+		gPerformance.frameVertexBytes = 0;
+		gPerformance.frameIndexBytes = 0;
+	}
+
+	double FramePercentileMs( double fraction )
+	{
+		const uint64_t target = static_cast<uint64_t>(gPerformance.frames * fraction);
+		uint64_t seen = 0;
+		for (int bucket = 0; bucket < kFrameHistogramBuckets; ++bucket) {
+			seen += gPerformance.histogram[bucket];
+			if (seen > target) return (bucket + 1) / 10.0;
+		}
+		return kFrameHistogramBuckets / 10.0;
+	}
+
+	void DumpPerformanceSummary()
+	{
+		const uint64_t frames = gPerformance.frames;
+		logPrintf("Performance (%llu frames with world draws):\n", static_cast<unsigned long long>(frames));
+		if (!frames) return;
+		const double frameMs = gPerformance.frameMsSum / frames;
+		const double drawMs = gPerformance.drawMsSum / frames;
+		logPrintf("  Frame time: avg %.2f ms (%.1f fps), p50 %.1f, p95 %.1f, p99 %.1f, max %.1f ms\n",
+			frameMs, frameMs > 0.0 ? 1000.0 / frameMs : 0.0, FramePercentileMs(0.50),
+			FramePercentileMs(0.95), FramePercentileMs(0.99), gPerformance.frameMsMax);
+		logPrintf("  Inside QindieGL draw calls: avg %.2f ms/frame (%.0f%% of frame time), max %.2f ms\n",
+			drawMs, frameMs > 0.0 ? 100.0 * drawMs / frameMs : 0.0, gPerformance.drawMsMax);
+		logPrintf("  Present: avg %.2f ms/frame\n", gPerformance.presentMsSum / frames);
+		logPrintf("  Draw calls: avg %.0f/frame, max %llu\n", static_cast<double>(gPerformance.drawsSum) / frames,
+			static_cast<unsigned long long>(gPerformance.drawsMax));
+		logPrintf("  Streamed to D3D9 by vertex arrays: avg %.0f vertices, %.1f KB vertex data, %.1f KB index data per frame\n",
+			static_cast<double>(gPerformance.verticesSum) / frames,
+			static_cast<double>(gPerformance.vertexBytesSum) / frames / 1024.0,
+			static_cast<double>(gPerformance.indexBytesSum) / frames / 1024.0);
+	}
 	static DiagnosticEvent gEvents[kEventCapacity] = {};
 	static volatile LONG gNextEvent = 0;
 	static LPTOP_LEVEL_EXCEPTION_FILTER gPreviousExceptionFilter = nullptr;
@@ -1076,6 +1176,30 @@ bool QGL_DiagnosticsBeginDraw( const char *api, unsigned int mode, int count,
 	return true;
 }
 
+void QGL_DiagnosticsBeginPresent()
+{
+	gPerformance.presentStart = PerformanceNow();
+}
+
+void QGL_DiagnosticsRecordVertexUpload( uint32_t vertices, uint32_t vertexBytes, uint32_t indexBytes )
+{
+	gPerformance.frameVertices += vertices;
+	gPerformance.frameVertexBytes += vertexBytes;
+	gPerformance.frameIndexBytes += indexBytes;
+}
+
+QGLDrawTimer::QGLDrawTimer() : m_start( 0 )
+{
+	if (gPerformance.drawTimerDepth++ == 0)
+		m_start = PerformanceNow();
+}
+
+QGLDrawTimer::~QGLDrawTimer()
+{
+	if (--gPerformance.drawTimerDepth == 0 && m_start)
+		gPerformance.frameDrawTicks += PerformanceNow() - m_start;
+}
+
 void QGL_DiagnosticsRecordProgramOp( char op, unsigned int target, unsigned int program,
 	int index, const float *values )
 {
@@ -1136,7 +1260,8 @@ void QGL_DiagnosticsEndFrame( long presentResult )
 	// Only a successful Present is a real presentation boundary. In particular,
 	// D3DERR_WASSTILLDRAWING from the DONOTWAIT path must not fabricate a frame.
 	if (SUCCEEDED(presentResult)) {
-		QGL_ViewDiagnosticsOnFrameEnd(gDiagnostics.frameId);
+		const bool worldFrame = QGL_ViewDiagnosticsOnFrameEnd(gDiagnostics.frameId);
+		RecordFramePerformance(worldFrame, gDiagnostics.drawId);
 		++gDiagnostics.framesPresented;
 		++gDiagnostics.frameId;
 		gDiagnostics.drawId = 0;
@@ -1309,5 +1434,6 @@ void QGL_DiagnosticsDumpSessionSummary()
 	logPrintf("VBOs created: %llu\n", static_cast<unsigned long long>(gDiagnostics.vbosCreated));
 	logPrintf("Peak VBO bytes: %llu\n", static_cast<unsigned long long>(gDiagnostics.peakVBOBytes));
 	QGL_ViewDiagnosticsDumpSummary();
+	DumpPerformanceSummary();
 	logPrintf("====================================\n");
 }

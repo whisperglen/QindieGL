@@ -46,8 +46,25 @@ void QGL_DiagnosticsSetRenderTarget( const char *name );
 
 // Projection classes and world-to-HUD boundaries (d3d_view_diagnostics.cpp).
 void QGL_ViewDiagnosticsOnDraw( uint64_t frame, uint64_t draw );
-void QGL_ViewDiagnosticsOnFrameEnd( uint64_t frame );
+// Returns true when the frame contained world draws (perspective, depth tested).
+bool QGL_ViewDiagnosticsOnFrameEnd( uint64_t frame );
 void QGL_ViewDiagnosticsDumpSummary();
+
+// Performance counters for the session summary. Frame statistics cover
+// frames with world draws only, so menus and loading screens do not skew them.
+void QGL_DiagnosticsBeginPresent();
+void QGL_DiagnosticsRecordVertexUpload( uint32_t vertices, uint32_t vertexBytes, uint32_t indexBytes );
+
+// Accumulates the wall time spent inside a draw entry point: QindieGL's CPU
+// cost plus the D3D9 runtime/driver calls it makes. Nested draws count once.
+class QGLDrawTimer
+{
+public:
+	QGLDrawTimer();
+	~QGLDrawTimer();
+private:
+	int64_t m_start;
+};
 
 // YAE Phase F program/modelview history, dumped by the program-fog probe.
 // op: 'B' bind program, 'L' local parameter write, 'E'/'e' enable/disable

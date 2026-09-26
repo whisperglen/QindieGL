@@ -97,4 +97,10 @@ void check_view_diagnostics_log( const std::string &logPath )
 	CHECK(log.find(expected) != std::string::npos, "session summary contains \"%s\"", expected);
 	CHECK(log.find("[VIEW_FRAME] frame=0 draws=2 projections=[#1 #2] lastWorldDraw=1 hudDraws=1 hudOrtho=1") !=
 		std::string::npos, "DEBUG log reports the first frame's world-to-HUD boundary");
+
+	// The first frame has no preceding presentation boundary to time from.
+	sprintf_s(expected, "Performance (%d frames with world draws):", kViewTestFrames - 1);
+	CHECK(log.find(expected) != std::string::npos, "session summary contains \"%s\"", expected);
+	const char *streamed = "Streamed to D3D9 by vertex arrays: avg 8 vertices";
+	CHECK(log.find(streamed) != std::string::npos, "session summary contains \"%s\" (world + HUD quads)", streamed);
 }

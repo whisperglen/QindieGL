@@ -1597,6 +1597,7 @@ OPENGL_API BOOL WINAPI wrap_wglSwapBuffers( HDC )
 		rmx_frame_end();
 #endif
 
+		QGL_DiagnosticsBeginPresent();
 		HRESULT hr;
 		
 		if (D3DGlobal.vSync)

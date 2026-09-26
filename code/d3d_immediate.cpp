@@ -1561,6 +1561,7 @@ OPENGL_API void WINAPI glBegin( GLenum mode )
 OPENGL_API void WINAPI glEnd( )
 {
 	DL_RECORD_0( glEnd );
+	QGLDrawTimer drawTimer;
 	assert( D3DGlobal.pIMBuffer != NULL );
 	D3DGlobal.pIMBuffer->End( );
 	D3DState.CurrentState.isSet.all = 0;

@@ -247,7 +247,7 @@ void QGL_ViewDiagnosticsOnDraw( uint64_t frame, uint64_t draw )
 	gDrawFlags.push_back(flags);
 }
 
-void QGL_ViewDiagnosticsOnFrameEnd( uint64_t frame )
+bool QGL_ViewDiagnosticsOnFrameEnd( uint64_t frame )
 {
 	++gFrames;
 	FrameSummary summary = { std::string(), false, false, 0, false };
@@ -308,6 +308,7 @@ void QGL_ViewDiagnosticsOnFrameEnd( uint64_t frame )
 
 	gDrawFlags.clear();
 	gSegments.clear();
+	return summary.world;
 }
 
 void QGL_ViewDiagnosticsDumpSummary()
