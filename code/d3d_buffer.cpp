@@ -373,10 +373,8 @@ OPENGL_API void WINAPI glBufferData( GLenum target, GLsizeiptrARB size, const GL
 
 	D3DBufferObject *bufferObject = D3DBuffer_GetBoundObject(target);
 	if (!bufferObject) return;
-	if (bufferObject->mapped) {
-		QGL_SET_ERROR(E_INVALID_OPERATION);
-		return;
-	}
+	// ARB_vertex_buffer_object: BufferData deletes the existing store and
+	// resets BUFFER_MAPPED to FALSE, implicitly unmapping a mapped buffer.
 
 	void *newStorage = nullptr;
 	if (size > 0) {
