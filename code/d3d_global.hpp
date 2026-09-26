@@ -174,6 +174,7 @@ typedef struct D3DGlobal_s
 			DWORD               orthoskipuntextureddraws;
 			DWORD               yaeFallbackCompatibility;
 			DWORD               yaeCompileARBPrograms;
+			DWORD               yaeEyeDistanceFog;
 		} game;
 	} settings;
 	struct {

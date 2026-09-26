@@ -1068,6 +1068,8 @@ OPENGL_API HGLRC WINAPI wrap_wglCreateContext( HDC hdc )
 	D3DGlobal.settings.game.orthoskipuntextureddraws = D3DGlobal_ReadGameConf( "orthoskipuntextureddraws" );
 	D3DGlobal.settings.game.yaeFallbackCompatibility = D3DGlobal_ReadGameConf( "yae_fallback_compatibility" );
 	D3DGlobal.settings.game.yaeCompileARBPrograms = D3DGlobal_ReadGameConf( "yae_compile_arb_programs" );
+	D3DGlobal.settings.game.yaeEyeDistanceFog = D3DGlobal.settings.game.yaeFallbackCompatibility &&
+		D3DGlobal_ReadGameConf( "yae_eye_distance_fog" );
 	if (D3DGlobal.settings.game.yaeFallbackCompatibility) {
 		// DS2 rejects the hardware before honoring use_shaders=0 unless both ARB
 		// program families are present. Phase B used the non-rendering stub; the

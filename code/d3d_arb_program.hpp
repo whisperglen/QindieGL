@@ -152,12 +152,18 @@ struct ARBParsedProgram {
 	// Per-unit texture target: 0=2D, 1=3D, 2=CUBE, 3=RECT
 	std::map<int, std::string>	texTargetPerUnit;
 
+	// YAE compatibility (yae_eye_distance_fog): rescale the VP's
+	// result.texcoord[5] to the true eye-space distance. Set before HLSL
+	// generation; see ARB_CompileProgram.
+	bool			eyeDistanceTexCoord5;
+
 	ARBParsedProgram() : target( 0 ), positionInvariant( false ), fogOption( false ),
 		usesColor( false ), usesColor2( false ), usesNormal( false ),
 		usesFogCoord( false ), usesPosition( false ),
 		outputsColor( false ), outputsColor2( false ), outputsFog( false ), outputsPointSize( false ),
 		outputsDepth( false ), usesFragmentPosition( false ),
-		usesMaterial( false ), usesLights( false ), usesLightModelAmbient( false ), usesFogParams( false )
+		usesMaterial( false ), usesLights( false ), usesLightModelAmbient( false ), usesFogParams( false ),
+		eyeDistanceTexCoord5( false )
 	{}
 };
 

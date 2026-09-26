@@ -1139,6 +1139,22 @@ static std::string MaybeSaturate( const std::string& expr, bool sat )
 	return sat ? ( "saturate(" + expr + ")" ) : expr;
 }
 
+// Texture coordinate sets written by a vertex program (result.texcoord[n]).
+static std::set<int> CollectOutputTexCoords( const ARBParsedProgram& p )
+{
+	std::set<int> outTexCoords;
+	for ( auto& inst : p.instructions ) {
+		std::string dstName = inst.dst.name;
+		auto oit = p.outputMap.find( dstName );
+		if ( oit != p.outputMap.end() ) dstName = oit->second;
+		if ( dstName.find( "result.texcoord" ) != std::string::npos ) {
+			int idx = inst.dst.arrayIndex >= 0 ? inst.dst.arrayIndex : 0;
+			outTexCoords.insert( idx );
+		}
+	}
+	return outTexCoords;
+}
+
 std::string ARB_GenerateHLSL( const ARBParsedProgram& p )
 {
 	std::ostringstream hlsl;
@@ -1163,6 +1179,8 @@ std::string ARB_GenerateHLSL( const ARBParsedProgram& p )
 		// transpose conventions leaking into state.matrix.*.row[n].
 		hlsl << "float4 " << MatrixConstName( mr ) << "[4];\n";
 	}
+	if ( isVP && p.eyeDistanceTexCoord5 )
+		hlsl << "float4 _yaeInvProjection[4];\n";
 
 	// State param constants (material, lights, fog, lightmodel)
 	// Generate named float4 constants for each unique state param
@@ -1222,17 +1240,7 @@ std::string ARB_GenerateHLSL( const ARBParsedProgram& p )
 		hlsl << "\tfloat4 color : COLOR0;\n";
 		if ( p.outputsColor2 ) hlsl << "\tfloat4 color2 : COLOR1;\n";
 		// Output texcoords
-		std::set<int> outTexCoords;
-		for ( auto& inst : p.instructions ) {
-			std::string dstName = inst.dst.name;
-			auto oit = p.outputMap.find( dstName );
-			if ( oit != p.outputMap.end() ) dstName = oit->second;
-			if ( dstName.find( "result.texcoord" ) != std::string::npos ) {
-				int idx = inst.dst.arrayIndex >= 0 ? inst.dst.arrayIndex : 0;
-				outTexCoords.insert( idx );
-			}
-		}
-		for ( int tc : outTexCoords ) {
+		for ( int tc : CollectOutputTexCoords( p ) ) {
 			hlsl << "\tfloat4 texcoord" << tc << " : TEXCOORD" << tc << ";\n";
 		}
 		if ( p.outputsFog ) hlsl << "\tfloat fogcoord : FOG;\n";
@@ -1492,6 +1500,19 @@ std::string ARB_GenerateHLSL( const ARBParsedProgram& p )
 		}
 	}
 
+	if ( isVP && p.eyeDistanceTexCoord5 ) {
+		// See ARB_CompileProgram. Recover the eye-space position from the final
+		// clip position and give TEXCOORD5 that length, keeping its direction.
+		hlsl << "\n\t// YAE_COMPAT yae_eye_distance_fog\n";
+		hlsl << "\tfloat4 _yaeEye = float4(dot(o.position, _yaeInvProjection[0]), "
+			 << "dot(o.position, _yaeInvProjection[1]), "
+			 << "dot(o.position, _yaeInvProjection[2]), "
+			 << "dot(o.position, _yaeInvProjection[3]));\n";
+		hlsl << "\tfloat _yaeToEyeLength = length(o.texcoord5.xyz);\n";
+		hlsl << "\tif (_yaeToEyeLength > 0.0)\n";
+		hlsl << "\t\to.texcoord5.xyz *= length(_yaeEye.xyz / _yaeEye.w) / _yaeToEyeLength;\n";
+	}
+
 	//--------------------------------------------------------------
 	// Return
 	//--------------------------------------------------------------
@@ -1524,6 +1545,21 @@ bool ARB_CompileProgram( GLuint programId, GLenum target, const char* source, in
 	if ( !ARB_ParseProgram( source, length, target, parsed ) ) {
 		errorString = "Failed to parse ARB program";
 		return false;
+	}
+
+	// YAE_COMPAT (yae_eye_distance_fog, opt-in, deliberately deviates from native).
+	// DS2's rigid and skinned material VPs write camera_pos_ws - inst_matrix * pos
+	// to TEXCOORD5, and every DS2 fragment program reading TEXCOORD5 uses only its
+	// length, as the linear fog distance. For weapons attached to a bone, DS2
+	// supplies the owner's inst_matrix without the (scaled) bone transform that
+	// it multiplies into the modelview, so the length is thousands of units and
+	// the fog saturates to its blue-green colour. The native NVIDIA driver renders
+	// the same blue weapon. For every consistent draw the length already equals
+	// the eye-space distance, so rescaling to that distance leaves them unchanged.
+	if ( target == GL_VERTEX_PROGRAM_ARB && D3DGlobal.settings.game.yaeEyeDistanceFog &&
+		CollectOutputTexCoords( parsed ).count( 5 ) ) {
+		parsed.eyeDistanceTexCoord5 = true;
+		logPrintf( "YAE_COMPAT: program %u TEXCOORD5 uses the eye-space fog distance.\n", programId );
 	}
 
 	// Generate HLSL
@@ -1694,6 +1730,22 @@ static void SetProgramConstants( ARBCompiledProgram* prog, bool isVS )
 			// Matrix stacks contain the transpose of the conceptual OpenGL matrix
 			// (so D3D's row-vector fixed pipeline produces the same transform).
 			// ARB row[n] therefore corresponds to column n of this D3D matrix.
+			float rows[16];
+			for ( int row = 0; row < 4; ++row )
+				for ( int column = 0; column < 4; ++column )
+					rows[row * 4 + column] = mat.m[column][row];
+			ct->SetFloatArray( dev, h, rows, 16 );
+		}
+	}
+
+	if ( isVS && p.eyeDistanceTexCoord5 ) {
+		// The inverse of the projection used for state.matrix.mvp maps the
+		// program's clip position back to eye space. Same row layout as above.
+		D3DXHANDLE h = ct->GetConstantByName( nullptr, "_yaeInvProjection" );
+		if ( h ) {
+			ARBParsedProgram::MatrixRef inverseProjection = { "projection", 0, true, false, false };
+			D3DXMATRIX mat;
+			GetGLMatrix( inverseProjection, mat );
 			float rows[16];
 			for ( int row = 0; row < 4; ++row )
 				for ( int column = 0; column < 4; ++column )
