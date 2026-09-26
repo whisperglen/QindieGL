@@ -73,10 +73,15 @@ OPENGL_API void WINAPI glGetLightfv( GLenum light, GLenum pname, GLfloat *params
 		params[3] = D3DState.LightingState.lightColorSpecular[lightIndex].a;
 		break;
 	case GL_POSITION:
-		params[0] = D3DState.LightingState.lightPosition[lightIndex].x;
-		params[1] = D3DState.LightingState.lightPosition[lightIndex].y;
-		params[2] = D3DState.LightingState.lightPosition[lightIndex].z;
-		params[3] =( D3DState.LightingState.lightType[lightIndex] == D3DLIGHT_DIRECTIONAL ) ? 0.0f : 1.0f;
+		{
+			// Directional lights store the negated eye-space direction for D3D.
+			const bool directional = D3DState.LightingState.lightType[lightIndex] == D3DLIGHT_DIRECTIONAL;
+			const float sign = directional ? -1.0f : 1.0f;
+			params[0] = sign * D3DState.LightingState.lightPosition[lightIndex].x;
+			params[1] = sign * D3DState.LightingState.lightPosition[lightIndex].y;
+			params[2] = sign * D3DState.LightingState.lightPosition[lightIndex].z;
+			params[3] = directional ? 0.0f : 1.0f;
+		}
 		break;
 	case GL_SPOT_DIRECTION:
 		params[0] = D3DState.LightingState.lightDirection[lightIndex].x;

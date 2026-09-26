@@ -845,9 +845,11 @@ void D3DState_SetDefaults()
 		D3DState.LightingState.lightColorSpecular[i].g = (i==0)?1.0f:0.0f;
 		D3DState.LightingState.lightColorSpecular[i].b = (i==0)?1.0f:0.0f;
 		D3DState.LightingState.lightColorSpecular[i].a = 1.0f;
+		// Directional lights store the D3D direction, the negated GL position
+		// (see glLightfv): GL's default (0,0,1,0) shines along -Z.
 		D3DState.LightingState.lightPosition[i].x = 0.0f;
 		D3DState.LightingState.lightPosition[i].y = 0.0f;
-		D3DState.LightingState.lightPosition[i].z = 1.0f;
+		D3DState.LightingState.lightPosition[i].z = -1.0f;
 		D3DState.LightingState.lightAttenuation[i].x = 1.0f;
 		D3DState.LightingState.lightAttenuation[i].y = 0.0f;
 		D3DState.LightingState.lightAttenuation[i].z = 0.0f;
