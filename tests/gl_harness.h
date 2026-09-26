@@ -44,6 +44,9 @@ struct GLApi
 	decltype(&::glGetString) GetString;
 	decltype(&::glLightfv) Lightfv;
 	decltype(&::glGetLightfv) GetLightfv;
+	decltype(&::glLoadMatrixf) LoadMatrixf;
+	decltype(&::glOrtho) Ortho;
+	decltype(&::glDepthMask) DepthMask;
 
 	PFNGLBINDBUFFERARBPROC BindBufferARB;
 	PFNGLGENBUFFERSARBPROC GenBuffersARB;

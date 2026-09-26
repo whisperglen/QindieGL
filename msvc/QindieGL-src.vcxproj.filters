@@ -52,6 +52,9 @@
     <ClCompile Include="..\code\d3d_diagnostics.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\code\d3d_view_diagnostics.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\code\d3d_blend.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

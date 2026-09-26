@@ -1044,6 +1044,7 @@ bool QGL_DiagnosticsBeginDraw( const char *api, unsigned int mode, int count,
 		api ? api : "<unknown>", GLModeName(mode), mode, count, first, indexType, indices);
 
 	SnapshotState();
+	QGL_ViewDiagnosticsOnDraw(gDiagnostics.frameId, gDiagnostics.drawId);
 	CensusYAEWorldDraw(api ? api : "<unknown>", mode, count, first, indexType, indices);
 	TraceYAEPostEffectDraw(api ? api : "<unknown>", mode, count, first, indexType, indices);
 	if (ProgramHistoryActive()) {
@@ -1135,6 +1136,7 @@ void QGL_DiagnosticsEndFrame( long presentResult )
 	// Only a successful Present is a real presentation boundary. In particular,
 	// D3DERR_WASSTILLDRAWING from the DONOTWAIT path must not fabricate a frame.
 	if (SUCCEEDED(presentResult)) {
+		QGL_ViewDiagnosticsOnFrameEnd(gDiagnostics.frameId);
 		++gDiagnostics.framesPresented;
 		++gDiagnostics.frameId;
 		gDiagnostics.drawId = 0;
@@ -1306,5 +1308,6 @@ void QGL_DiagnosticsDumpSessionSummary()
 	logPrintf("ARB program compilation failures: %llu\n", static_cast<unsigned long long>(gDiagnostics.arbProgramFailures));
 	logPrintf("VBOs created: %llu\n", static_cast<unsigned long long>(gDiagnostics.vbosCreated));
 	logPrintf("Peak VBO bytes: %llu\n", static_cast<unsigned long long>(gDiagnostics.peakVBOBytes));
+	QGL_ViewDiagnosticsDumpSummary();
 	logPrintf("====================================\n");
 }

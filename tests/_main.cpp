@@ -23,14 +23,23 @@ extern void do_vbo_tests();
 extern void do_multitexture_tests();
 extern void do_lighting_tests();
 extern void do_extension_availability_tests( bool expectBufferObjects );
+extern void do_view_tests();
+extern void check_view_diagnostics_log( const std::string &logPath );
 
 namespace {
+
+enum GLTestMode
+{
+	MODE_BUFFER_OBJECTS,	// VBO, lighting and multitexture tests
+	MODE_NO_BUFFER_OBJECTS,	// the extension must be hidden
+	MODE_VIEW_DIAGNOSTICS,	// frames checked afterwards through QindieGL.log
+};
 
 struct GLConfiguration
 {
 	const char *name;
 	const char *ini;
-	bool bufferObjects;	// run VBO tests; otherwise verify the extension is hidden
+	GLTestMode mode;
 };
 
 const char kCommonExtensions[] =
@@ -41,19 +50,22 @@ const char kCommonExtensions[] =
 const GLConfiguration kConfigurations[] = {
 	{ "vbo-copy-path",
 		"[Settings]\r\nLogLevel = 1\r\nDrawCallFastPath = 0\r\n\r\n"
-		"[Extensions]\r\nGL_ARB_vertex_buffer_object = 1\r\n", true },
+		"[Extensions]\r\nGL_ARB_vertex_buffer_object = 1\r\n", MODE_BUFFER_OBJECTS },
 	{ "vbo-fast-path",
 		"[Settings]\r\nLogLevel = 1\r\nDrawCallFastPath = 1\r\n\r\n"
-		"[Extensions]\r\nGL_ARB_vertex_buffer_object = 1\r\n", true },
+		"[Extensions]\r\nGL_ARB_vertex_buffer_object = 1\r\n", MODE_BUFFER_OBJECTS },
 	// Mirrors the You Are Empty profile: VBO is exposed by the YAE switch while
 	// the global extension setting stays disabled.
 	{ "yae-profile",
 		"[Settings]\r\nLogLevel = 1\r\nDrawCallFastPath = 1\r\nProjectionFix = 1\r\n\r\n"
 		"[game.QindieGL_Tests]\r\nyae_fallback_compatibility = 1\r\nyae_compile_arb_programs = 1\r\n\r\n"
-		"[Extensions]\r\nGL_ARB_vertex_buffer_object = 0\r\n", true },
+		"[Extensions]\r\nGL_ARB_vertex_buffer_object = 0\r\n", MODE_BUFFER_OBJECTS },
 	{ "vbo-disabled",
 		"[Settings]\r\nLogLevel = 1\r\n\r\n"
-		"[Extensions]\r\nGL_ARB_vertex_buffer_object = 0\r\n", false },
+		"[Extensions]\r\nGL_ARB_vertex_buffer_object = 0\r\n", MODE_NO_BUFFER_OBJECTS },
+	{ "view-diagnostics",
+		"[Settings]\r\nLogLevel = 3\r\nProjectionFix = 1\r\n\r\n"
+		"[Extensions]\r\n", MODE_VIEW_DIAGNOSTICS },
 };
 
 std::string ExecutablePath()
@@ -150,13 +162,19 @@ int RunGLChild( const char *dll, const char *configurationName )
 		printf("[%s] harness initialisation failed: %s\n", configurationName, error.c_str());
 		return 1;
 	}
-	if (configuration->bufferObjects) {
+	switch (configuration->mode) {
+	case MODE_BUFFER_OBJECTS:
 		do_extension_availability_tests(true);
 		do_lighting_tests();
 		do_vbo_tests();
 		do_multitexture_tests();
-	} else {
+		break;
+	case MODE_NO_BUFFER_OBJECTS:
 		do_extension_availability_tests(false);
+		break;
+	case MODE_VIEW_DIAGNOSTICS:
+		do_view_tests();
+		break;
 	}
 	Harness_Shutdown();
 
@@ -194,6 +212,9 @@ int main( int argc, char **argv )
 			char label[128];
 			sprintf_s(label, "GL configuration %s (child exit code 0x%lX)", configuration.name, exitCode);
 			xassert_str(exitCode == 0, label, __func__, __LINE__, __FILE__);
+			if (configuration.mode == MODE_VIEW_DIAGNOSTICS)
+				check_view_diagnostics_log(DirectoryOf(ExecutablePath()) + "\\gl-tests\\" +
+					configuration.name + "\\QindieGL.log");
 		}
 	}
 

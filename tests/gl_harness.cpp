@@ -90,7 +90,10 @@ bool Harness_Init( const char *dllPath, int width, int height, std::string &erro
 		!LoadExport(gl.Finish, "glFinish", error) ||
 		!LoadExport(gl.GetString, "glGetString", error) ||
 		!LoadExport(gl.Lightfv, "glLightfv", error) ||
-		!LoadExport(gl.GetLightfv, "glGetLightfv", error))
+		!LoadExport(gl.GetLightfv, "glGetLightfv", error) ||
+		!LoadExport(gl.LoadMatrixf, "glLoadMatrixf", error) ||
+		!LoadExport(gl.Ortho, "glOrtho", error) ||
+		!LoadExport(gl.DepthMask, "glDepthMask", error))
 		return false;
 
 	WNDCLASSA windowClass = {};

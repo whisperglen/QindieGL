@@ -373,6 +373,7 @@ copy $(TargetDir)$(ProjectName).ini $(ProjectDir)..\bin\$(Configuration).$(Platf
     <ClCompile Include="..\code\d3d_array.cpp" />
     <ClCompile Include="..\code\d3d_buffer.cpp" />
     <ClCompile Include="..\code\d3d_diagnostics.cpp" />
+    <ClCompile Include="..\code\d3d_view_diagnostics.cpp" />
     <ClCompile Include="..\code\d3d_blend.cpp" />
     <ClCompile Include="..\code\d3d_clip.cpp" />
     <ClCompile Include="..\code\d3d_combiners.cpp" />

@@ -44,6 +44,11 @@ void QGL_DiagnosticsRecordVBOCreated();
 void QGL_DiagnosticsRecordVBOBytes( int64_t delta );
 void QGL_DiagnosticsSetRenderTarget( const char *name );
 
+// Projection classes and world-to-HUD boundaries (d3d_view_diagnostics.cpp).
+void QGL_ViewDiagnosticsOnDraw( uint64_t frame, uint64_t draw );
+void QGL_ViewDiagnosticsOnFrameEnd( uint64_t frame );
+void QGL_ViewDiagnosticsDumpSummary();
+
 // YAE Phase F program/modelview history, dumped by the program-fog probe.
 // op: 'B' bind program, 'L' local parameter write, 'E'/'e' enable/disable
 // program target, 'M' modelview operation (index = operation), 'D' draw.
