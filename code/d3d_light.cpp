@@ -150,6 +150,18 @@ OPENGL_API void WINAPI glLightModeliv( GLenum pname, const GLint *params )
 	fparams[3] =( GLfloat )params[3];
 	glLightModelfv( pname, fparams );
 }
+// D3DState_SetLight uploads a light to D3D only when it is marked modified.
+static void MarkLightModified( int lightIndex )
+{
+	D3DState.LightingState.lightModified[lightIndex] = TRUE;
+	static bool reported = false;
+	if ( !reported ) {
+		reported = true;
+		logPrintfLevel( QGL_LOG_INFO, "GL_LIGHTING",
+			"application sets fixed-function light parameters (first: GL_LIGHT%d)", lightIndex );
+	}
+}
+
 OPENGL_API void WINAPI glLightf( GLenum light, GLenum pname, GLfloat param )
 {
 	DL_RECORD_3( glLightf, light, pname, param );
@@ -181,6 +193,7 @@ OPENGL_API void WINAPI glLightf( GLenum light, GLenum pname, GLfloat param )
 		QGL_SET_ERROR(E_INVALIDARG);
 		return;
 	}
+	MarkLightModified( lightIndex );
 }
 OPENGL_API void WINAPI glLightfv( GLenum light, GLenum pname, const GLfloat *params )
 {
@@ -268,6 +281,7 @@ OPENGL_API void WINAPI glLightfv( GLenum light, GLenum pname, const GLfloat *par
 		QGL_SET_ERROR(E_INVALIDARG);
 		return;
 	}
+	MarkLightModified( lightIndex );
 }
 OPENGL_API void WINAPI glLighti( GLenum light, GLenum pname, GLint param )
 {
