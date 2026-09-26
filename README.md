@@ -1,3 +1,18 @@
+# QindieGL — the Project Empty fork for *You Are Empty*
+
+This fork of QindieGL, an OpenGL → Direct3D 9 translation layer, exists to run the **original**
+*You Are Empty* (2006, DS2 Engine, OpenGL + Cg) through Direct3D so that Direct3D-only tooling —
+RTX Remix, DLSS, frame-generation and capture tools — can be attached to it. It is an experiment of
+[Project Empty](https://github.com/OpenYAE), separate from the [YAE Engine](https://github.com/OpenYAE/yae-engine)
+reimplementation, which renders with modern OpenGL by itself. The fork's own findings (the game's
+address-space exhaustion, the camera/model-view detection) are in the commit history and in the
+notes below; the upstream README follows unchanged. License: GPL-3.0, as upstream (`LICENSE`).
+
+The game's files are not part of this repository; the shim is dropped next to your own copy of the
+game as `opengl32.dll`.
+
+---
+
 # QindieGL
 ## QindieGL Is Not Driver, It's Emulator
 
