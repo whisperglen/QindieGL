@@ -44,6 +44,12 @@ void QGL_DiagnosticsRecordVBOCreated();
 void QGL_DiagnosticsRecordVBOBytes( int64_t delta );
 void QGL_DiagnosticsSetRenderTarget( const char *name );
 
+// YAE Phase F program/modelview history, dumped by the program-fog probe.
+// op: 'B' bind program, 'L' local parameter write, 'E'/'e' enable/disable
+// program target, 'M' modelview operation (index = operation), 'D' draw.
+void QGL_DiagnosticsRecordProgramOp( char op, unsigned int target, unsigned int program,
+	int index, const float *values );
+
 void QGL_DiagnosticsDumpCapabilityReport();
 void QGL_DiagnosticsDumpSessionSummary();
 

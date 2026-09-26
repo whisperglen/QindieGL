@@ -15,6 +15,10 @@
 #include <set>
 #include <string>
 
+// Parameters of the currently bound ARB program object (d3d_extension.cpp).
+extern GLfloat (*ARB_LocalParams( GLenum target ))[4];
+extern bool ARB_GetLocalWriteStamp( GLenum target, GLuint index, uint64_t *frame, uint64_t *draw );
+
 namespace {
 	static const LONG kEventCapacity = 256;
 	static const size_t kEventTextSize = 384;
@@ -339,6 +343,347 @@ namespace {
 				LogArraySample(name, D3DState.ClientVertexArrayState.texCoordInfo[unit], sampleVertex);
 			}
 		}
+	}
+
+	// Reads one array element without integer normalization, matching how the
+	// draw path feeds texcoord arrays (YAE bone indices are GL_SHORT texcoords).
+	// Unlike D3DBuffer_ResolvePointer this never records a GL error.
+	bool ReadArrayElement( const D3DVAInfo& info, int vertex, float out[4] )
+	{
+		out[0] = out[1] = out[2] = 0.0f;
+		out[3] = 1.0f;
+		size_t componentBytes = 0;
+		switch (info.elementType) {
+		case GL_BYTE: case GL_UNSIGNED_BYTE: componentBytes = 1; break;
+		case GL_SHORT: case GL_UNSIGNED_SHORT: componentBytes = 2; break;
+		case GL_INT: case GL_UNSIGNED_INT: case GL_FLOAT: componentBytes = 4; break;
+		case GL_DOUBLE: componentBytes = 8; break;
+		default: return false;
+		}
+		if (vertex < 0 || info.elementCount <= 0) return false;
+		const size_t packedBytes = componentBytes * static_cast<size_t>(info.elementCount);
+		const size_t stride = info.stride > 0 ? static_cast<size_t>(info.stride) : packedBytes;
+		const size_t offset = static_cast<size_t>(vertex) * stride;
+		const GLubyte *base = info.data;
+		if (info.bufferBinding) {
+			D3DBufferObject *buffer = D3DBuffer_GetObject(info.bufferBinding, false);
+			const size_t bufferOffset = reinterpret_cast<size_t>(info.data);
+			if (!buffer || !buffer->storage || buffer->size < 0 ||
+				bufferOffset > static_cast<size_t>(buffer->size) ||
+				offset + packedBytes > static_cast<size_t>(buffer->size) - bufferOffset)
+				return false;
+			base = static_cast<const GLubyte *>(buffer->storage) + bufferOffset;
+		}
+		if (!base) return false;
+		const GLubyte *element = base + offset;
+		for (int i = 0; i < info.elementCount && i < 4; ++i) {
+			switch (info.elementType) {
+			case GL_BYTE: out[i] = reinterpret_cast<const GLbyte *>(element)[i]; break;
+			case GL_UNSIGNED_BYTE: out[i] = element[i]; break;
+			case GL_SHORT: out[i] = reinterpret_cast<const GLshort *>(element)[i]; break;
+			case GL_UNSIGNED_SHORT: out[i] = reinterpret_cast<const GLushort *>(element)[i]; break;
+			case GL_INT: out[i] = static_cast<float>(reinterpret_cast<const GLint *>(element)[i]); break;
+			case GL_UNSIGNED_INT: out[i] = static_cast<float>(reinterpret_cast<const GLuint *>(element)[i]); break;
+			case GL_FLOAT: out[i] = reinterpret_cast<const GLfloat *>(element)[i]; break;
+			case GL_DOUBLE: out[i] = static_cast<float>(reinterpret_cast<const GLdouble *>(element)[i]); break;
+			}
+		}
+		return true;
+	}
+
+	float Dot4( const GLfloat row[4], const float v[4] )
+	{
+		return row[0] * v[0] + row[1] * v[1] + row[2] * v[2] + row[3] * v[3];
+	}
+
+	float Length3( const float v[3] )
+	{
+		return sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+	}
+
+	// Phase F probe for DS2's lit dynamic-material fragment programs, whose
+	// linear fog reads the vertex program's TEXCOORD5 (camera_pos_ws minus the
+	// inst_matrix-transformed position). The sample vertex is evaluated on the
+	// CPU exactly as the rigid/skinned DS2 vertex programs do, and the camera
+	// implied by the GL modelview is compared with the camera constants DS2
+	// supplied. A mismatch identifies which input disagrees with the transform
+	// that actually positions the geometry. Active only with LogLevel >= 3 (DEBUG);
+	// the first saturated draws also dump the program/modelview call history.
+	std::set<uint32_t> gYAEFogProbeStates;
+	unsigned int gYAEFogProbeRecords = 0;
+
+	struct ProgramHistoryEntry
+	{
+		uint32_t frame;
+		uint32_t draw;
+		char op;
+		unsigned int target;
+		unsigned int program;
+		int index;
+		float values[4];
+	};
+	static const size_t kProgramHistoryCapacity = 16384;
+	static const unsigned int kProgramHistoryMaxDumps = 3;
+	ProgramHistoryEntry gProgramHistory[kProgramHistoryCapacity];
+	size_t gProgramHistoryNext = 0;
+	unsigned int gProgramHistoryDumps = 0;
+
+	bool ProgramHistoryActive()
+	{
+		return D3DGlobal.settings.game.yaeFallbackCompatibility && gDiagnostics.frameId >= 250 &&
+			gProgramHistoryDumps < kProgramHistoryMaxDumps && logIsEnabled(QGL_LOG_DEBUG);
+	}
+
+	const char *ProgramTargetName( unsigned int target )
+	{
+		return target == GL_VERTEX_PROGRAM_ARB ? "VP" : target == GL_FRAGMENT_PROGRAM_ARB ? "FP" : "?";
+	}
+
+	// Writes the program binds, local writes and modelview operations issued
+	// since four draws before the current one. Bone palette rows (VP local
+	// 10..209) are counted rather than listed.
+	void DumpProgramHistory( unsigned int record )
+	{
+		static const char *const modelviewOps[] = {
+			"LoadIdentity", "LoadMatrix", "MultMatrix", "PushMatrix", "PopMatrix",
+			"Translate", "Rotate", "Scale" };
+		++gProgramHistoryDumps;
+		const uint32_t frame = static_cast<uint32_t>(gDiagnostics.frameId);
+		const uint32_t firstDraw = gDiagnostics.drawId > 4 ? static_cast<uint32_t>(gDiagnostics.drawId) - 4 : 0;
+		const size_t available = gProgramHistoryNext < kProgramHistoryCapacity ?
+			gProgramHistoryNext : kProgramHistoryCapacity;
+		unsigned int boneWrites = 0, redundantBinds = 0, lines = 0;
+		unsigned int boundVP = ~0u, boundFP = ~0u;
+		logPrintfLevel(QGL_LOG_DEBUG, "YAE_FOG_HISTORY", "record=%u begin frame=%u fromDraw=%u",
+			record, frame, firstDraw);
+		for (size_t i = gProgramHistoryNext - available; i < gProgramHistoryNext; ++i) {
+			const ProgramHistoryEntry& e = gProgramHistory[i % kProgramHistoryCapacity];
+			if (e.frame != frame || e.draw < firstDraw) continue;
+			if (e.op == 'L' && e.target == GL_VERTEX_PROGRAM_ARB && e.index >= 10 && e.index <= 209) {
+				++boneWrites;
+				continue;
+			}
+			// DS2 rebinds the same program around every parameter write.
+			if (e.op == 'B') {
+				unsigned int& bound = e.target == GL_VERTEX_PROGRAM_ARB ? boundVP : boundFP;
+				if (bound == e.program) { ++redundantBinds; continue; }
+				bound = e.program;
+			}
+			if (++lines > 400) break;
+			switch (e.op) {
+			case 'D':
+				logPrintfLevel(QGL_LOG_DEBUG, "YAE_FOG_HISTORY",
+					"record=%u D:%u DRAW count=%.0f vp=%u(on=%.0f) fp=%d(on=%.0f)",
+					record, e.draw, e.values[0], e.program, e.values[1], e.index, e.values[2]);
+				break;
+			case 'B':
+				logPrintfLevel(QGL_LOG_DEBUG, "YAE_FOG_HISTORY", "record=%u D:%u bind %s %u",
+					record, e.draw, ProgramTargetName(e.target), e.program);
+				break;
+			case 'E': case 'e':
+				logPrintfLevel(QGL_LOG_DEBUG, "YAE_FOG_HISTORY", "record=%u D:%u %s %s",
+					record, e.draw, e.op == 'E' ? "enable" : "disable", ProgramTargetName(e.target));
+				break;
+			case 'L':
+				logPrintfLevel(QGL_LOG_DEBUG, "YAE_FOG_HISTORY",
+					"record=%u D:%u local %s program=%u [%d] = (%.4f, %.4f, %.4f, %.4f)",
+					record, e.draw, ProgramTargetName(e.target), e.program, e.index,
+					e.values[0], e.values[1], e.values[2], e.values[3]);
+				break;
+			case 'M':
+				logPrintfLevel(QGL_LOG_DEBUG, "YAE_FOG_HISTORY",
+					"record=%u D:%u modelview %s (%.4f, %.4f, %.4f, %.4f)",
+					record, e.draw, e.index >= 0 && e.index < 8 ? modelviewOps[e.index] : "?",
+					e.values[0], e.values[1], e.values[2], e.values[3]);
+				break;
+			}
+		}
+		logPrintfLevel(QGL_LOG_DEBUG, "YAE_FOG_HISTORY",
+			"record=%u end lines=%u boneWritesOmitted=%u redundantBindsOmitted=%u",
+			record, lines, boneWrites, redundantBinds);
+	}
+
+	void LogLocalWriteStamps( unsigned int record, const char *name, GLenum target,
+		const int *indices, int count )
+	{
+		char text[256] = "";
+		size_t used = 0;
+		for (int i = 0; i < count && used < sizeof(text) - 32; ++i) {
+			uint64_t frame = 0, draw = 0;
+			int written;
+			if (indices[i] < 0)
+				continue;
+			if (ARB_GetLocalWriteStamp(target, static_cast<GLuint>(indices[i]), &frame, &draw))
+				written = sprintf_s(text + used, sizeof(text) - used, " [%d]@F%llu:D%llu", indices[i],
+					static_cast<unsigned long long>(frame), static_cast<unsigned long long>(draw));
+			else
+				written = sprintf_s(text + used, sizeof(text) - used, " [%d]@never", indices[i]);
+			if (written > 0) used += static_cast<size_t>(written);
+		}
+		logPrintfLevel(QGL_LOG_DEBUG, "YAE_FOG_PROBE", "record=%u %s lastWrites%s (now F%llu:D%llu)",
+			record, name, text, static_cast<unsigned long long>(gDiagnostics.frameId),
+			static_cast<unsigned long long>(gDiagnostics.drawId));
+	}
+
+	void ProbeYAEProgramFog( const char *api, int count, int first, unsigned int indexType,
+		const void *indices )
+	{
+		if (!D3DGlobal.settings.game.yaeFallbackCompatibility || gDiagnostics.frameId < 250 ||
+			!D3DState.EnableState.fragmentProgramEnabled || gYAEFogProbeRecords >= 160 ||
+			!D3DGlobal.modelviewMatrixStack || !logIsEnabled(QGL_LOG_DEBUG))
+			return;
+
+		const GLuint fpId = ARB_GetBoundFragmentProgram();
+		ARBCompiledProgram *fp = ARB_GetCompiledProgram(fpId);
+		if (!fp || !fp->ps) return;
+		const ARBParsedProgram& fpParsed = fp->parsed;
+		if (!fpParsed.usedTexCoords.count(5) || !fpParsed.usedLocalParams.count(0) ||
+			!fpParsed.usedLocalParams.count(1))
+			return;
+
+		GLfloat (*fpLocal)[4] = ARB_LocalParams(GL_FRAGMENT_PROGRAM_ARB);
+		const auto& arrays = D3DState.ClientVertexArrayState;
+		const int sampleVertex = ResolveSampleVertex(first, indexType, indices);
+
+		float position[4];
+		if (!(arrays.vertexArrayEnable & VA_ENABLE_VERTEX_BIT) ||
+			!ReadArrayElement(arrays.vertexInfo, sampleVertex, position))
+			return;
+
+		const GLuint vpId = D3DState.EnableState.vertexProgramEnabled ? ARB_GetBoundVertexProgram() : 0;
+		ARBCompiledProgram *vp = vpId ? ARB_GetCompiledProgram(vpId) : nullptr;
+		const bool vpActive = vp && vp->vs;
+		const bool skinned = vpActive && !vp->parsed.addressReg.empty();
+		GLfloat (*vpLocal)[4] = ARB_LocalParams(GL_VERTEX_PROGRAM_ARB);
+
+		// Model-space position consumed by MVP (DS2 VP register R2 / vertex.position).
+		float model[4] = { position[0], position[1], position[2], 1.0f };
+		float boneIds[4] = { 0, 0, 0, 1 }, boneWeights[4] = { 0, 0, 0, 1 };
+		bool skinInputs = false;
+		if (skinned &&
+			VA_TEXTURE_BIT_IS_SET(arrays.vertexArrayEnable, 1) &&
+			VA_TEXTURE_BIT_IS_SET(arrays.vertexArrayEnable, 2) &&
+			ReadArrayElement(arrays.texCoordInfo[1], sampleVertex, boneIds) &&
+			ReadArrayElement(arrays.texCoordInfo[2], sampleVertex, boneWeights)) {
+			skinInputs = true;
+			float skinnedPos[3] = { 0, 0, 0 };
+			for (int influence = 0; influence < 2; ++influence) {
+				const int a0 = static_cast<int>(floorf(boneIds[influence] * 3.0f));
+				if (a0 + 11 < 0 || a0 + 11 >= 256) { skinInputs = false; break; }
+				for (int axis = 0; axis < 3; ++axis)
+					skinnedPos[axis] += boneWeights[influence] * Dot4(vpLocal[a0 + 9 + axis], position);
+			}
+			if (skinInputs) {
+				model[0] = skinnedPos[0]; model[1] = skinnedPos[1]; model[2] = skinnedPos[2];
+			}
+		}
+
+		// The matrix stack stores the transpose of the GL matrix, so D3DX row-vector
+		// transforms reproduce GL's column-vector transforms.
+		const D3DXMATRIX& modelview = *static_cast<const D3DXMATRIX *>(D3DGlobal.modelviewMatrixStack->top());
+		D3DXVECTOR4 eye;
+		D3DXVec4Transform(&eye, reinterpret_cast<const D3DXVECTOR4 *>(model), &modelview);
+		const float eyeDistance = Length3(&eye.x);
+		D3DXMATRIX inverseModelview;
+		float modelCamera[4] = { 0, 0, 0, 1 };
+		const bool invertible = D3DXMatrixInverse(&inverseModelview, nullptr, &modelview) != nullptr;
+		if (invertible && inverseModelview._44 != 0.0f) {
+			modelCamera[0] = inverseModelview._41 / inverseModelview._44;
+			modelCamera[1] = inverseModelview._42 / inverseModelview._44;
+			modelCamera[2] = inverseModelview._43 / inverseModelview._44;
+		}
+		float modelviewScale[3];
+		for (int column = 0; column < 3; ++column) {
+			const float axis[3] = { modelview.m[column][0], modelview.m[column][1], modelview.m[column][2] };
+			modelviewScale[column] = Length3(axis);
+		}
+
+		float world[3] = { 0, 0, 0 }, camera[3] = { 0, 0, 0 }, impliedCamera[3] = { 0, 0, 0 };
+		float toEye[3] = { 0, 0, 0 };
+		int cameraIndex = -1;
+		if (vpActive) {
+			cameraIndex = vp->parsed.usedLocalParams.empty() ? -1 : *vp->parsed.usedLocalParams.rbegin();
+			for (int axis = 0; axis < 3; ++axis) {
+				world[axis] = Dot4(vpLocal[5 + axis], model);
+				impliedCamera[axis] = Dot4(vpLocal[5 + axis], modelCamera);
+				camera[axis] = cameraIndex >= 0 && cameraIndex < 256 ? vpLocal[cameraIndex][axis] : 0.0f;
+				toEye[axis] = camera[axis] - world[axis];
+			}
+		} else {
+			// Fixed-function vertex processing forwards texture coordinate set 5.
+			float texcoord5[4];
+			if (!VA_TEXTURE_BIT_IS_SET(arrays.vertexArrayEnable, 5) ||
+				!ReadArrayElement(arrays.texCoordInfo[5], sampleVertex, texcoord5))
+				memcpy(texcoord5, D3DState.CurrentState.currentTexCoord[5], sizeof(texcoord5));
+			memcpy(toEye, texcoord5, sizeof(toEye));
+		}
+		const float fogDistance = Length3(toEye);
+		const float fogStart = fpLocal[0][0], fogEnd = fpLocal[1][0];
+		float fog = fogEnd != fogStart ? (fogDistance - fogStart) / (fogEnd - fogStart) : 1.0f;
+		fog = fog < 0.0f ? 0.0f : (fog > 1.0f ? 1.0f : fog);
+		const float fpCameraDelta[3] = {
+			fpLocal[11][0] - modelCamera[0], fpLocal[11][1] - modelCamera[1], fpLocal[11][2] - modelCamera[2] };
+		const float vpCameraDelta[3] = {
+			camera[0] - impliedCamera[0], camera[1] - impliedCamera[1], camera[2] - impliedCamera[2] };
+		// fog is DS2's own value; renderedFog includes yae_eye_distance_fog.
+		const bool saturated = fog > 0.95f;
+		float renderedFog = fog;
+		if (vpActive && vp->parsed.eyeDistanceTexCoord5 && fogEnd != fogStart) {
+			renderedFog = (eyeDistance - fogStart) / (fogEnd - fogStart);
+			renderedFog = renderedFog < 0.0f ? 0.0f : (renderedFog > 1.0f ? 1.0f : renderedFog);
+		}
+
+		D3DTextureObject *diffuse = D3DState.TextureState.currentTexture[0][D3D_TEXTARGET_2D];
+		const GLuint diffuseId = diffuse ? diffuse->GetGLIndex() : 0;
+		uint32_t signature = 2166136261u;
+		MixHash(signature, &vpId, sizeof(vpId));
+		MixHash(signature, &fpId, sizeof(fpId));
+		MixHash(signature, &diffuseId, sizeof(diffuseId));
+		MixHash(signature, &saturated, sizeof(saturated));
+		if (!gYAEFogProbeStates.insert(signature).second) return;
+		++gYAEFogProbeRecords;
+
+		logPrintfLevel(QGL_LOG_DEBUG, "YAE_FOG_PROBE",
+			"record=%u frame=%llu draw=%llu api=%s count=%d vertex=%d vp=%u(%s) fp=%u diffuse=%u %ux%u fog=%.3f%s renderedFog=%.3f fogDist=%.3f eyeDist=%.3f start=%.3f end=%.3f color=(%.3f,%.3f,%.3f) vpCamErr=%.3f fpCamErr=%.3f",
+			gYAEFogProbeRecords, static_cast<unsigned long long>(gDiagnostics.frameId),
+			static_cast<unsigned long long>(gDiagnostics.drawId), api, count, sampleVertex,
+			vpId, vpActive ? (skinned ? (skinInputs ? "skinned" : "skinned-noinputs") : "rigid") :
+				(D3DState.EnableState.vertexProgramEnabled ? "enabled-uncompiled" : "fixed-function"),
+			fpId, diffuseId, diffuse ? diffuse->GetWidth() : 0, diffuse ? diffuse->GetHeight() : 0,
+			fog, saturated ? " SATURATED" : "", renderedFog, fogDistance, eyeDistance, fogStart, fogEnd,
+			fpLocal[2][0], fpLocal[2][1], fpLocal[2][2],
+			vpActive ? Length3(vpCameraDelta) : -1.0f,
+			fpParsed.usedLocalParams.count(11) ? Length3(fpCameraDelta) : -1.0f);
+		logPrintfLevel(QGL_LOG_DEBUG, "YAE_FOG_PROBE",
+			"record=%u pos=(%.3f,%.3f,%.3f) bones=(%.1f,%.1f) weights=(%.3f,%.3f) model=(%.3f,%.3f,%.3f) eye=(%.3f,%.3f,%.3f) world=(%.3f,%.3f,%.3f) toEye=(%.3f,%.3f,%.3f)",
+			gYAEFogProbeRecords, position[0], position[1], position[2],
+			boneIds[0], boneIds[1], boneWeights[0], boneWeights[1],
+			model[0], model[1], model[2], eye.x, eye.y, eye.z,
+			world[0], world[1], world[2], toEye[0], toEye[1], toEye[2]);
+		logPrintfLevel(QGL_LOG_DEBUG, "YAE_FOG_PROBE",
+			"record=%u vpCam[local%d]=(%.3f,%.3f,%.3f) impliedWorldCam=(%.3f,%.3f,%.3f) fpCam[local11]=(%.3f,%.3f,%.3f) impliedModelCam=(%.3f,%.3f,%.3f) mvScale=(%.4f,%.4f,%.4f)",
+			gYAEFogProbeRecords, cameraIndex, camera[0], camera[1], camera[2],
+			impliedCamera[0], impliedCamera[1], impliedCamera[2],
+			fpLocal[11][0], fpLocal[11][1], fpLocal[11][2],
+			modelCamera[0], modelCamera[1], modelCamera[2],
+			modelviewScale[0], modelviewScale[1], modelviewScale[2]);
+		logPrintfLevel(QGL_LOG_DEBUG, "YAE_FOG_PROBE",
+			"record=%u inst=[%.4f %.4f %.4f %.4f | %.4f %.4f %.4f %.4f | %.4f %.4f %.4f %.4f] modelviewGL=[%.4f %.4f %.4f %.4f | %.4f %.4f %.4f %.4f | %.4f %.4f %.4f %.4f]",
+			gYAEFogProbeRecords,
+			vpLocal[5][0], vpLocal[5][1], vpLocal[5][2], vpLocal[5][3],
+			vpLocal[6][0], vpLocal[6][1], vpLocal[6][2], vpLocal[6][3],
+			vpLocal[7][0], vpLocal[7][1], vpLocal[7][2], vpLocal[7][3],
+			modelview._11, modelview._21, modelview._31, modelview._41,
+			modelview._12, modelview._22, modelview._32, modelview._42,
+			modelview._13, modelview._23, modelview._33, modelview._43);
+
+		const int vpStamps[] = { 5, 6, 7, cameraIndex };
+		const int fpStamps[] = { 0, 1, 2, 11 };
+		if (vpActive)
+			LogLocalWriteStamps(gYAEFogProbeRecords, "vp", GL_VERTEX_PROGRAM_ARB, vpStamps, 4);
+		LogLocalWriteStamps(gYAEFogProbeRecords, "fp", GL_FRAGMENT_PROGRAM_ARB, fpStamps, 4);
+		if (saturated && gProgramHistoryDumps < kProgramHistoryMaxDumps)
+			DumpProgramHistory(gYAEFogProbeRecords);
 	}
 
 	void SnapshotState()
@@ -701,6 +1046,14 @@ bool QGL_DiagnosticsBeginDraw( const char *api, unsigned int mode, int count,
 	SnapshotState();
 	CensusYAEWorldDraw(api ? api : "<unknown>", mode, count, first, indexType, indices);
 	TraceYAEPostEffectDraw(api ? api : "<unknown>", mode, count, first, indexType, indices);
+	if (ProgramHistoryActive()) {
+		const float drawValues[4] = { static_cast<float>(count),
+			static_cast<float>(D3DState.EnableState.vertexProgramEnabled),
+			static_cast<float>(D3DState.EnableState.fragmentProgramEnabled), 0.0f };
+		QGL_DiagnosticsRecordProgramOp('D', 0, ARB_GetBoundVertexProgram(),
+			static_cast<int>(ARB_GetBoundFragmentProgram()), drawValues);
+	}
+	ProbeYAEProgramFog(api ? api : "<unknown>", count, first, indexType, indices);
 	if (gDiagnostics.debugDumpDraw >= 0
 		&& static_cast<int>(gDiagnostics.frameId) == gDiagnostics.debugDumpFrame
 		&& static_cast<int>(gDiagnostics.drawId) == gDiagnostics.debugDumpDraw) {
@@ -720,6 +1073,25 @@ bool QGL_DiagnosticsBeginDraw( const char *api, unsigned int mode, int count,
 		return false;
 	}
 	return true;
+}
+
+void QGL_DiagnosticsRecordProgramOp( char op, unsigned int target, unsigned int program,
+	int index, const float *values )
+{
+	if (!ProgramHistoryActive())
+		return;
+	ProgramHistoryEntry& entry = gProgramHistory[gProgramHistoryNext % kProgramHistoryCapacity];
+	++gProgramHistoryNext;
+	entry.frame = static_cast<uint32_t>(gDiagnostics.frameId);
+	entry.draw = static_cast<uint32_t>(gDiagnostics.drawId);
+	entry.op = op;
+	entry.target = target;
+	entry.program = program;
+	entry.index = index;
+	if (values)
+		memcpy(entry.values, values, sizeof(entry.values));
+	else
+		memset(entry.values, 0, sizeof(entry.values));
 }
 
 void QGL_DiagnosticsAfterDraw()
@@ -892,6 +1264,7 @@ void QGL_DiagnosticsDumpCapabilityReport()
 	logPrintf("  EnableARBProgramsStub: %u\n", D3DGlobal.settings.enableARBProgramsStub);
 	logPrintf("  YAEFallbackCompatibility: %u\n", D3DGlobal.settings.game.yaeFallbackCompatibility);
 	logPrintf("  YAECompileARBPrograms: %u\n", D3DGlobal.settings.game.yaeCompileARBPrograms);
+	logPrintf("  YAEEyeDistanceFog: %u\n", D3DGlobal.settings.game.yaeEyeDistanceFog);
 	logPrintf("  MultiSample: %u\n", D3DGlobal.settings.multisample);
 	logPrintf("  CrashDiagnostics: %u\n", D3DGlobal.settings.crashDiagnostics);
 	logPrintf("  DebugMaxDrawCall: %d\n", D3DGlobal.settings.debugMaxDrawCall);

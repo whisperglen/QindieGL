@@ -70,9 +70,14 @@ namespace {
 		GLenum target; // GL_VERTEX_PROGRAM_ARB or GL_FRAGMENT_PROGRAM_ARB
 		std::string source;
 		GLfloat localParams[ARB_MAX_LOCAL_PARAMS][4];
+		// Diagnostics only: frame+1 (0 = never written) and draw of the last write.
+		uint32_t localWriteFrame[ARB_MAX_LOCAL_PARAMS];
+		uint32_t localWriteDraw[ARB_MAX_LOCAL_PARAMS];
 
 		ARBProgramData() : target( 0 ) {
 			memset( localParams, 0, sizeof( localParams ) );
+			memset( localWriteFrame, 0, sizeof( localWriteFrame ) );
+			memset( localWriteDraw, 0, sizeof( localWriteDraw ) );
 		}
 	};
 	static std::map<GLuint, ARBProgramData> gARBProgramStore;
@@ -98,6 +103,21 @@ namespace {
 	GLfloat (*ARB_EnvParams_Internal( GLenum target ))[4] {
 		return (target == GL_VERTEX_PROGRAM_ARB) ? gARBEnvParamsVP : gARBEnvParamsFP;
 	}
+
+	// Diagnostics: stamp the bound program object's local parameter and record
+	// the write in the YAE program-history ring.
+	void ARB_NoteLocalWrite( GLenum target, GLuint index )
+	{
+		GLuint bound = ( target == GL_VERTEX_PROGRAM_ARB ) ?
+			gARBBoundVertexProgram : gARBBoundFragmentProgram;
+		GLfloat (*p)[4] = ARB_LocalParams_Internal( target );
+		QGL_DiagnosticsRecordProgramOp( 'L', target, bound, (int)index, p[index] );
+		if ( bound ) {
+			ARBProgramData& data = gARBProgramStore[bound];
+			data.localWriteFrame[index] = (uint32_t)QGL_DiagnosticsGetFrameId() + 1;
+			data.localWriteDraw[index] = (uint32_t)QGL_DiagnosticsGetDrawId();
+		}
+	}
 }
 
 // Accessors for d3d_arb_program.cpp (cannot be in anonymous namespace)
@@ -105,6 +125,20 @@ GLfloat (*ARB_EnvParams( GLenum target ))[4] { return ARB_EnvParams_Internal( ta
 GLfloat (*ARB_LocalParams( GLenum target ))[4] { return ARB_LocalParams_Internal( target ); }
 GLuint ARB_GetBoundVertexProgram() { return gARBBoundVertexProgram; }
 GLuint ARB_GetBoundFragmentProgram() { return gARBBoundFragmentProgram; }
+
+// Diagnostics: last write of a local parameter of the bound program object.
+bool ARB_GetLocalWriteStamp( GLenum target, GLuint index, uint64_t *frame, uint64_t *draw )
+{
+	GLuint bound = ( target == GL_VERTEX_PROGRAM_ARB ) ?
+		gARBBoundVertexProgram : gARBBoundFragmentProgram;
+	auto it = gARBProgramStore.find( bound );
+	if ( !bound || index >= ARB_MAX_LOCAL_PARAMS || it == gARBProgramStore.end() ||
+		!it->second.localWriteFrame[index] )
+		return false;
+	*frame = it->second.localWriteFrame[index] - 1;
+	*draw = it->second.localWriteDraw[index];
+	return true;
+}
 
 #define RECORD_ARB_PROGRAM_STUB() \
 	do { if (D3DGlobal.settings.enableARBProgramsStub) D3DExtension_RecordStubInvocation(__FUNCTION__); } while (0)
@@ -158,6 +192,7 @@ OPENGL_API void WINAPI glBindProgramARB( GLenum target, GLuint program )
 		gARBBoundVertexProgram = program;
 	else if (target == GL_FRAGMENT_PROGRAM_ARB)
 		gARBBoundFragmentProgram = program;
+	QGL_DiagnosticsRecordProgramOp('B', target, program, -1, nullptr);
 }
 
 OPENGL_API void WINAPI glDeleteProgramsARB( GLsizei n, const GLuint *programs )
@@ -227,6 +262,7 @@ OPENGL_API void WINAPI glProgramLocalParameter4dARB( GLenum target, GLuint index
 	if (index < ARB_MAX_LOCAL_PARAMS) {
 		GLfloat (*p)[4] = ARB_LocalParams(target);
 		p[index][0] = (GLfloat)x; p[index][1] = (GLfloat)y; p[index][2] = (GLfloat)z; p[index][3] = (GLfloat)w;
+		ARB_NoteLocalWrite(target, index);
 	}
 }
 
@@ -236,6 +272,7 @@ OPENGL_API void WINAPI glProgramLocalParameter4dvARB( GLenum target, GLuint inde
 	if (v && index < ARB_MAX_LOCAL_PARAMS) {
 		GLfloat (*p)[4] = ARB_LocalParams(target);
 		p[index][0] = (GLfloat)v[0]; p[index][1] = (GLfloat)v[1]; p[index][2] = (GLfloat)v[2]; p[index][3] = (GLfloat)v[3];
+		ARB_NoteLocalWrite(target, index);
 	}
 }
 
@@ -245,6 +282,7 @@ OPENGL_API void WINAPI glProgramLocalParameter4fARB( GLenum target, GLuint index
 	if (index < ARB_MAX_LOCAL_PARAMS) {
 		GLfloat (*p)[4] = ARB_LocalParams(target);
 		p[index][0] = x; p[index][1] = y; p[index][2] = z; p[index][3] = w;
+		ARB_NoteLocalWrite(target, index);
 	}
 }
 
@@ -254,6 +292,7 @@ OPENGL_API void WINAPI glProgramLocalParameter4fvARB( GLenum target, GLuint inde
 	if (v && index < ARB_MAX_LOCAL_PARAMS) {
 		GLfloat (*p)[4] = ARB_LocalParams(target);
 		p[index][0] = v[0]; p[index][1] = v[1]; p[index][2] = v[2]; p[index][3] = v[3];
+		ARB_NoteLocalWrite(target, index);
 	}
 }
 

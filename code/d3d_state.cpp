@@ -1338,9 +1338,11 @@ static void D3DState_EnableDisableState( GLenum cap, DWORD value )
 
 	case GL_VERTEX_PROGRAM_ARB:
 		D3DState.EnableState.vertexProgramEnabled = value;
+		QGL_DiagnosticsRecordProgramOp(value ? 'E' : 'e', cap, 0, -1, nullptr);
 		break;
 	case GL_FRAGMENT_PROGRAM_ARB:
 		D3DState.EnableState.fragmentProgramEnabled = value;
+		QGL_DiagnosticsRecordProgramOp(value ? 'E' : 'e', cap, 0, -1, nullptr);
 		break;
 	case GL_VERTEX_PROGRAM_POINT_SIZE_ARB:
 	case GL_VERTEX_PROGRAM_TWO_SIDE_ARB:
