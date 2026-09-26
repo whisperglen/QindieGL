@@ -293,8 +293,8 @@ OPENGL_API void WINAPI glLoadTransposeMatrixd( const GLdouble *m )
 	bool b2Dproj = false;
 	D3DXMATRIX mt;
 	for( int i = 0; i < 4; ++i ) 
-		for( int j = 0; j < 4; ++i ) 
-			mt.m[i][j] =(FLOAT)m[i*4+j];
+		for( int j = 0; j < 4; ++j ) 
+			mt.m[i][j] =(FLOAT)m[j*4+i];
 	if( D3DGlobal.settings.projectionFix ) {
 		if( D3DState.TransformState.matrixMode == GL_PROJECTION ) {
 			b2Dproj =( mt[2*4+3] >= 0 );
@@ -335,8 +335,8 @@ OPENGL_API void WINAPI glMultTransposeMatrixd( const GLdouble *m )
 	if( !D3DState.currentMatrixStack ) return;
 	D3DXMATRIX mt;
 	for( int i = 0; i < 4; ++i ) 
-		for( int j = 0; j < 4; ++i ) 
-			mt.m[i][j] =(FLOAT)m[i*4+j];
+		for( int j = 0; j < 4; ++j ) 
+			mt.m[i][j] =(FLOAT)m[j*4+i];
 	D3DState.currentMatrixStack->multiply( mt );
 	*D3DState.currentMatrixModified = true;
 	CheckTexCoordOffset_Hack( false );
