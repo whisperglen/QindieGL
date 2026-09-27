@@ -378,6 +378,7 @@ EXPORTS
 	matrix_preferred_address
 	DXGetErrorStringA
 	logPrintf
+	global_options_set
 	rmx_begin_loading_map = qdx_begin_loading_map
 	rmx_setplayerpos = rmx_setplayerpos
 	rmx_set_game_api = rmx_set_game_api

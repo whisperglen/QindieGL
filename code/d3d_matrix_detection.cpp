@@ -160,10 +160,13 @@ void matrix_detect_process_upload(const float* mat, D3DXMATRIX* detected_model, 
 		}
 		else if (matrix_is_flippingmat(mat))
 		{
+#if 1
 			D3DXMatrixIdentity(detected_model);
 			memcpy(&detected_view->m[0][0], mat, 16*sizeof(float)); PROCESS_CAMERA_MAT(mat);
-			//memcpy(&detected_model->m[0][0], mat, 16*sizeof(float));
-			//D3DXMatrixIdentity(detected_view);
+#else
+			memcpy(&detected_model->m[0][0], mat, 16*sizeof(float));
+			D3DXMatrixIdentity(detected_view); PROCESS_CAMERA_MAT(g_mat_identity);
+#endif
 			if ( g_mat_log_print_one_round & 2 )
 			{
 				logPrintf( "matrix simple (detected flipping)\n" );

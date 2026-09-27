@@ -32,6 +32,13 @@
 // Log all internal errors into text file.
 // This will help to debug the wrapper and monitor unimplemented functions.
 //==================================================================================
+
+// Define 10 MB in bytes
+#define MAX_LOG_SIZE (10 * 1024 * 1024) 
+
+// Helper function to get the current file size
+static long get_file_size(const char* filename);
+
 static FILE *g_fpLog = nullptr;
 static const char s_szLogFileName[] = WRAPPER_GL_SHORT_NAME_STRING ".log";
 static char *log_string = nullptr;
@@ -49,7 +56,14 @@ static void logInit()
 	}
 	log_string[c_LogStringSize -1] = 0;
 
-	if ( fopen_s( &g_fpLog, s_szLogFileName, "w" ) )
+	// Check the current size of the log file
+	long current_size = get_file_size(s_szLogFileName);
+
+	// Determine the correct file mode
+	// If it's 10MB or larger, use "w" (overwrite). Otherwise, use "a" (append).
+	const char* mode = (current_size >= MAX_LOG_SIZE) ? "w" : "a";
+
+	if ( fopen_s( &g_fpLog, s_szLogFileName, mode ) )
 		return;
 
 	char timeBuf[64];
@@ -104,6 +118,25 @@ void logPrintf( const char *fmt, ... )
 
 	fprintf(g_fpLog, "%s", log_string);
 	fflush(g_fpLog);
+}
+
+// Helper function to get the current file size
+static long get_file_size(const char* filename) {
+	FILE* fp = fopen(filename, "r");
+	if (fp == NULL) {
+		// File doesn't exist yet, or we don't have permission to read it.
+		// Returning 0 ensures we will create it using append mode later.
+		return 0;
+	}
+
+	// Jump to the end of the file
+	fseek(fp, 0, SEEK_END);
+
+	// Get the current byte offset (which equals the file size)
+	long size = ftell(fp);
+
+	fclose(fp);
+	return size;
 }
 
 #define PATH_SZ 1024

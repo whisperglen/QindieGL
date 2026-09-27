@@ -59,6 +59,12 @@ typedef void (*fn_matrix_print_s)(const float* mat, const char* info);
 typedef void (*fn_matrix_update_camera)(const float* mat);
 typedef void (*fn_matrix_preferred_address)(const void* addr);
 
+enum qind_global_options_e
+{
+	OPT_NORMALPTR,
+};
+typedef void (*fn_global_options_set)(int id, void* data);
+
 extern fn_rmx_begin_loading_map rmx_begin_loading_map;
 extern fn_rmx_setplayerpos rmx_setplayerpos;
 extern fn_rmx_set_game_api rmx_set_game_api;
@@ -68,6 +74,7 @@ extern fn_rmx_lights_clear rmx_lights_clear;
 extern fn_matrix_print_s qind_mat_print;
 extern fn_matrix_update_camera qind_mat_update_camera;
 extern fn_matrix_preferred_address qind_mat_preferred_address;
+extern fn_global_options_set qind_global_options_set;
 
 void rmx_interface_init(void *opengl32_hnd);
 
@@ -96,6 +103,7 @@ fn_rmx_lights_clear rmx_lights_clear;
 fn_matrix_print_s qind_mat_print;
 fn_matrix_update_camera qind_mat_update_camera;
 fn_matrix_preferred_address qind_mat_preferred_address;
+fn_global_options_set qind_global_options_set;
 
 void rmx_interface_init(void *opengl32_hnd)
 {
@@ -109,6 +117,7 @@ void rmx_interface_init(void *opengl32_hnd)
 	qind_mat_print = (fn_matrix_print_s)rmx_assign_func(opengl32_, "matrix_print_s");
 	qind_mat_update_camera = (fn_matrix_update_camera)rmx_assign_func(opengl32_, "matrix_update_camera");
 	qind_mat_preferred_address = (fn_matrix_preferred_address)rmx_assign_func(opengl32_, "matrix_preferred_address");
+	qind_global_options_set = (fn_global_options_set)rmx_assign_func(opengl32_, "global_options_set");
 }
 #endif
 

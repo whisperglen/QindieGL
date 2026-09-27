@@ -80,13 +80,12 @@ void D3DGlobal_Init( bool clearGlobals )
 			D3DGlobal.defaultTexture[i] = new D3DTextureObject(0);
 	}
 
-	if (g_inifile.read(g_iniconf))
+	if (!g_iniavailable)
 	{
-		g_iniavailable = true;
-	}
-	else
-	{
-		g_iniavailable = false;
+		if (g_inifile.read(g_iniconf))
+		{
+			g_iniavailable = true;
+		}
 	}
 
 	if (!clearGlobals)
@@ -1660,4 +1659,35 @@ OPENGL_API void WINAPI glPNTrianglesiATI( GLenum pname, GLint param )
 OPENGL_API void WINAPI glPNTrianglesfATI( GLenum pname, GLfloat param )
 {
 	_CRT_UNUSED( pname ); _CRT_UNUSED( param );
+}
+
+void global_options_set(int id, void* data)
+{
+	enum
+	{
+		OPT_NORMALPTR,
+	};
+
+	const char* gamename = D3DGlobal_GetGameName();
+
+	switch (id)
+	{
+	case OPT_NORMALPTR:{
+		void** ptrs = (void**)data;
+		if (gamename)
+		{
+			char name[32]; char value[32];
+
+			snprintf(name, sizeof(name), "dp_VertexPointer%d", ARRAYSIZE(D3DGlobal.normalPtrGuess) - 1);
+			snprintf(value, sizeof(value), "%p", ptrs[0]);
+			g_iniconf[gamename][name].assign(value);
+
+			snprintf(name, sizeof(name), "dp_NormalPointer%d", ARRAYSIZE(D3DGlobal.normalPtrGuess) - 1);
+			snprintf(value, sizeof(value), "%p", ptrs[1]);
+			g_iniconf[gamename][name].assign(value);
+		}
+		if(D3DGlobal.normalPtrGuessEnabled == 1)
+			logPrintf("WARN: OPT_NORMALPTR was set after globals were initialised, it may not be considered");
+		break;}
+	}
 }
