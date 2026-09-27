@@ -20,7 +20,7 @@ static BOOL g_ini_first_init = FALSE;
 static std::string active_map( "" );
 static game_api g_game_api = NULL;
 
-#define FALLBACKLIGHT_ENVAL (60*3)
+static int rmx_fallbacklight_delay = 0; //(60 * 3);
 static int rmx_fallbacklight_counter = 0;
 static int rmx_fallbacklight_state = 0;
 
@@ -169,6 +169,11 @@ void qdx_begin_loading_map( const char* mapname )
 						continue;
 					}
 				}
+				if (0 == strcmp(key, "rtx.fallbackLightDelay"))
+				{
+					rmx_fallbacklight_delay = strtol(value, NULL, 10);
+					continue;
+				}
 
 				rmx_console_printf(PRINT_ALL, "Setting option %s = %s\n", key, value);
 				remixapi_ErrorCode rercd = remixInterface.SetConfigVariable( key, value );
@@ -202,12 +207,28 @@ void rmx_distant_light_radiance(float r, float g, float b, bool enabled)
 	}
 }
 
+void rmx_distant_light_direction(float x, float y, float z, bool enabled)
+{
+	static char direction[64];
+	if (remixOnline)
+	{
+		remixapi_ErrorCode rercd;
+		rercd = remixInterface.SetConfigVariable("rtx.fallbackLightMode", enabled ? "2" : "0");
+		rercd = remixInterface.SetConfigVariable("rtx.fallbackLightType", "0");
+		snprintf(direction, sizeof(direction), "%.3f, %.3f, %.3f", x, y, z);
+		rercd = remixInterface.SetConfigVariable("rtx.fallbackLightDirection", direction);
+		if (REMIXAPI_ERROR_CODE_SUCCESS != rercd)
+		{
+			rmx_console_printf(PRINT_ERROR, "RMX failed to set config var %d\n", rercd);
+		}
+	}
+}
+
 void rmx_frame_end()
 {
-	if (rmx_fallbacklight_state != 0 && rmx_fallbacklight_counter < FALLBACKLIGHT_ENVAL)
+	if (rmx_fallbacklight_state != 0 && rmx_fallbacklight_counter <= rmx_fallbacklight_delay)
 	{
-		rmx_fallbacklight_counter++;
-		if (rmx_fallbacklight_counter == FALLBACKLIGHT_ENVAL)
+		if (rmx_fallbacklight_counter++ == rmx_fallbacklight_delay)
 		{
 			const char* key = "rtx.fallbackLightMode";
 			const char* value = "2";

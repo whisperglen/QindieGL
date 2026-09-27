@@ -66,6 +66,7 @@ extern "C" {
 void rmx_set_game_api( game_api fn );
 void rmx_flashlight_enable( int val = -1 );
 void rmx_distant_light_radiance(float r, float g, float b, bool enabled);
+void rmx_distant_light_direction(float x, float y, float z, bool enabled);
 
 /**************************
 ** api for imgui interop **

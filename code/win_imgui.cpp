@@ -274,7 +274,7 @@ static void do_draw()
 		bool updated = false;
 		if (ImGui::Checkbox("Enabled", &enabled)) updated = true;
 		if (ImGui::ColorEdit3("Color##20", rgb, ImGuiColorEditFlags_Float)) updated = true;
-		if (ImGui::DragFloat("Intensity", &scale, 0.02, 0, 5)) updated = true;
+		if (ImGui::DragFloat("Intensity", &scale, 0.005, 0, 5)) updated = true;
 		if (updated)
 		{
 			float multv = max(max(rgb[0], rgb[1]), rgb[2]);
@@ -285,7 +285,13 @@ static void do_draw()
 			cnv[2] = rgb[2] * multv;
 			rmx_distant_light_radiance(cnv[0], cnv[1], cnv[2], enabled);
 		}
-		ImGui::Text("Final %.3f %.3f %.3f", cnv[0], cnv[1], cnv[2]);
+		ImGui::Text("Remix Values: %.3f %.3f %.3f", cnv[0], cnv[1], cnv[2]);
+
+		static float dir[3] = { 0, 0, -1 };
+		if (ImGui::DragFloat3("Direction##20", dir, 0.005, -90.0, 90.0))
+		{
+			rmx_distant_light_direction(dir[0], dir[1], dir[2], enabled);
+		}
 	}
 
 #ifdef FRUSTUM_IMGUI
